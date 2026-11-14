@@ -2,7 +2,7 @@
 
 Describe a demo video in plain words. Take plays it in your real web app and gives you a finished video.
 
-![A Take video: a click on New project, a name typed in, the new card appears](assets/demo.jpg)
+![A Take video: a click on New project, a name typed in, the new card appears](assets/demo.gif)
 
 You write a few lines: the app's address and the steps (*click "New project", type "Moodboard", click "Create"*). Your AI agent tries the steps in the app, shows you a storyboard with one picture per step, and after you say yes, Take records it:
 

@@ -16,5 +16,6 @@
     "playwright",
     "ffmpeg",
     "skill"
-  ]
+  ],
+  "logo": "assets/icon.svg"
 }
