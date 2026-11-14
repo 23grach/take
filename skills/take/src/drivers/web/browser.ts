@@ -1,5 +1,6 @@
 // Launches Chromium the way every capture will: fixed viewport, sRGB colours, no scrollbars.
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import type { Browser, BrowserContext, Page } from 'playwright';
+import { launchBrowser } from '../../browser-binary.ts';
 import type { Take } from '../../take/format.ts';
 import { TakeError } from './driver.ts';
 import { describeCondition, holds } from './targets.ts';
@@ -51,27 +52,9 @@ export async function launch({
   return { browser, context, userAgent };
 }
 
-/** Launch with harden flags; try Chrome channel first, then Playwright's Chromium. */
-async function launchHardened({
-  headed,
-  extra,
-  preferChromeChannel,
-}: {
-  headed: boolean;
-  extra: string[];
-  preferChromeChannel: boolean;
-}): Promise<Browser> {
-  const tryChrome = preferChromeChannel;
-  if (tryChrome) {
-    try {
-      return await chromium.launch(hardenLaunchOptions({ headed, args: extra, preferChromeChannel: true }));
-    } catch (e) {
-      const msg = String((e as Error)?.message ?? e);
-      // Missing Google Chrome on the machine — fall back quietly.
-      if (!/executable doesn't exist|Failed to launch|chrome/i.test(msg)) throw e;
-    }
-  }
-  return chromium.launch(hardenLaunchOptions({ headed, args: extra, preferChromeChannel: false }));
+/** Launch with harden flags: installed Google Chrome first (fresh profile), else Playwright's Chromium. */
+function launchHardened({ headed, extra, preferChromeChannel }: { headed: boolean; extra: string[]; preferChromeChannel: boolean }): Promise<Browser> {
+  return launchBrowser(hardenLaunchOptions({ headed, args: extra }), { chrome: preferChromeChannel });
 }
 
 /** Launches Chromium for a take and opens its start page, ready to film: loaded, network quiet (or 10 s passed),

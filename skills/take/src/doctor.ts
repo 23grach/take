@@ -1,7 +1,7 @@
 // `take doctor`: checks that this machine has what Take needs and says how to fix what's missing.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chromium } from 'playwright';
+import { browserLabel, DOWNLOAD_CHROMIUM } from './browser-binary.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -17,7 +17,8 @@ export interface Probe {
   platform: NodeJS.Platform;
   nodeVersion: string;
   run(cmd: string, args: string[]): Promise<string | null>;
-  chromiumVersion(): Promise<string>;
+  /** The browser Take records with, e.g. "Google Chrome 147.0…"; throws when there is none. */
+  browser(): Promise<string>;
 }
 
 export const MIN_NODE_MAJOR = 24;
@@ -33,14 +34,7 @@ export const realProbe: Probe = {
       return null;
     }
   },
-  async chromiumVersion() {
-    const browser = await chromium.launch();
-    try {
-      return browser.version();
-    } finally {
-      await browser.close();
-    }
-  },
+  browser: browserLabel,
 };
 
 function installFfmpeg(platform: NodeJS.Platform): string {
@@ -65,14 +59,13 @@ export async function runChecks(probe: Probe = realProbe): Promise<CheckResult[]
   );
 
   try {
-    const version = await probe.chromiumVersion();
-    results.push({ name: 'Chromium', ok: true, detail: `${version} (Playwright)` });
+    results.push({ name: 'Browser', ok: true, detail: await probe.browser() });
   } catch {
     results.push({
-      name: 'Chromium',
+      name: 'Browser',
       ok: false,
-      detail: 'Playwright can’t start Chromium',
-      fix: 'npx playwright install chromium',
+      detail: 'no Google Chrome, and Playwright can’t start its Chromium',
+      fix: `install Google Chrome, or run in Take's folder: ${DOWNLOAD_CHROMIUM}`,
     });
   }
 

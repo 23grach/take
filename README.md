@@ -15,7 +15,7 @@ The result is a 2560×1440 H.264 MP4 at 60 fps that plays everywhere.
 
 ## Install
 
-You need **macOS or Linux**, **[Node.js](https://nodejs.org) 24 or newer** and **ffmpeg** (`brew install ffmpeg` on a Mac). The first time you use Take, it installs itself and downloads its own browser (about 150 MB). If anything is missing, it tells you what to install.
+You need **macOS or Linux**, **[Node.js](https://nodejs.org) 24 or newer** and **ffmpeg** (`brew install ffmpeg` on a Mac). Take records with your **Google Chrome** if you have it, so the first use downloads almost nothing. Without Chrome, it downloads Chromium once (about 200 MB). If anything is missing, it tells you what to install.
 
 ### Claude Code
 
@@ -87,7 +87,7 @@ The CLI the agent uses (`node skills/take/bin/take <command>`):
 
 | Command | Does |
 |---|---|
-| `take doctor` | Checks Node, the browser and ffmpeg, and says what to install |
+| `take doctor` | Checks Node, the browser (your Chrome, or Take's Chromium) and ffmpeg, and says what to install |
 | `take probe <take.json>` | Plays the steps without recording and makes the storyboard |
 | `take run <take.json>` | Records, composes and checks the video |
 | `take compose <capture>` | Composes again without re-recording (for example, a new address) |

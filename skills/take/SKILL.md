@@ -11,7 +11,7 @@ The CLI lives in this skill's base directory, the folder that holds this `SKILL.
 
 | Command | Does |
 |---|---|
-| `take doctor` | Checks Node, Chromium, ffmpeg. Run it the first time you use Take in a session, and whenever a command fails for a reason that isn't the take. If `<base>/node_modules` is missing, run `npm install` in `<base>` first. |
+| `take doctor` | Checks Node, the browser (Google Chrome if installed, else Playwright's Chromium), ffmpeg. Run it the first time you use Take in a session, and whenever a command fails for a reason that isn't the take. If `<base>/node_modules` is missing, run `npm install` in `<base>` first. |
 | `take login <url>` | Opens a visible browser window on `<url>` where the user signs in themselves; saves that login when they close the window, under the site's domain (`--name` to choose another). Takes whose target has `"login": "<name>"` then start signed in. |
 | `take logout <name>` | Forgets a saved login. |
 | `take validate takes/<name>/take.json` | Checks the file's shape and explains every problem. |

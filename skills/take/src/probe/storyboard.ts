@@ -3,7 +3,7 @@
 // with the reason. This is the sheet a person approves before the video is recorded.
 import fs from 'node:fs';
 import path from 'node:path';
-import { chromium } from 'playwright';
+import { launchBrowser } from '../browser-binary.ts';
 import { loadTheme } from '../compose/compose.ts';
 import { cursorArt } from '../compose/cursor-art.ts';
 import type { ProbeResult } from './probe.ts';
@@ -59,7 +59,7 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
   <div class="legend">Each picture is the page after that step.<span style="border:2px solid #2f6bff"></span>acted on<span style="border:2px dashed #1a9f5b"></span>waited for</div>
   <div class="grid">${cards.join('')}</div>`;
 
-  const browser = await chromium.launch();
+  const browser = await launchBrowser();
   try {
     const page = await browser.newPage({ viewport: { width: COLS * (W + 20) + 56, height: 600 } });
     await page.setContent(html);

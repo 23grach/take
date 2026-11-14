@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { chromium } from 'playwright';
+import { launchBrowser } from '../browser-binary.ts';
 import type { Report } from './check.ts';
 
 const COLS = 6;
@@ -43,7 +43,7 @@ export async function contactSheet(report: Report, out: string, { loop = true } 
     <div class="grid">${picks.map((f) => tile(f)).join('')}</div>
     ${loop ? `<h2>Loop seam: the last three frames, then the first three</h2><div class="grid">${seam.map((f, i) => tile(f, i === 3 ? ' · start' : '')).join('')}</div>` : ''}
     ${hitches.length ? `<h2>Hitches: frame before, doubled frame, frame after</h2><div class="grid">${hitches.map((f) => tile(f)).join('')}</div>` : ''}`;
-    const browser = await chromium.launch();
+    const browser = await launchBrowser();
     try {
       const page = await browser.newPage({ viewport: { width: COLS * (TILE + 12) + 48, height: 600 } });
       await page.setContent(html);

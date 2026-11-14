@@ -5,7 +5,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { chromium, type BrowserContext, type Page } from 'playwright';
+import type { BrowserContext, Page } from 'playwright';
+import { launchBrowser } from '../../browser-binary.ts';
 import { applyHarden, chromeUserAgent, hardenClientHints, hardenLaunchOptions } from './harden.ts';
 export { isLoginName } from '../../take/format.ts';
 
@@ -152,12 +153,6 @@ async function quickState(context: BrowserContext, before: Map<string, StorageSt
   return { cookies: await context.cookies(), origins: [...origins.values()].filter((o) => o.localStorage.length || (o as { indexedDB?: unknown[] }).indexedDB?.length) };
 }
 
-async function launchForLogin(headless: boolean) {
-  try {
-    return await chromium.launch(hardenLaunchOptions({ headed: !headless, preferChromeChannel: true }));
-  } catch (e) {
-    const msg = String((e as Error)?.message ?? e);
-    if (!/executable doesn't exist|Failed to launch|chrome/i.test(msg)) throw e;
-    return chromium.launch(hardenLaunchOptions({ headed: !headless, preferChromeChannel: false }));
-  }
+function launchForLogin(headless: boolean) {
+  return launchBrowser(hardenLaunchOptions({ headed: !headless }));
 }

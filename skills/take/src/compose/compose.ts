@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { chromium } from 'playwright';
+import { launchBrowser } from '../browser-binary.ts';
 import type { CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog } from '../drivers/web/events.ts';
 import { stageHtml, layout, type Theme } from './stage.ts';
@@ -181,7 +181,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
 
   fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   const t0 = performance.now();
-  const browser = await chromium.launch({ args: ['--force-color-profile=srgb', '--hide-scrollbars'] });
+  const browser = await launchBrowser({ args: ['--force-color-profile=srgb', '--hide-scrollbars'] });
   const ffmpeg = encoder(out, info.fps);
   try {
     const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: scale });

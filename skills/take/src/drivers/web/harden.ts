@@ -69,8 +69,6 @@ export function hardenLaunchOptions(opts: {
   headed?: boolean;
   /** Extra Chromium args (e.g. device scale). */
   args?: string[];
-  /** Prefer installed Chrome binary when present (still a fresh profile). */
-  preferChromeChannel?: boolean;
 }): PwLaunchOptions {
   const headed = opts.headed ?? false;
   const options: PwLaunchOptions = {
@@ -78,10 +76,6 @@ export function hardenLaunchOptions(opts: {
     args: hardenLaunchArgs(opts.args ?? []),
     ignoreDefaultArgs: [...HARDEN_IGNORE_DEFAULT_ARGS],
   };
-  // Channel "chrome" uses installed Google Chrome with a fresh Playwright profile, never the person's everyday one.
-  if (opts.preferChromeChannel !== false) {
-    options.channel = 'chrome';
-  }
   return options;
 }
 
