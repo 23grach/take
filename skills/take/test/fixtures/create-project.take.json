@@ -1,0 +1,16 @@
+{
+  "version": 0,
+  "title": "Create a project",
+  "target": { "kind": "web", "url": "http://127.0.0.1:4300/", "address": "boards.app", "viewport": [1440, 900], "scale": 2 },
+  "theme": "default",
+  "steps": [
+    { "do": "hold", "ms": 2000, "mark": "start" },
+    { "do": "click", "target": { "role": "button", "name": "New project" },
+      "waitFor": { "visible": { "role": "dialog", "name": "New project" } } },
+    { "do": "type", "target": { "label": "Name" }, "text": "Moodboard", "cps": 14 },
+    { "do": "click", "target": { "role": "button", "name": "Create", "exact": true },
+      "waitFor": { "visible": { "role": "heading", "name": "Moodboard" } } },
+    { "do": "hold", "ms": 2000, "mark": "result" }
+  ],
+  "loop": "crossfade-to-start"
+}

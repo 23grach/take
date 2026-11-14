@@ -1,0 +1,85 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { validateTake, DEFAULTS } from '../src/take/format.ts';
+import { loadTake } from '../src/take/load.ts';
+
+const example = new URL('./fixtures/create-project.take.json', import.meta.url).pathname;
+const bin = new URL('../bin/take', import.meta.url).pathname;
+
+const minimal = () => ({
+  version: 0,
+  title: 'Minimal',
+  target: { kind: 'web', url: 'http://127.0.0.1:4300/' },
+  steps: [{ do: 'click', target: { role: 'button', name: 'New project' } }],
+});
+
+const errorsOf = (input: unknown) => {
+  const r = validateTake(input);
+  assert.equal(r.ok, false, 'expected the take to be rejected');
+  return r.ok ? [] : r.errors;
+};
+
+test('the example take for the demo app is valid', () => {
+  const r = loadTake(example);
+  assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+  assert.equal(r.take.steps.length, 5);
+});
+
+test('defaults are filled in', () => {
+  const take = { ...minimal(), steps: [{ do: 'type', text: 'hi' }, { do: 'wait', for: { text: 'Done' } }] };
+  const r = validateTake(take);
+  assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+  assert.deepEqual(r.take.target.viewport, DEFAULTS.viewport);
+  assert.equal(r.take.target.scale, 2);
+  assert.equal(r.take.theme, 'default');
+  assert.equal(r.take.loop, 'crossfade-to-start');
+  assert.deepEqual(r.take.steps.map((s) => ('cps' in s ? s.cps : 'timeout' in s ? s.timeout : null)), [14, 10_000]);
+});
+
+test('typos get a suggestion', () => {
+  const take = minimal();
+  (take.steps[0] as Record<string, unknown>).taget = take.steps[0].target;
+  delete (take.steps[0] as Record<string, unknown>).target;
+  const errors = errorsOf(take);
+  assert.ok(errors.includes('steps[0]: missing "target" (what to click)'), errors.join('\n'));
+  assert.ok(errors.includes('steps[0].taget: unknown field (did you mean "target"?)'), errors.join('\n'));
+  assert.match(errorsOf({ ...minimal(), steps: [{ do: 'clik', target: { text: 'x' } }] })[0], /did you mean "click"/);
+});
+
+test('a target needs exactly one way to find the element', () => {
+  assert.match(errorsOf({ ...minimal(), steps: [{ do: 'click', target: {} }] })[0], /give exactly one of role, label, text, placeholder, css$/);
+  assert.match(errorsOf({ ...minimal(), steps: [{ do: 'click', target: { role: 'button', text: 'Save' } }] })[0], /\(got role and text\)/);
+  assert.match(errorsOf({ ...minimal(), steps: [{ do: 'click', target: { role: 'Button' } }] })[0], /roles are lowercase, e.g. "button"/);
+});
+
+test('each problem is reported with where it is', () => {
+  const errors = errorsOf({
+    version: 1,
+    title: '',
+    target: { kind: 'ios', url: 'localhost:3000', viewport: [1440], scale: 3 },
+    steps: [{ do: 'hold' }, { do: 'scroll' }, { do: 'press', key: 'Enter', mark: 'a' }, { do: 'hold', ms: -5, mark: 'a' }],
+    loop: 'bounce',
+  });
+  assert.deepEqual(errors, [
+    'version: must be 0, got 1',
+    'take.title: must be non-empty text, got ""',
+    'target.kind: must be "web", got "ios"',
+    'target.url: must start with http:// or https://, got "localhost:3000"',
+    'target.viewport: must be [width, height] in whole pixels between 320 and 3840, e.g. [1440, 900], got [1440]',
+    'target.scale: must be 1 or 2, got 3',
+    'steps[0]: missing "ms"',
+    'steps[1]: give either "target" (scroll it into view) or "by": [x, y] in pixels',
+    'steps[3].ms: must be a number above 0, got -5',
+    'steps: mark "a" is used more than once; marks must be unique',
+    'loop: must be one of crossfade-to-start, none, got "bounce"',
+  ]);
+});
+
+test('take validate reports a good and a broken take', () => {
+  const out = execFileSync(process.execPath, [bin, 'validate', example], { encoding: 'utf8' });
+  assert.match(out, /✓ .*"Create a project", 5 steps, 1440×900 at 2×/);
+  const bad = spawnSync(process.execPath, [bin, 'validate', bin], { encoding: 'utf8' });
+  assert.equal(bad.status, 1);
+  assert.match(bad.stderr, /is not valid JSON/);
+});

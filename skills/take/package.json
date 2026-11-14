@@ -1,0 +1,27 @@
+{
+  "name": "take",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Turns a plain-text scenario into a finished demo video recorded from the real app.",
+  "type": "module",
+  "bin": {
+    "take": "bin/take"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "take": "node bin/take",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run typecheck && node --test \"test/**/*.test.ts\"",
+    "demo": "node examples/demo-app/serve.mjs",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "playwright": "^1.64.1"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,12 @@
+node_modules/
+.DS_Store
+
+# Local working files, never published
+private/
+CLAUDE.local.md
+
+# What Take writes inside a takes/ folder
+takes/*/capture*/
+takes/*/probe/
+takes/*/out/
+out/

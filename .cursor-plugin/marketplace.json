@@ -1,0 +1,16 @@
+{
+  "name": "take",
+  "owner": {
+    "name": "Pavel Grachev"
+  },
+  "metadata": {
+    "description": "Take: demo videos from your real web app"
+  },
+  "plugins": [
+    {
+      "name": "take",
+      "source": "./",
+      "description": "Turns a plain-text scenario into a finished demo video recorded from your real web app: browser window, cursor, click ripples, seamless loop, 60 fps MP4."
+    }
+  ]
+}

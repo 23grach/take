@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 30 30" width="30" height="30">
+  <!-- Take's own text cursor (I-beam). Hotspot at its centre (15, 15). -->
+  <path d="M11.5 6.5 C13.5 6.5 14.4 7.1 15 8 C15.6 7.1 16.5 6.5 18.5 6.5 M15 8 L15 22 M11.5 23.5 C13.5 23.5 14.4 22.9 15 22 C15.6 22.9 16.5 23.5 18.5 23.5"
+        fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M11.5 6.5 C13.5 6.5 14.4 7.1 15 8 C15.6 7.1 16.5 6.5 18.5 6.5 M15 8 L15 22 M11.5 23.5 C13.5 23.5 14.4 22.9 15 22 C15.6 22.9 16.5 23.5 18.5 23.5"
+        fill="none" stroke="#111114" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
