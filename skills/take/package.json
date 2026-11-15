@@ -1,6 +1,6 @@
 {
   "name": "take",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "description": "Turns a plain-text scenario into a finished demo video recorded from the real app.",
   "type": "module",
