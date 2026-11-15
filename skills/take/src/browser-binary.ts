@@ -21,6 +21,11 @@ export function hasChrome(): boolean {
   return chromePaths().some((p) => fs.existsSync(p));
 }
 
+/** For studio recording, where pictures are taken one at a time: without these each picture waits for the next
+ *  two screen refreshes at 60 Hz (33 ms), with them about half that; the pictures are byte-identical. Compose
+ *  gains nothing (its browsers overlap the wait). Not for live drafts or windows people use. */
+export const UNTHROTTLED = ['--disable-gpu-vsync', '--disable-frame-rate-limit'];
+
 export const DOWNLOAD_CHROMIUM = 'npx playwright install chromium --no-shell';
 export const NO_BROWSER = `no browser to record with: install Google Chrome, or run "${DOWNLOAD_CHROMIUM}" in Take's folder`;
 

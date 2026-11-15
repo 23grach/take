@@ -115,3 +115,16 @@ test('a failed re-record keeps the earlier capture whole, and the capture names 
   assert.equal(fs.readdirSync(path.join(out, 'frames')).length, frames);
   assert.deepEqual(fs.readdirSync(tmp).filter((f) => f.endsWith('.recording')), [], 'no staging folder left behind');
 });
+
+test('a studio recording starts the page clock at the real time', async () => {
+  const { freezePage } = await import('../src/drivers/web/capture.ts');
+  const { openTake } = await import('../src/drivers/web/browser.ts');
+  const before = Date.now();
+  const { browser, page } = await openTake(take(), { prepare: (p) => freezePage(p) });
+  try {
+    const shown = await page.evaluate(() => Date.now());
+    assert.ok(shown >= before - 1000 && shown <= Date.now() + 2000, `page time ${new Date(shown).toISOString()}`);
+  } finally {
+    await browser.close();
+  }
+});

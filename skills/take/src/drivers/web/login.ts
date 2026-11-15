@@ -59,7 +59,7 @@ export function forgetLogin(name: string): boolean {
   return true;
 }
 
-function writeLogin(name: string, login: SavedLogin) {
+export function writeLogin(name: string, login: SavedLogin) {
   fs.mkdirSync(loginsDir(), { recursive: true, mode: 0o700 });
   const file = loginPath(name);
   const tmp = `${file}.${process.pid}.tmp`;

@@ -19,6 +19,8 @@ export interface LaunchOptions {
   headed?: boolean;
   /** Start signed in: the saved login's cookies and storage, and the browser it was made in. */
   login?: SavedLogin;
+  /** More browser switches. */
+  args?: string[];
   /**
    * Prefer the installed Chrome binary (fresh Take profile — not the person's everyday Chrome).
    * Falls back to Playwright Chromium when Chrome isn't installed. Default true.
@@ -31,13 +33,14 @@ export async function launch({
   scale = 1,
   headed = false,
   login,
+  args = [],
   preferChromeChannel = true,
 }: LaunchOptions = {}): Promise<{
   browser: Browser;
   context: BrowserContext;
   userAgent: string;
 }> {
-  const extra = scale > 1 ? [`--force-device-scale-factor=${scale}`] : [];
+  const extra = [...(scale > 1 ? [`--force-device-scale-factor=${scale}`] : []), ...args];
   // Without --force-device-scale-factor, screencast frames arrive at CSS-pixel size even with deviceScaleFactor 2.
   const browser = await launchHardened({ headed, extra, preferChromeChannel });
   const userAgent = login?.userAgent ?? chromeUserAgent(browser.version());
@@ -64,13 +67,13 @@ function launchHardened({ headed, extra, preferChromeChannel }: { headed: boolea
  *  and `visible` says so, so the person can be told not to click in it. */
 export async function openTake(
   take: Take,
-  { headed = false, prepare }: { headed?: boolean; prepare?: (page: Page) => Promise<unknown> } = {},
+  { headed = false, prepare, args = [] }: { headed?: boolean; prepare?: (page: Page) => Promise<unknown>; args?: string[] } = {},
 ): Promise<{ browser: Browser; page: Page; visible: boolean }> {
   try {
-    return { ...(await open(take, headed, prepare)), visible: headed };
+    return { ...(await open(take, headed, prepare, args)), visible: headed };
   } catch (e) {
     if (headed || !(e instanceof RefusedHidden)) throw e;
-    return { ...(await open(take, true, prepare)), visible: true };
+    return { ...(await open(take, true, prepare, args)), visible: true };
   }
 }
 
@@ -79,10 +82,10 @@ class RefusedHidden extends TakeError {}
 /** What to tell the person when a take had to run in a visible window. */
 export const VISIBLE_NOTE = "the site refused Take's hidden browser (error 403), so it ran in a visible window. Don't click in it or close it while Take works; the video isn't affected.";
 
-async function open(take: Take, headed: boolean, prepare?: (page: Page) => Promise<unknown>): Promise<{ browser: Browser; page: Page }> {
+async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promise<unknown>) | undefined, args: string[]): Promise<{ browser: Browser; page: Page }> {
   const [width, height] = take.target.viewport;
   const login = savedLogin(take);
-  const { browser, context, userAgent } = await launch({ viewport: { width, height }, scale: take.target.scale, headed, login });
+  const { browser, context, userAgent } = await launch({ viewport: { width, height }, scale: take.target.scale, headed, login, args });
   const page = await context.newPage();
   await hardenClientHints(context, page, userAgent);
   const errors: string[] = [];

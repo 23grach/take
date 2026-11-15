@@ -31,6 +31,12 @@ claude plugin install take@take
 
 Or, inside a Claude Code session: `/plugin install take --marketplace 23grach/take`. This works the same in the terminal, the Claude desktop app's Code tab and the IDE extensions.
 
+Claude Code doesn't update plugins from this marketplace by itself. To get a new version:
+
+```bash
+claude plugin update take@take
+```
+
 ### Cursor
 
 Open **Customize** in the sidebar, add a plugin **From GitHub Repository**, paste `https://github.com/23grach/take`, and install **Take**.
@@ -71,13 +77,13 @@ Everything lives in your project, in `takes/<name>/`: `scenario.md` and `take.js
 
 ### Signed-in videos
 
-To film an app as a signed-in user, Take opens a browser window where **you** sign in yourself, then remembers that login for later videos. Take never sees or types your password. Logins are saved on your computer in `~/.take/logins/`, readable only by you, never inside a project.
+To film an app as a signed-in user, Take opens a browser window where **you** sign in yourself, then remembers that login for later videos. Or, if you're already signed in to the site in Google Chrome, Take can copy that one site's login from it: turn on remote debugging once at `chrome://inspect/#remote-debugging` and click **Allow** when Chrome asks (on a Mac, the app you run Take from needs Full Disk Access). Either way Take never sees or types your password, and records in its own clean browser window, not in your Chrome. Logins are saved on your computer in `~/.take/logins/`, readable only by you, never inside a project.
 
 Since a signed-in video shows a real account, the agent points out personal details it sees on screen before recording.
 
 ## Not yet
 
-Videos are always 2560×1440, with one look. Phone frames, multi-finger gestures, zoom-in camera moves and GIF export aren't there yet. Videos can only start from a page the app's address opens, signed in or not, never from filmed setup steps. Some sites with strong bot protection may still refuse to be recorded. Videos playing inside the page and pages embedded from other sites may play at the wrong speed in a final video.
+Videos are always 2560×1440, with one look. Phone frames, multi-finger gestures, zoom-in camera moves and GIF export aren't there yet. Videos can only start from a page the app's address opens, signed in or not, never from filmed setup steps. Some sites with strong bot protection may still refuse to be recorded. Videos playing inside the page, and animations in pages embedded from other sites, play too fast in a final video.
 
 ## Under the hood
 

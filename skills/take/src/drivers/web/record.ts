@@ -5,6 +5,7 @@ import path from 'node:path';
 import type { CDPSession } from 'playwright';
 import type { Take } from '../../take/format.ts';
 import { openTake, untilReady } from './browser.ts';
+import { UNTHROTTLED } from '../../browser-binary.ts';
 import { freezePage, live, studio, type CaptureInfo, type Mode, type Recorder } from './capture.ts';
 import { perform } from './driver.ts';
 import { hideCaret } from './caret.ts';
@@ -67,7 +68,8 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal }: Re
   const [w, h] = take.target.viewport;
   const size: [number, number] = [Math.round(w * take.target.scale), Math.round(h * take.target.scale)];
   let cdp: CDPSession | undefined;
-  const { browser, page, visible } = await openTake(take, { headed, prepare: mode === 'studio' ? async (p) => (cdp = await freezePage(p)) : undefined });
+  const studioMode = mode === 'studio';
+  const { browser, page, visible } = await openTake(take, { headed, args: studioMode ? UNTHROTTLED : [], prepare: studioMode ? async (p) => (cdp = await freezePage(p)) : undefined });
   const stop = () => void browser.close().catch(() => {});
   signal?.addEventListener('abort', stop, { once: true });
   try {

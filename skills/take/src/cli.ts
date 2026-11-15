@@ -16,6 +16,8 @@ import { probe } from './probe/probe.ts';
 import { storyboard } from './probe/storyboard.ts';
 import { defaultLoginName, forgetLogin, isLoginName, loginPath, readLogin, savedLogins, signIn } from './drivers/web/login.ts';
 import { loginCommand, VISIBLE_NOTE } from './drivers/web/browser.ts';
+import { loginFromChrome } from './drivers/web/chrome-login.ts';
+import { writeLogin } from './drivers/web/login.ts';
 
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')) as { version: string };
 
@@ -27,6 +29,8 @@ Commands:
   doctor    check Node, the browser and ffmpeg
   login     open <url> in a browser window to sign in by hand; saves the login when you close the window,
             so takes with "login": "<name>" start signed in. --name <name> (default: the site's domain)
+            --from-chrome: copy the site's login from your own Chrome instead, no window (needs remote
+            debugging on at chrome://inspect/#remote-debugging; Chrome asks you to Allow)
   logout    forget a saved login: take logout <name>
   validate  check a take.json and explain any problems
   probe     perform a take without recording and screenshot every step → storyboard
@@ -53,6 +57,7 @@ try {
       theme: { type: 'string' },
       address: { type: 'string' },
       name: { type: 'string' },
+      'from-chrome': { type: 'boolean', default: false },
       headed: { type: 'boolean', default: false },
       'no-loop': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h' },
@@ -71,7 +76,7 @@ const { headed, out: outFlag, theme: themeFlag } = opts;
  *  an error instead of silently doing nothing. */
 const accepts: Record<string, string[]> = {
   doctor: [],
-  login: ['name'],
+  login: ['name', 'from-chrome'],
   logout: [],
   validate: [],
   probe: ['out', 'theme', 'headed'],
@@ -186,6 +191,20 @@ async function loginCommandLine(): Promise<number> {
   if (!url || !/^https?:\/\//.test(url)) return fail('take login: give the page to sign in on, e.g. take login https://boards.app');
   const name = opts.name ?? defaultLoginName(url);
   if (!isLoginName(name)) return fail(`take login: --name must be letters, digits, dots, dashes and underscores, e.g. boards.app, got "${name}"`);
+  if (opts['from-chrome']) {
+    process.stdout.write(`Copying your ${new URL(url).hostname} login from Chrome.\n`);
+    process.stdout.write(`Chrome will ask to "allow remote debugging": that's Chrome's name for this connection. Click Allow. Take only reads this site's login and disconnects.\n`);
+    try {
+      const login = await loginFromChrome(url);
+      writeLogin(name, login);
+      const sites = [...new Set(login.state.cookies.map((c) => c.domain.replace(/^\./, '')))].sort();
+      process.stdout.write(`✓ Saved login "${name}" from Chrome: ${login.state.cookies.length} cookie${login.state.cookies.length === 1 ? '' : 's'} for ${sites.join(', ')} in ${loginPath(name)}, readable only by you.\n`);
+      process.stdout.write(`  Takes start signed in with it when their target has "login": "${name}". Nothing else was read from Chrome.\n`);
+      return 0;
+    } catch (e) {
+      return fail(`✗ take login: ${(e as Error).message}`);
+    }
+  }
   process.stdout.write(`Opening ${url} in a browser window. Sign in there as you normally would, then close the window.\n`);
   process.stdout.write(`The login is saved for "${name}" in ${loginPath(name)}, outside your project, readable only by you.\n`);
   try {

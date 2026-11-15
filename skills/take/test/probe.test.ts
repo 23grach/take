@@ -106,3 +106,10 @@ test('probe clears only its own files from --out, never the take next to them', 
   clearProbe(dir);
   assert.deepEqual(fs.readdirSync(dir).sort(), ['scenario.md', 'take.json']);
 });
+
+test('a rehearsal cuts the opening and closing holds short, and keeps the ones between steps', async () => {
+  const { rehearsal } = await import('../src/probe/probe.ts');
+  const t = take([{ do: 'hold', ms: 2000 }, { do: 'click', target: { role: 'button', name: 'New project' } }, { do: 'hold', ms: 1500 }, { do: 'press', key: 'Escape' }, { do: 'hold', ms: 2000 }]);
+  assert.deepEqual(rehearsal(t).steps.map((s) => (s.do === 'hold' ? s.ms : s.do)), [500, 'click', 1500, 'press', 500]);
+  assert.equal(t.steps[0].do === 'hold' && t.steps[0].ms, 2000, 'the take itself is unchanged');
+});

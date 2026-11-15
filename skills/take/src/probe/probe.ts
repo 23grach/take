@@ -77,6 +77,17 @@ async function settle(page: Page) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
+/** The longest an opening or closing hold lasts in a rehearsal. */
+export const REHEARSAL_HOLD_MS = 500;
+
+/** The take as rehearsed: the opening and closing holds (2 s each in a video) are cut short, since the storyboard
+ *  shows only where each step ends. Holds between steps are played in full, and labels keep the real lengths. */
+export function rehearsal(take: Take): Take {
+  const last = take.steps.length - 1;
+  const steps = take.steps.map((s, i) => (s.do === 'hold' && (i === 0 || i === last) && s.ms > REHEARSAL_HOLD_MS ? { ...s, ms: REHEARSAL_HOLD_MS } : s));
+  return { ...take, steps };
+}
+
 /** Removes an earlier probe's files from `out`, and nothing else: `--out` may point at a folder that holds
  *  other things, the take itself included. */
 export function clearProbe(out: string) {
@@ -127,7 +138,7 @@ export async function probe(take: Take, out: string, { headed = false } = {}): P
     await page.mouse.move(...pointer);
     await shoot(0, 'First screen', pointer, error ? { error } : {});
     if (!error) try {
-      await perform(page, take, clock, {
+      await perform(page, rehearsal(take), clock, {
         onStep: async (log, p) => {
           pointer = p;
           await settle(page);

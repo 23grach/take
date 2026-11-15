@@ -46,9 +46,11 @@ const name = frameFile;
 
 /** Freezes page time and animations. Must run before the page is opened, so the page never sees real time. */
 export async function freezePage(page: Page): Promise<CDPSession> {
-  // Page time starts at a fixed moment and moves only when we advance it (install alone keeps it running).
-  await page.clock.install({ time: new Date('2026-01-01T09:00:00Z') });
-  await page.clock.pauseAt(new Date('2026-01-01T09:00:01Z'));
+  // Page time starts at the real time, so dates in the app ("Today", "2 min ago") match the storyboard, and moves
+  // only when we advance it (install alone keeps it running).
+  const now = Math.floor(Date.now() / 1000) * 1000;
+  await page.clock.install({ time: now });
+  await page.clock.pauseAt(now + 1000);
   // Freeze the browser's animation clock too, so CSS transitions that start mid-take begin frozen.
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Animation.enable');

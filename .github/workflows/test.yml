@@ -34,4 +34,20 @@ jobs:
       # One package-list update: Playwright's step runs it, ffmpeg installs right after.
       - run: npx playwright install-deps chromium && sudo apt-get install -y ffmpeg
       - run: node bin/take doctor
-      - run: xvfb-run -a npm test
+      - run: npm run typecheck
+      # One test file at a time, each with its own time limit, so a file that hangs is named in the log and the
+      # rest still run, instead of the whole job waiting silently until the job's time limit.
+      - name: tests
+        run: |
+          set +e  # keep going after a failing file
+          failed=0
+          for f in test/*.test.ts; do
+            echo "::group::$f"
+            start=$SECONDS
+            timeout --kill-after=10 240 xvfb-run -a node --test --test-timeout=180000 "$f"
+            code=$?
+            echo "::endgroup::"
+            if [ $code -eq 124 ] || [ $code -eq 137 ]; then echo "::error::$f hung (stopped after $((SECONDS - start)) s)"; failed=1
+            elif [ $code -ne 0 ]; then echo "::error::$f failed"; failed=1; fi
+          done
+          exit $failed
