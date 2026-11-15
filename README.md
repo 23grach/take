@@ -77,7 +77,7 @@ Since a signed-in video shows a real account, the agent points out personal deta
 
 ## Not yet
 
-Videos are always 2560×1440, with one look. Phone frames, multi-finger gestures, zoom-in camera moves and GIF export aren't there yet. Videos can only start from a page the app's address opens, signed in or not, never from filmed setup steps. Some sites with strong bot protection may still refuse to be recorded.
+Videos are always 2560×1440, with one look. Phone frames, multi-finger gestures, zoom-in camera moves and GIF export aren't there yet. Videos can only start from a page the app's address opens, signed in or not, never from filmed setup steps. Some sites with strong bot protection may still refuse to be recorded. Videos playing inside the page and pages embedded from other sites may play at the wrong speed in a final video.
 
 ## Under the hood
 
@@ -88,6 +88,7 @@ The CLI the agent uses (`node skills/take/bin/take <command>`):
 | Command | Does |
 |---|---|
 | `take doctor` | Checks Node, the browser (your Chrome, or Take's Chromium) and ffmpeg, and says what to install |
+| `take validate <take.json>` | Checks the take and explains any problems |
 | `take probe <take.json>` | Plays the steps without recording and makes the storyboard |
 | `take run <take.json>` | Records, composes and checks the video |
 | `take compose <capture>` | Composes again without re-recording (for example, a new address) |

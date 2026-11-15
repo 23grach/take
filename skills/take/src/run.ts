@@ -5,10 +5,10 @@ import { VISIBLE_NOTE } from './drivers/web/browser.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readyTake } from './take/load.ts';
-import { record } from './drivers/web/record.ts';
+import { commitCapture, discardRecording, record, stagingDir } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/driver.ts';
 import type { Mode } from './drivers/web/capture.ts';
-import { compose, following } from './compose/compose.ts';
+import { compose, ffmpegProblem, following, themeProblem } from './compose/compose.ts';
 import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { addressWarning, shownAddress } from './take/format.ts';
@@ -42,6 +42,9 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
 
   const { take, error } = await readyTake(file);
   if (!take) return stop(error);
+  // Things that would only fail once the recording is done: say so before opening the browser.
+  const problem = themeProblem(theme ?? take.theme) ?? ffmpegProblem();
+  if (problem) return stop(`take run: ${problem}`);
 
   const dir = path.dirname(path.resolve(file));
   const name = path.basename(dir);
@@ -62,22 +65,42 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   // In studio mode the video is composed while recording, a few frames behind, so it's ready soon after.
   const recording = mode === 'studio' ? following() : undefined;
   const options = { capture, out: video, theme: theme ?? take.theme, address: shownAddress(take.target) };
-  const composing = recording && compose({ ...options, follow: recording.follow });
-  composing?.catch(() => {}); // awaited below
+  // While recording, the new capture sits in a staging folder (an earlier one stays whole until this one is done).
+  const composing = recording && compose({ ...options, capture: stagingDir(capture), follow: recording.follow });
+  // If composing fails, there's no point recording on: stop the recording too, and report why compose failed.
+  const abort = new AbortController();
+  let composeError: unknown;
+  let recordFailed = false;
+  composing?.catch((e) => {
+    if (recordFailed) return; // compose stopped because the recording did: that error is reported below
+    composeError = e;
+    abort.abort();
+  });
   try {
-    const { capture: info, events } = await record(take, { mode, out: capture, headed, onFrame: recording?.frame });
+    const { capture: info, events } = await record(take, { mode, out: capture, headed, onFrame: recording?.frame, commit: !recording, signal: abort.signal });
     recording?.end(events);
     log(`✓ recorded  ${info.frames.length} frames (${(info.frames.length / info.fps).toFixed(2)} s of app) in ${lap()} → ${rel(capture)}`);
     if (info.visibleWindow) log(`⚠ ${VISIBLE_NOTE}`);
   } catch (e) {
+    recordFailed = composeError === undefined;
     recording?.fail(e);
     await composing?.catch(() => {}); // it stops and cleans up
+    if (composeError !== undefined) throw composeError;
     // A step that couldn't be performed: the message already says which step and why.
     if (e instanceof TakeError) return { ...stop(e.message), capture };
     throw e;
   }
 
-  const composed = await (composing ?? compose(options));
+  let composed;
+  if (composing) {
+    try {
+      composed = await composing;
+    } catch (e) {
+      discardRecording(capture);
+      throw e;
+    }
+    commitCapture(capture);
+  } else composed = await compose(options);
   log(`✓ composed  ${composed.size.join('×')}, ${composed.frames} frames (${composed.seconds.toFixed(2)} s of video) in ${lap()} → ${rel(video)}`);
 
   const loop = take.loop !== 'none';

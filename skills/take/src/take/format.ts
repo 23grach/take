@@ -229,10 +229,13 @@ export function validateTake(input: unknown): Result {
         else if (typeof v.text !== 'string' || v.text === '') fail(`${path}.text`, `must be non-empty text, got ${show(v.text)}`);
         out.cps = positive(v, 'cps', path, DEFAULTS.cps);
         break;
-      case 'press':
+      case 'press': {
         onlyKeys(v, path, [...common, 'key']);
-        text(v, 'key', path);
+        const key = text(v, 'key', path);
+        const bad = key === undefined ? undefined : keyProblem(key);
+        if (bad) fail(`${path}.key`, bad);
         break;
+      }
       case 'scroll':
         onlyKeys(v, path, [...common, 'target', 'by']);
         if ('target' in v === 'by' in v) fail(path, 'give either "target" (scroll it into view) or "by": [x, y] in pixels');
@@ -255,7 +258,7 @@ export function validateTake(input: unknown): Result {
   }
 
   if (!isObj(input)) return { ok: false, errors: ['the take must be a JSON object'] };
-  onlyKeys(input, '', ['$schema', 'version', 'title', 'target', 'theme', 'ready', 'steps', 'loop']);
+  onlyKeys(input, '', ['version', 'title', 'target', 'theme', 'ready', 'steps', 'loop']);
   // One condition or a list; all must hold.
   const ready = 'ready' in input ? (Array.isArray(input.ready) ? input.ready : [input.ready]) : undefined;
   if (ready?.length === 0) fail('ready', 'give a condition, e.g. { "visible": { "role": "button", "name": "Deposit" } }, or a list of them');
@@ -283,7 +286,7 @@ export function validateTake(input: unknown): Result {
     if (scale !== 1 && scale !== 1.5 && scale !== 2) fail('target.scale', `must be 1, 1.5 or 2, got ${show(t.scale)}`);
     const login = t.login;
     if (login !== undefined && (typeof login !== 'string' || !isLoginName(login)))
-      fail('target.login', `must be the name of a saved login, e.g. "boards.app" (letters, digits, dots, dashes), got ${show(login)}`);
+      fail('target.login', `must be the name of a saved login, e.g. "boards.app" (letters, digits, dots, dashes, underscores), got ${show(login)}`);
     web = {
       kind: 'web',
       url: url ?? '',
@@ -329,6 +332,39 @@ export function validateTake(input: unknown): Result {
 }
 
 /** The nearest allowed word to a typo, if it's close enough to be a likely slip. */
+/** Key names the browser knows (as Playwright names them): modifiers, named keys and key codes. Any single
+ *  character works too. */
+const KEY_NAMES = new Set([
+  'Shift', 'Control', 'Alt', 'Meta', 'ControlOrMeta', 'Escape', 'Enter', 'Tab', 'Backspace', 'Delete', 'Insert', 'Space',
+  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'CapsLock', 'ContextMenu',
+  'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'AltGraph', 'MetaLeft', 'MetaRight',
+  'Backquote', 'Minus', 'Equal', 'Backslash', 'BracketLeft', 'BracketRight', 'Semicolon', 'Quote', 'Comma', 'Period', 'Slash',
+  'PrintScreen', 'ScrollLock', 'Pause', 'NumLock', 'NumpadDivide', 'NumpadMultiply', 'NumpadSubtract', 'NumpadAdd', 'NumpadDecimal', 'NumpadEnter',
+  'AudioVolumeMute', 'AudioVolumeDown', 'AudioVolumeUp', 'MediaTrackNext', 'MediaTrackPrevious', 'MediaPlayPause',
+  ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`),
+  ...Array.from({ length: 10 }, (_, i) => `Digit${i}`),
+  ...Array.from({ length: 10 }, (_, i) => `Numpad${i}`),
+  ...Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`),
+]);
+/** What people often write, and the browser's name for it. */
+const KEY_ALIASES: Record<string, string> = {
+  cmd: 'Meta', command: 'Meta', '⌘': 'Meta', super: 'Meta', win: 'Meta', ctrl: 'Control', control: 'Control', '⌃': 'Control',
+  option: 'Alt', opt: 'Alt', alt: 'Alt', '⌥': 'Alt', shift: 'Shift', '⇧': 'Shift', esc: 'Escape', escape: 'Escape', return: 'Enter',
+  enter: 'Enter', del: 'Delete', delete: 'Delete', backspace: 'Backspace', up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft',
+  right: 'ArrowRight', space: 'Space', spacebar: 'Space', tab: 'Tab', pgup: 'PageUp', pgdn: 'PageDown', home: 'Home', end: 'End',
+};
+
+/** Why a press key won't work, e.g. "Cmd+K" → use Meta. Keys are joined with +, as in "Meta+K". */
+export function keyProblem(key: string): string | undefined {
+  const parts = key === '+' ? ['+'] : key.split(/\+(?!$)/);
+  for (const part of parts) {
+    if ([...part].length === 1 || KEY_NAMES.has(part)) continue;
+    const name = KEY_ALIASES[part.toLowerCase()] ?? closest(part, [...KEY_NAMES]);
+    return `unknown key "${part}"${name ? `; use ${name} (e.g. "${key.replace(part, name)}")` : ''}. Join keys with +, as in "Meta+K"`;
+  }
+  return undefined;
+}
+
 function closest(word: string, options: readonly string[]): string | undefined {
   let best: string | undefined;
   let bestDist = Infinity;

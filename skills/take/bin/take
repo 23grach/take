@@ -1,3 +1,24 @@
 #!/usr/bin/env node
 // Node runs the TypeScript sources directly (type stripping), so there is no build step.
-import '../src/cli.ts';
+// Two things that would otherwise fail with a Node error before Take can explain: an old Node, and a fresh copy
+// whose packages aren't installed yet. Kept in plain old JavaScript so even an old Node can run this far.
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+
+const major = Number(process.versions.node.split('.')[0]);
+const home = fileURLToPath(new URL('..', import.meta.url));
+if (major < 24) {
+  process.stderr.write(`✗ Take needs Node 24 or newer; this is Node ${process.versions.node}. Install the current LTS from https://nodejs.org, then run take doctor.\n`);
+  process.exit(1);
+}
+let installed = true;
+try {
+  createRequire(import.meta.url).resolve('playwright/package.json');
+} catch {
+  installed = false;
+}
+if (!installed) {
+  process.stderr.write(`✗ Take's packages aren't installed yet. Run this once:\n  cd "${home.replace(/\/$/, '')}" && npm ci --omit=dev\n`);
+  process.exit(1);
+}
+await import('../src/cli.ts');

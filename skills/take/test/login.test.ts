@@ -1,5 +1,6 @@
 // Saved logins: sign in once in a browser window, and takes that name the login start signed in.
 import { test, before, after } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -122,7 +123,7 @@ test('a missing login stops the take and says how to make it', async () => {
 test('validate says whether the login exists', () => {
   const dir = fs.mkdtempSync(path.join(home, 'take-'));
   const file = path.join(dir, 'take.json');
-  const bin = new URL('../bin/take', import.meta.url).pathname;
+  const bin = fileURLToPath(new URL('../bin/take', import.meta.url));
   const env = { ...process.env, TAKE_HOME: home };
   fs.writeFileSync(file, JSON.stringify({ version: 0, title: 't', target: { kind: 'web', url: base, login: 'demo' }, steps: [{ do: 'hold', ms: 100 }] }));
   assert.match(spawnSync(process.execPath, [bin, 'validate', file], { encoding: 'utf8', env }).stdout, /starts signed in with the saved login "demo"/);
@@ -141,7 +142,7 @@ test('login names that could escape the logins folder are rejected', () => {
 });
 
 test('logout forgets a login and names the ones left', () => {
-  const bin = new URL('../bin/take', import.meta.url).pathname;
+  const bin = fileURLToPath(new URL('../bin/take', import.meta.url));
   const env = { ...process.env, TAKE_HOME: home };
   const out = (name: string) => spawnSync(process.execPath, [bin, 'logout', name], { encoding: 'utf8', env });
   fs.copyFileSync(loginPath('demo'), loginPath('spare'));

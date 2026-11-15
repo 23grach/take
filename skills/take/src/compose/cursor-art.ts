@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import type { CursorKeyword } from '../drivers/web/cursor.ts';
 import type { Theme } from './stage.ts';
 
@@ -80,7 +81,7 @@ function macosArt(): ArtSet | undefined {
         plists[name] = path.join(folder, 'info.plist');
       }
     }
-    const script = new URL('./macos-cursors.js', import.meta.url).pathname;
+    const script = fileURLToPath(new URL('./macos-cursors.js', import.meta.url));
     const drawn: { name: string; file: string; size: [number, number]; hotspot?: [number, number] }[] =
       JSON.parse(execFileSync('osascript', ['-l', 'JavaScript', script, dir, JSON.stringify(jobs)], { encoding: 'utf8' }));
     const entries = drawn.map((d) => {

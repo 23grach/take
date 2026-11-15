@@ -48,7 +48,7 @@ Every step has `do`. Any step may also have `mark` (a unique name for that momen
 | `hover` | `target` | The cursor travels to the element and rests there (to show a tooltip or hover state). |
 | `drag` | `from`, `to` | The cursor travels to `from`, presses, moves to `to` with the button held, and lets go: draws a shape, moves a slider, drops a card in a column. Each end is a [target](#targets) (its middle) or a point `[x, y]` in CSS pixels from the page's top left, e.g. `[540, 330]`, for places no element names, like a spot on a drawing canvas. |
 | `type` | `text`, `target`?, `cps`? = 14 | Clicks the field if `target` is given, then types character by character at `cps` characters per second. Without `target`, types into whatever has focus. |
-| `press` | `key` | A single key, e.g. `"Enter"`, `"Escape"`, `"Meta+A"`. |
+| `press` | `key` | A single key, e.g. `"Enter"`, `"Escape"`, `"Meta+A"`. The browser's key names: `Meta` (⌘), `Control`, `Alt` (⌥), `Shift`, `ArrowUp`…; join keys with `+`. `take validate` flags others (`Cmd`, `Esc`) and names the right one. |
 | `scroll` | `target` or `by: [x, y]` | Scrolls an element into view, or by a distance in pixels. |
 | `wait` | `for`, `timeout`? = 10000 | Waits for a condition. The take fails if it isn't met within `timeout` ms. |
 | `hold` | `ms` | Nothing happens for `ms` milliseconds, so the viewer can take it in. |

@@ -9,9 +9,11 @@ You turn the user's scenario into an exact `take.json`, prove every step works w
 
 The CLI lives in this skill's base directory, the folder that holds this `SKILL.md`: run it as `node <base>/bin/take <command>`. Below, `take` means that.
 
+**Before first use:** if `<base>/node_modules` is missing (a fresh install), run `npm ci --omit=dev` in `<base>` once, then `take doctor`.
+
 | Command | Does |
 |---|---|
-| `take doctor` | Checks Node, the browser (Google Chrome if installed, else Playwright's Chromium), ffmpeg. Run it the first time you use Take in a session, and whenever a command fails for a reason that isn't the take. If `<base>/node_modules` is missing, run `npm ci --omit=dev` in `<base>` first (only what Take needs to run). |
+| `take doctor` | Checks Node, the browser (Google Chrome if installed, else Playwright's Chromium), ffmpeg. Run it the first time you use Take in a session, and whenever a command fails for a reason that isn't the take. |
 | `take login <url>` | Opens a visible browser window on `<url>` where the user signs in themselves; saves that login when they close the window, under the site's domain (`--name` to choose another). Takes whose target has `"login": "<name>"` then start signed in. |
 | `take logout <name>` | Forgets a saved login. |
 | `take validate takes/<name>/take.json` | Checks the file's shape and explains every problem. |
@@ -92,6 +94,6 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 
 ## Not supported yet
 
-Multi-finger gestures; setup before the video starts other than signing in; video sizes other than 2560×1440; phone frames. Say so plainly when a scenario needs them, and offer the closest version that works.
+Multi-finger gestures; setup before the video starts other than signing in; video sizes other than 2560×1440; phone frames. Videos playing inside the page (`<video>`, embedded players) and pages embedded from other sites keep their own clock in a final recording, so they may play at the wrong speed; a `--mode live` draft shows them as they are. Say so plainly when a scenario needs them, and offer the closest version that works.
 
 Never change Take itself (anything in `<base>`: its code, docs, plan or themes) to get a video done, even when a fix looks small. Work only in the user's project. When Take can't do something, say what is missing; the user decides whether Take should learn it.

@@ -1,4 +1,5 @@
 import { test, before, after } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import type { Browser, Page } from 'playwright';
 import { serve } from '../examples/demo-app/serve.mjs';
@@ -37,7 +38,7 @@ function takeOf(steps: unknown[]): Take {
 const openDialog = { do: 'click', target: { role: 'button', name: 'New project' }, waitFor: { visible: { role: 'dialog' } } };
 
 test('performs the example take in real time and logs it', async () => {
-  const r = loadTake(new URL('./fixtures/create-project.take.json', import.meta.url).pathname);
+  const r = loadTake(fileURLToPath(new URL('./fixtures/create-project.take.json', import.meta.url)));
   assert.ok(r.ok);
   const page = await open(r.take);
   const t0 = performance.now();

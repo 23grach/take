@@ -63,3 +63,11 @@ test('run explains a broken take before opening a browser', async () => {
   assert.match(r.error ?? '', /problem/);
   assert.match(r.error ?? '', /click/);
 });
+
+test('run names a missing theme at once, before opening a browser', async () => {
+  const file = writeTake('bad-theme', [{ do: 'hold', ms: 100 }]);
+  const r = await run(file, { theme: 'defualt' });
+  assert.match(r.error ?? '', /no theme "defualt"\. Themes: default/);
+  assert.ok(r.seconds < 2, `took ${r.seconds} s`);
+  assert.equal(fs.existsSync(path.join(path.dirname(file), 'capture')), false);
+});

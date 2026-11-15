@@ -26,6 +26,8 @@ export interface CaptureInfo {
   images: number;
   /** The site refused the hidden browser, so it recorded in a visible window. */
   visibleWindow?: true;
+  /** The take's theme, so compose on its own draws the video the way take run would. */
+  theme?: string;
 }
 
 export interface Recorder {

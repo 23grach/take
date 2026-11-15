@@ -5,7 +5,8 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import type { Browser, Page } from 'playwright';
 import { launchBrowser } from '../browser-binary.ts';
 import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
@@ -92,7 +93,7 @@ export interface ComposeResult {
   renderSeconds: number;
 }
 
-const THEMES = new URL('../../themes/', import.meta.url).pathname;
+const THEMES = fileURLToPath(new URL('../../themes/', import.meta.url));
 const HOST = 'http://take.local/';
 
 /** How many browsers draw frames at once: one per 2 s of video (starting a browser costs more than drawing a
@@ -103,9 +104,25 @@ export function composeWorkers(frames: number, cpus = os.availableParallelism(),
   return Math.max(1, Math.min(4, Math.floor(cpus / 2), Math.floor(memory / 3 / 2 ** 30), Math.ceil(frames / 120)));
 }
 
+/** The themes Take ships with. */
+export const themeNames = () => fs.readdirSync(THEMES).filter((d) => fs.existsSync(path.join(THEMES, d, 'tokens.json'))).sort();
+
+/** Why a theme can't be used, or undefined when it can. Cheap: run it before opening a browser. */
+export function themeProblem(name: string): string | undefined {
+  if (themeNames().includes(name)) return undefined;
+  return `there's no theme "${name}". Themes: ${themeNames().join(', ')}`;
+}
+
+/** Is ffmpeg on the PATH? Checked before recording, so a missing one is reported at once, not after the take. */
+export function ffmpegProblem(): string | undefined {
+  const r = spawnSync('ffmpeg', ['-hide_banner', '-version'], { stdio: 'ignore' });
+  return r.error ? "ffmpeg isn't installed (or isn't on the PATH). Run take doctor to see how to install it." : undefined;
+}
+
 export function loadTheme(name = 'default'): { theme: Theme; dir: string } {
   const dir = path.join(THEMES, name);
-  if (!fs.existsSync(path.join(dir, 'tokens.json'))) throw new Error(`theme "${name}" not found in ${THEMES}`);
+  const problem = themeProblem(name);
+  if (problem) throw new Error(problem);
   return { theme: JSON.parse(fs.readFileSync(path.join(dir, 'tokens.json'), 'utf8')), dir };
 }
 

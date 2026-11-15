@@ -97,3 +97,12 @@ test('outlines leave out link addresses, which targets never use', () => {
     '- button "Create"',
   ].join('\n'));
 });
+
+test('probe clears only its own files from --out, never the take next to them', async () => {
+  const { clearProbe } = await import('../src/probe/probe.ts');
+  const dir = path.join(tmp, 'own-folder');
+  fs.mkdirSync(dir);
+  for (const f of ['take.json', 'scenario.md', 'step-01.png', 'step-01.outline.yml', 'probe.json', 'storyboard.jpg']) fs.writeFileSync(path.join(dir, f), 'x');
+  clearProbe(dir);
+  assert.deepEqual(fs.readdirSync(dir).sort(), ['scenario.md', 'take.json']);
+});

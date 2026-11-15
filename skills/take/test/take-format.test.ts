@@ -1,11 +1,12 @@
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { validateTake, DEFAULTS } from '../src/take/format.ts';
 import { loadTake } from '../src/take/load.ts';
 
-const example = new URL('./fixtures/create-project.take.json', import.meta.url).pathname;
-const bin = new URL('../bin/take', import.meta.url).pathname;
+const example = fileURLToPath(new URL('./fixtures/create-project.take.json', import.meta.url));
+const bin = fileURLToPath(new URL('../bin/take', import.meta.url));
 
 const minimal = () => ({
   version: 0,
@@ -82,4 +83,13 @@ test('take validate reports a good and a broken take', () => {
   const bad = spawnSync(process.execPath, [bin, 'validate', bin], { encoding: 'utf8' });
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /is not valid JSON/);
+});
+
+test('press keys use the browser\'s names; common other names get the right one', async () => {
+  const { keyProblem } = await import('../src/take/format.ts');
+  for (const ok of ['Enter', 'Meta+A', 'Shift+Tab', 'ControlOrMeta+K', 'a', 'Meta++', '+', 'F5', 'Space']) assert.equal(keyProblem(ok), undefined, ok);
+  assert.match(keyProblem('Cmd+K') ?? '', /unknown key "Cmd"; use Meta/);
+  assert.match(keyProblem('Esc') ?? '', /use Escape/);
+  assert.match(keyProblem('Ctrl+Shift+P') ?? '', /use Control \(e\.g\. "Control\+Shift\+P"\)/);
+  assert.match(keyProblem('Enterr') ?? '', /use Enter/);
 });

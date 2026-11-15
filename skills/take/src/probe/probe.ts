@@ -77,8 +77,16 @@ async function settle(page: Page) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
+/** Removes an earlier probe's files from `out`, and nothing else: `--out` may point at a folder that holds
+ *  other things, the take itself included. */
+export function clearProbe(out: string) {
+  if (!fs.existsSync(out)) return;
+  for (const f of fs.readdirSync(out))
+    if (/^step-\d+\.(png|outline\.yml)$/.test(f) || f === 'probe.json' || f === 'storyboard.jpg') fs.rmSync(path.join(out, f), { force: true });
+}
+
 export async function probe(take: Take, out: string, { headed = false } = {}): Promise<ProbeResult> {
-  fs.rmSync(out, { recursive: true, force: true });
+  clearProbe(out);
   fs.mkdirSync(out, { recursive: true });
   const t0 = performance.now();
   // Scale 1: the layout is the same as at 2×, and the storyboard shows small pictures.

@@ -319,7 +319,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       }
       case 'press':
         events.push({ frame: clock.frame, type: 'key', key: s.key });
-        await page.keyboard.press(s.key);
+        await page.keyboard.press(s.key).catch((e: Error) => {
+          // validate catches most; the browser may still refuse one, so say which step and which key.
+          const unknown = /Unknown key: "([^"]*)"/.exec(e.message)?.[1];
+          throw unknown === undefined ? e : new TakeError(current, `unknown key "${unknown}" in "${s.key}"; use the browser's key names, e.g. Meta, Control, Alt, Shift, Enter, Escape`);
+        });
         await tick();
         break;
       case 'scroll':
@@ -327,7 +331,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         else {
           const loc = await find(s.target);
           const box = await boxOf(loc, s.target);
-          const inView = box.y >= 0 && box.y + box.height <= vh && box.x >= 0 && box.x + box.width <= vw;
+          const inView = fitsAxis(box.x, box.width, vw) && fitsAxis(box.y, box.height, vh);
           // Bring it to the middle of the screen, which reads better than the edge.
           if (!inView) await scroll(0, Math.round(center(box)[1] - vh / 2));
           log.target = await boxOf(loc, s.target);

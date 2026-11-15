@@ -27,7 +27,7 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
   const cards = shots.map((s) => {
     // Drawn at the page's scale, from the hotspot; a site's own cursor image at its own size.
     const c = typeof s.cursor === 'object' ? { src: s.cursor.image, hotspot: s.cursor.hotspot ?? [0, 0] } : s.cursor === 'none' ? null : art[s.cursor] ?? art.default;
-    const cursor = c ? `<img class="cursor" src="${c.src}" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px;transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
+    const cursor = c ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px;transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
     return `<figure class="${s.error ? 'failed' : ''}">
       <div class="shot"><img src="${data(path.join(dir, s.file), 'image/png')}">${s.target ? box(s.target, 'target') : ''}${s.waitedFor ? box(s.waitedFor, 'waited') : ''}${cursor}</div>
       <figcaption><b>${s.step === 0 ? 'Start' : s.step}</b><span>${esc(s.label)}${s.error ? `<em>${esc(s.error)}</em>` : ''}</span><i>${s.at.toFixed(1)} s</i></figcaption>

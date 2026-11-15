@@ -100,3 +100,18 @@ test('the browser\'s own caret is never filmed, and the drawn one keeps the page
     server.close();
   }
 });
+
+test('a failed re-record keeps the earlier capture whole, and the capture names its theme', async () => {
+  const { withShortFind } = await import('./short-find.ts');
+  const out = path.join(tmp, 'rerecord');
+  await record(take(), { mode: 'studio', out });
+  const before = fs.readFileSync(path.join(out, 'capture.json'), 'utf8');
+  assert.equal(JSON.parse(before).theme, 'default');
+  const frames = fs.readdirSync(path.join(out, 'frames')).length;
+  const broken = validateTake({ version: 0, title: 'Broken', target: { kind: 'web', url: app.url, viewport: [800, 600], scale: 1 }, steps: [{ do: 'click', target: { text: 'Nowhere' } }] });
+  assert.ok(broken.ok);
+  await assert.rejects(withShortFind(() => record(broken.take, { mode: 'studio', out })), /step 1/);
+  assert.equal(fs.readFileSync(path.join(out, 'capture.json'), 'utf8'), before);
+  assert.equal(fs.readdirSync(path.join(out, 'frames')).length, frames);
+  assert.deepEqual(fs.readdirSync(tmp).filter((f) => f.endsWith('.recording')), [], 'no staging folder left behind');
+});

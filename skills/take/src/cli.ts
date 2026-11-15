@@ -7,7 +7,7 @@ import { loadTake, problems, readyTake } from './take/load.ts';
 import { record } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/driver.ts';
 import type { Mode } from './drivers/web/capture.ts';
-import { compose } from './compose/compose.ts';
+import { compose, ffmpegProblem, themeProblem } from './compose/compose.ts';
 import { check, formatReport } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { run } from './run.ts';
@@ -24,18 +24,18 @@ const usage = `take ${pkg.version}
 Usage: take <command> [file] [options]
 
 Commands:
-  doctor    check Node, Chromium and ffmpeg
+  doctor    check Node, the browser and ffmpeg
   login     open <url> in a browser window to sign in by hand; saves the login when you close the window,
             so takes with "login": "<name>" start signed in. --name <name> (default: the site's domain)
   logout    forget a saved login: take logout <name>
   validate  check a take.json and explain any problems
   probe     perform a take without recording and screenshot every step → storyboard
-            --out <folder> (default: probe/ next to the take)  --headed (show the browser)
+            --out <folder> (default: probe/ next to the take)  --theme <name> (cursor drawings)  --headed (show the browser)
   record    perform a take and capture frames + events
             --mode studio (default, exact, for finals) | live (real time, for drafts)
             --out <folder> (default: capture/ next to the take)  --headed (show the browser)
   compose   turn a capture folder into a finished MP4
-            --theme <name> (default: default)  --out <file> (default: out/<take>.mp4 next to the capture)
+            --theme <name> (default: the take's)  --out <file> (default: out/<take>.mp4 next to the capture)
             --address <text> (address bar text; default: the take's)
   check     report frame rate, length, hitches and loop seam, and make a contact sheet
             --no-loop (the video isn't meant to loop)
@@ -67,6 +67,32 @@ const { values: opts, positionals } = parsed;
 const [command, file] = positionals;
 const { headed, out: outFlag, theme: themeFlag } = opts;
 
+/** The options each command uses, so one given to a command that ignores it (a typo, a wrong guess) stops with
+ *  an error instead of silently doing nothing. */
+const accepts: Record<string, string[]> = {
+  doctor: [],
+  login: ['name'],
+  logout: [],
+  validate: [],
+  probe: ['out', 'theme', 'headed'],
+  record: ['mode', 'out', 'headed'],
+  compose: ['theme', 'out', 'address'],
+  check: ['no-loop'],
+  run: ['mode', 'theme', 'out', 'headed'],
+};
+
+/** Why this command line can't run as typed, or undefined. */
+function misuse(): string | undefined {
+  const allowed = accepts[command];
+  if (!allowed) return undefined;
+  const given = Object.entries(opts).filter(([k, v]) => !['help', 'version'].includes(k) && v !== undefined && v !== false).map(([k]) => k);
+  const extra = given.filter((k) => !allowed.includes(k));
+  if (extra.length) return `take ${command} doesn't take ${extra.map((k) => `--${k}`).join(', ')}${allowed.length ? ` (it takes ${allowed.map((k) => `--${k}`).join(', ')})` : ''}`;
+  const most = command === 'doctor' ? 0 : 1;
+  if (positionals.length - 1 > most) return `take ${command}: too many names (${positionals.slice(1).map((p) => `"${p}"`).join(', ')}); it takes ${most ? 'one' : 'none'}`;
+  return undefined;
+}
+
 const commands: Record<string, () => number | Promise<number>> = {
   doctor,
   login: loginCommandLine,
@@ -81,7 +107,10 @@ const commands: Record<string, () => number | Promise<number>> = {
 
 if (opts.version) process.stdout.write(`${pkg.version}\n`);
 else if (!command || opts.help) process.stdout.write(usage);
-else if (commands[command]) process.exitCode = await Promise.resolve().then(commands[command]).catch(unexpected);
+else if (commands[command] && misuse()) {
+  process.stderr.write(`${misuse()}\n`);
+  process.exitCode = 1;
+} else if (commands[command]) process.exitCode = await Promise.resolve().then(commands[command]).catch(unexpected);
 else {
   process.stderr.write(`take: unknown command "${command}"\n\n${usage}`);
   process.exitCode = 1;
@@ -114,6 +143,8 @@ function validateCommand(): number {
   const result = loadTake(file);
   if (!result.ok) return fail(`✗ ${problems(file, result.errors)}`);
   const { take } = result;
+  const badTheme = themeProblem(take.theme);
+  if (badTheme) return fail(`✗ ${file}: theme: ${badTheme}`);
   process.stdout.write(`✓ ${file}: "${take.title}", ${take.steps.length} steps, ${take.target.viewport.join('×')} at ${take.target.scale}×\n`);
   const warning = addressWarning(take.target);
   if (warning) process.stdout.write(`⚠ ${warning}\n`);
@@ -154,7 +185,7 @@ async function loginCommandLine(): Promise<number> {
   const url = file;
   if (!url || !/^https?:\/\//.test(url)) return fail('take login: give the page to sign in on, e.g. take login https://boards.app');
   const name = opts.name ?? defaultLoginName(url);
-  if (!isLoginName(name)) return fail(`take login: --name must be letters, digits, dots and dashes, e.g. boards.app, got "${name}"`);
+  if (!isLoginName(name)) return fail(`take login: --name must be letters, digits, dots, dashes and underscores, e.g. boards.app, got "${name}"`);
   process.stdout.write(`Opening ${url} in a browser window. Sign in there as you normally would, then close the window.\n`);
   process.stdout.write(`The login is saved for "${name}" in ${loginPath(name)}, outside your project, readable only by you.\n`);
   try {
@@ -181,10 +212,19 @@ async function composeCommand(): Promise<number> {
   if (!existsSync(path.join(file, 'capture.json'))) return fail(`take compose: no capture.json in ${file}. Record first: take record <take.json>`);
   const takeDir = path.dirname(path.resolve(file));
   const out = outFlag ?? path.join(takeDir, 'out', `${path.basename(takeDir)}.mp4`);
+  let captured: { theme?: string };
+  try {
+    captured = JSON.parse(readFileSync(path.join(file, 'capture.json'), 'utf8'));
+  } catch {
+    return fail(`take compose: ${path.join(file, 'capture.json')} is unreadable. Record again: take record <take.json>`);
+  }
+  const theme = themeFlag ?? captured.theme ?? 'default';
+  const problem = themeProblem(theme) ?? ffmpegProblem();
+  if (problem) return fail(`✗ take compose: ${problem}`);
   process.stdout.write(`Composing ${file}…\n`);
   let r;
   try {
-    r = await compose({ capture: file, out, theme: themeFlag, address: opts.address });
+    r = await compose({ capture: file, out, theme, address: opts.address });
   } catch (e) {
     return fail(`✗ take compose: ${(e as Error).message}`);
   }
@@ -224,6 +264,8 @@ async function probeCommand(): Promise<number> {
   if (!file) return fail('take probe: give a take.json, e.g. take probe takes/create-project/take.json');
   const { take, error } = await readyTake(file);
   if (!take) return fail(`✗ take probe: ${error}`);
+  const badTheme = themeProblem(themeFlag ?? take.theme);
+  if (badTheme) return fail(`✗ take probe: ${badTheme}`);
   const out = outFlag ?? path.join(path.dirname(file), 'probe');
   process.stdout.write(`Probing "${take.title}"…\n`);
   const r = await probe(take, out, { headed });
