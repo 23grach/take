@@ -21,11 +21,6 @@ export interface LaunchOptions {
   login?: SavedLogin;
   /** More browser switches. */
   args?: string[];
-  /**
-   * Prefer the installed Chrome binary (fresh Take profile — not the person's everyday Chrome).
-   * Falls back to Playwright Chromium when Chrome isn't installed. Default true.
-   */
-  preferChromeChannel?: boolean;
 }
 
 export async function launch({
@@ -34,7 +29,6 @@ export async function launch({
   headed = false,
   login,
   args = [],
-  preferChromeChannel = true,
 }: LaunchOptions = {}): Promise<{
   browser: Browser;
   context: BrowserContext;
@@ -42,7 +36,7 @@ export async function launch({
 }> {
   const extra = [...(scale > 1 ? [`--force-device-scale-factor=${scale}`] : []), ...args];
   // Without --force-device-scale-factor, screencast frames arrive at CSS-pixel size even with deviceScaleFactor 2.
-  const browser = await launchHardened({ headed, extra, preferChromeChannel });
+  const browser = await launchHardened({ headed, extra });
   const userAgent = login?.userAgent ?? chromeUserAgent(browser.version());
   const context = await browser.newContext({
     viewport,
@@ -56,8 +50,8 @@ export async function launch({
 }
 
 /** Launch with harden flags: installed Google Chrome first (fresh profile), else Playwright's Chromium. */
-function launchHardened({ headed, extra, preferChromeChannel }: { headed: boolean; extra: string[]; preferChromeChannel: boolean }): Promise<Browser> {
-  return launchBrowser(hardenLaunchOptions({ headed, args: extra }), { chrome: preferChromeChannel });
+function launchHardened({ headed, extra }: { headed: boolean; extra: string[] }): Promise<Browser> {
+  return launchBrowser(hardenLaunchOptions({ headed, args: extra }));
 }
 
 /** Launches Chromium for a take and opens its start page, ready to film: loaded, network quiet (or 10 s passed),

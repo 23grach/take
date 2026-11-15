@@ -27,7 +27,6 @@ test('a hardened context hides the obvious automation signals', async () => {
   const { browser, context, userAgent } = await launch({
     viewport: { width: 400, height: 300 },
     scale: 1,
-    preferChromeChannel: false,
   });
   try {
     const page = await context.newPage();
@@ -55,17 +54,21 @@ test('client hints no longer advertise HeadlessChrome', async () => {
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const { port } = server.address() as import('node:net').AddressInfo;
-  const { browser, context, userAgent } = await launch({ preferChromeChannel: false });
+  // The server is closed whatever happens: left open, it keeps this test file running forever.
   try {
-    const page = await context.newPage();
-    const { hardenClientHints } = await import('../src/drivers/web/harden.ts');
-    await hardenClientHints(context, page, userAgent);
-    await page.goto(`http://127.0.0.1:${port}/`);
-    assert.ok(seen[0], 'expected a sec-ch-ua header');
-    assert.doesNotMatch(seen[0], /HeadlessChrome/);
-    assert.match(seen[0], /Google Chrome/);
+    const { browser, context, userAgent } = await launch();
+    try {
+      const page = await context.newPage();
+      const { hardenClientHints } = await import('../src/drivers/web/harden.ts');
+      await hardenClientHints(context, page, userAgent);
+      await page.goto(`http://127.0.0.1:${port}/`);
+      assert.ok(seen[0], 'expected a sec-ch-ua header');
+      assert.doesNotMatch(seen[0], /HeadlessChrome/);
+      assert.match(seen[0], /Google Chrome/);
+    } finally {
+      await browser.close();
+    }
   } finally {
-    await browser.close();
     await new Promise<void>((r) => server.close(() => r()));
   }
 });

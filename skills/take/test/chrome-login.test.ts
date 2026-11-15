@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { chromium } from 'playwright';
+import { chromePaths } from '../src/browser-binary.ts';
 import { belongsTo, chromeEndpoint, loginFromChrome } from '../src/drivers/web/chrome-login.ts';
 
 test('cookies belong to the site and its subdomains, not to other sites', () => {
@@ -27,7 +28,9 @@ test('no connection file: says how to turn remote debugging on', async () => {
 
 test('copies only the site\'s cookies and Chrome\'s user agent from a running Chrome', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-chrome-'));
-  const proc = spawn(chromium.executablePath(), ['--headless', '--remote-debugging-port=0', `--user-data-dir=${dir}`, '--no-first-run', 'about:blank'], { stdio: 'ignore' });
+  // The browser Take would use: Chrome when installed (then Chromium isn't downloaded), else Chromium.
+  const binary = chromePaths().find((p) => fs.existsSync(p)) ?? chromium.executablePath();
+  const proc = spawn(binary, ['--headless', '--remote-debugging-port=0', `--user-data-dir=${dir}`, '--no-first-run', 'about:blank'], { stdio: 'ignore' });
   try {
     let endpoint: string | undefined;
     for (let i = 0; i < 100 && !(endpoint = chromeEndpoint(dir)); i++) await new Promise((r) => setTimeout(r, 100));
