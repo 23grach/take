@@ -125,17 +125,18 @@ export async function untilReady(page: Page, ready: Condition[] | undefined, pas
       if (t >= READY_MS) throw new TakeError(-1, `waited ${READY_MS / 1000} s for ${describeCondition(c)} before filming (the take's "ready"); check it matches the loaded page`);
       await pass(100);
     }
-  // Pictures that are downloading finish, so none is half drawn on the first frame.
-  for (; !(await imagesDone(page)) && t < READY_MS; t += 100) await pass(100);
+  // Pictures and fonts that are downloading finish, so none is half drawn on the first frame.
+  for (; !(await downloadsDone(page)) && t < READY_MS; t += 100) await pass(100);
   // What just appeared may still be fading in.
   for (let s = 0; s < SETTLE_MS; s += 100) await pass(100);
 }
 
-/** Have the pictures on or near the screen finished downloading? One that hasn't started (a lazy image Chrome
- *  didn't notice coming near while page time was frozen) is told to load now, and counts as not finished. */
-export function imagesDone(page: Page): Promise<boolean> {
+/** Have the fonts, and the pictures on or near the screen, finished downloading? A picture that hasn't started
+ *  (a lazy image Chrome didn't notice coming near while page time was frozen) is told to load now, and counts as
+ *  not finished. */
+export function downloadsDone(page: Page): Promise<boolean> {
   return page
-    .evaluate(() => [...document.images].every((img) => {
+    .evaluate(() => document.fonts.status !== 'loading' && [...document.images].every((img) => {
       if (img.complete) return true;
       const r = img.getBoundingClientRect();
       // On screen or about to be (within a screen of it, like a carousel's next slide), as Chrome reckons for lazy images.

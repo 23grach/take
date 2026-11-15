@@ -26,10 +26,13 @@ const round = (n: number) => Math.round(n * 10) / 10;
 export interface PerformOptions {
   /** Called after each step finishes (before the pause to the next), with where the pointer is. `take probe` screenshots here. */
   onStep?: (log: StepLog, pointer: [number, number]) => Promise<void>;
+  /** Called after every frame with the log so far (`frames`: how many frames there are so far). The log is the
+   *  one perform returns, growing: `take run` composes from it while recording. */
+  onFrame?: (log: EventLog) => void;
 }
 
 /** Opens nothing and closes nothing: the page must already show take.target.url. */
-export async function perform(page: Page, take: Take, clock: Clock, { onStep }: PerformOptions = {}): Promise<EventLog> {
+export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame }: PerformOptions = {}): Promise<EventLog> {
   const [vw, vh] = take.target.viewport;
   let pointer: Point = [Math.round(vw * PACING.start[0]), Math.round(vh * PACING.start[1])];
   const path: Point[] = [];
@@ -42,6 +45,23 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep }: 
   const pageErrors: string[] = [];
   const onError = (e: Error) => pageErrors.push(e.message);
   page.on('pageerror', onError);
+  const eventLog: EventLog = {
+    version: 0,
+    title: take.title,
+    url: take.target.url,
+    address: shownAddress(take.target),
+    fps: clock.fps,
+    viewport: take.target.viewport,
+    scale: take.target.scale,
+    frames: clock.frame,
+    pointer: path,
+    cursors,
+    carets,
+    events,
+    steps,
+    marks,
+    loop: take.loop,
+  };
   let current = 0; // index of the step being performed, for messages
   await page.mouse.move(...pointer);
 
@@ -55,6 +75,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep }: 
     const caret = await caretAt(page).catch(() => null);
     if (!carets.length || JSON.stringify(carets.at(-1)![1]) !== JSON.stringify(caret)) carets.push([clock.frame, caret]);
     await clock.tick();
+    eventLog.frames = clock.frame;
+    onFrame?.(eventLog);
     if (pageErrors.length)
       throw new TakeError(current, `the app threw an error: "${pageErrors[0]}". Take stops rather than film a broken app; fix the app, or the step that sets it off`);
   }
@@ -339,24 +361,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep }: 
   fillSkipped(path);
   // In live mode the last frame can skip too: hold the pointer where it was up to the end.
   while (path.length < clock.frame) path.push(path.at(-1)!);
-
-  return {
-    version: 0,
-    title: take.title,
-    url: take.target.url,
-    address: shownAddress(take.target),
-    fps: clock.fps,
-    viewport: take.target.viewport,
-    scale: take.target.scale,
-    frames: clock.frame,
-    pointer: path,
-    cursors,
-    carets,
-    events,
-    steps,
-    marks,
-    loop: take.loop,
-  };
+  eventLog.frames = clock.frame;
+  return eventLog;
 }
 
 /** In live mode a slow frame makes the clock skip ahead. Fill those frames in between their neighbours,

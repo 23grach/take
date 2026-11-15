@@ -31,7 +31,7 @@ test('defaults are filled in', () => {
   const r = validateTake(take);
   assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
   assert.deepEqual(r.take.target.viewport, DEFAULTS.viewport);
-  assert.equal(r.take.target.scale, 2);
+  assert.equal(r.take.target.scale, 1.5);
   assert.equal(r.take.theme, 'default');
   assert.equal(r.take.loop, 'crossfade-to-start');
   assert.deepEqual(r.take.steps.map((s) => ('cps' in s ? s.cps : 'timeout' in s ? s.timeout : null)), [14, 10_000]);
@@ -67,7 +67,7 @@ test('each problem is reported with where it is', () => {
     'target.kind: must be "web", got "ios"',
     'target.url: must start with http:// or https://, got "localhost:3000"',
     'target.viewport: must be [width, height] in whole pixels between 320 and 3840, e.g. [1440, 900], got [1440]',
-    'target.scale: must be 1 or 2, got 3',
+    'target.scale: must be 1, 1.5 or 2, got 3',
     'steps[0]: missing "ms"',
     'steps[1]: give either "target" (scroll it into view) or "by": [x, y] in pixels',
     'steps[3].ms: must be a number above 0, got -5',
@@ -78,7 +78,7 @@ test('each problem is reported with where it is', () => {
 
 test('take validate reports a good and a broken take', () => {
   const out = execFileSync(process.execPath, [bin, 'validate', example], { encoding: 'utf8' });
-  assert.match(out, /✓ .*"Create a project", 5 steps, 1440×900 at 2×/);
+  assert.match(out, /✓ .*"Create a project", 5 steps, 1440×900 at 1\.5×/);
   const bad = spawnSync(process.execPath, [bin, 'validate', bin], { encoding: 'utf8' });
   assert.equal(bad.status, 1);
   assert.match(bad.stderr, /is not valid JSON/);

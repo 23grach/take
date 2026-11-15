@@ -9,6 +9,7 @@ import { openTake } from '../src/drivers/web/browser.ts';
 import { realtimeClock } from '../src/drivers/web/clock.ts';
 import { perform, TakeError } from '../src/drivers/web/driver.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
+import { withShortFind } from './short-find.ts';
 
 const page = (body: string, script = '') => `<!doctype html><meta charset="utf-8"><style>
   body { margin: 0; font: 16px system-ui; } button { font: inherit; padding: 10px 16px; cursor: pointer; }
@@ -81,7 +82,7 @@ async function play(path: string, steps: unknown[]) {
 }
 
 async function failure(path: string, steps: unknown[]): Promise<string> {
-  const err = await play(path, steps).then(() => undefined, (e) => e);
+  const err = await withShortFind(() => play(path, steps)).then(() => undefined, (e) => e);
   assert.ok(err instanceof TakeError, `expected a TakeError, got ${err}`);
   return err.message;
 }

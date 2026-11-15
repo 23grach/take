@@ -47,7 +47,8 @@ export interface WebTarget {
   /** What the window's address bar shows, e.g. "boards.app". The product's real domain, not where it runs while recording. */
   address?: string;
   viewport: [number, number];
-  scale: 1 | 2;
+  /** Pixels per CSS pixel in the captured frames. */
+  scale: 1 | 1.5 | 2;
   /** A saved login to start signed in with (made by `take login`), by name, e.g. "boards.app". */
   login?: string;
 }
@@ -91,7 +92,7 @@ export interface Take {
 
 export const DEFAULTS = {
   viewport: [1440, 900] as [number, number],
-  scale: 2 as const,
+  scale: 1.5 as const,
   theme: 'default',
   loop: 'crossfade-to-start' as const,
   /** Typing speed in characters per second. 14 reads as quick but human. */
@@ -279,7 +280,7 @@ export function validateTake(input: unknown): Result {
     if (!Array.isArray(viewport) || viewport.length !== 2 || !viewport.every((n) => Number.isInteger(n) && n >= 320 && n <= 3840))
       fail('target.viewport', `must be [width, height] in whole pixels between 320 and 3840, e.g. [1440, 900], got ${show(t.viewport)}`);
     const scale = t.scale ?? DEFAULTS.scale;
-    if (scale !== 1 && scale !== 2) fail('target.scale', `must be 1 or 2, got ${show(t.scale)}`);
+    if (scale !== 1 && scale !== 1.5 && scale !== 2) fail('target.scale', `must be 1, 1.5 or 2, got ${show(t.scale)}`);
     const login = t.login;
     if (login !== undefined && (typeof login !== 'string' || !isLoginName(login)))
       fail('target.login', `must be the name of a saved login, e.g. "boards.app" (letters, digits, dots, dashes), got ${show(login)}`);
@@ -288,7 +289,7 @@ export function validateTake(input: unknown): Result {
       url: url ?? '',
       ...(typeof address === 'string' ? { address: address.trim() } : {}),
       viewport: viewport as [number, number],
-      scale: scale as 1 | 2,
+      scale: scale as 1 | 1.5 | 2,
       ...(typeof login === 'string' ? { login } : {}),
     };
   }

@@ -92,14 +92,25 @@ ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${
   const pressScale = ${cursor.pressScale};
   // Everything in CSS pixels of the page times box.k, so a cursor is as big next to the page as on a real screen.
   const byKey = {};
-  // Called once the cursor images have loaded: a site's own image is drawn at its own size.
-  window.setup = () => { for (const img of document.querySelectorAll('.cursor')) {
+  // Sizes a cursor drawing once its image has loaded: a site's own image is drawn at its own size.
+  const fit = (img) => {
     const a = art[img.dataset.key], k = box.k;
     const [w, h] = a.size ?? [img.naturalWidth, img.naturalHeight];
     Object.assign(img.style, { width: w * k + 'px', height: h * k + 'px', transformOrigin: a.hotspot[0] * k + 'px ' + a.hotspot[1] * k + 'px',
       filter: a.shadow ? 'drop-shadow(0 ' + a.shadow.y * k + 'px ' + a.shadow.blur * k + 'px rgb(0 0 0 / ' + a.shadow.alpha + '))' : 'none' });
     byKey[img.dataset.key] = img;
-  } };
+  };
+  // Called once the cursor images have loaded.
+  window.setup = () => { for (const img of document.querySelectorAll('.cursor')) fit(img); };
+  // A site's own cursor image joins when the video first shows it.
+  window.addCursor = async ({ key, src, hotspot }) => {
+    art[key] = { hotspot };
+    const img = Object.assign(document.createElement('img'), { className: 'cursor', alt: '', src });
+    img.dataset.key = key;
+    document.body.append(img);
+    await img.decode();
+    fit(img);
+  };
   const shot = document.getElementById('shot'), fade = document.getElementById('fade'), rip = document.getElementById('ripples');
   const sx = (x) => box.contentLeft + x * box.k, sy = (y) => box.contentTop + y * box.k;
   const show = async (img, src) => { if (img.getAttribute('src') !== src) { img.src = src; await img.decode(); } };

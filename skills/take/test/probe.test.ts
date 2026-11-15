@@ -4,9 +4,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { serve } from '../examples/demo-app/serve.mjs';
-import { describeStep, probe } from '../src/probe/probe.ts';
+import { describeStep, probe, withoutAddresses } from '../src/probe/probe.ts';
 import { storyboard } from '../src/probe/storyboard.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
+import { withShortFind } from './short-find.ts';
 
 let app: { url: string; close: () => Promise<unknown> };
 let tmp: string;
@@ -64,14 +65,35 @@ test('probe screenshots the first screen and every step, and makes a storyboard'
 
 test('probe stops at a step that fails and shows why', async () => {
   const out = path.join(tmp, 'bad');
-  const r = await probe(take([
+  const r = await withShortFind(() => probe(take([
     { do: 'click', target: { role: 'button', name: 'New project' } },
     { do: 'click', target: { role: 'button', name: 'Save' } },
     { do: 'hold', ms: 100 },
-  ]), out);
+  ]), out));
   assert.equal(r.ok, false);
   assert.match(r.error ?? '', /^step 2: can't find button "Save"/);
   assert.deepEqual(r.shots.map((s) => s.step), [0, 1, 2]);
   assert.match(r.shots[2].error ?? '', /^can't find button "Save"/);
   assert.ok(JSON.parse(fs.readFileSync(path.join(out, 'probe.json'), 'utf8')).error);
+});
+
+test('outlines leave out link addresses, which targets never use', () => {
+  const outline = [
+    '- banner:',
+    '  - link "Home":',
+    '    - /url: /home',
+    '  - link "Search and explore":',
+    '    - /url: /explore',
+    '    - text: Explore',
+    '- textbox "Name": Moodboard',
+    '- button "Create"',
+  ].join('\n');
+  assert.equal(withoutAddresses(outline), [
+    '- banner:',
+    '  - link "Home"',
+    '  - link "Search and explore":',
+    '    - text: Explore',
+    '- textbox "Name": Moodboard',
+    '- button "Create"',
+  ].join('\n'));
 });

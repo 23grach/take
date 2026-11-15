@@ -1,7 +1,7 @@
 {
   "version": 0,
   "title": "Create a project",
-  "target": { "kind": "web", "url": "http://127.0.0.1:4300/", "address": "boards.app", "viewport": [1440, 900], "scale": 2 },
+  "target": { "kind": "web", "url": "http://127.0.0.1:4300/", "address": "boards.app", "viewport": [1440, 900], "scale": 1.5 },
   "theme": "default",
   "steps": [
     { "do": "hold", "ms": 2000, "mark": "start" },

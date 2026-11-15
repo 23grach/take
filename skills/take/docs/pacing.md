@@ -9,7 +9,7 @@ Rules for writing `take.json` ([take-format.md](take-format.md)) from a scenario
 | `Title: Create a project` | `"title": "Create a project"`; folder `takes/create-project/` |
 | `App: http://localhost:3000` | `target.url` |
 | `Address: boards.app` | `target.address`. Local app and no address: ask the user once. |
-| `Size: desktop` (default) | `viewport: [1440, 900]`, `scale: 2` |
+| `Size: desktop` (default) | `viewport: [1440, 900]`, `scale: 1.5` |
 | `Loop: yes` (default) / `no` | `"loop": "crossfade-to-start"` / `"none"` |
 | `Theme:` | `"theme"`; default `"default"` |
 

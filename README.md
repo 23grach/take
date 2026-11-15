@@ -81,7 +81,7 @@ Videos are always 2560×1440, with one look. Phone frames, multi-finger gestures
 
 ## Under the hood
 
-The agent writes an exact `take.json`, and a script performs it. Take drives the browser with [Playwright](https://playwright.dev), freezes the page's clock and steps it 1/60 s at a time while saving frames at 2× resolution, logs the cursor and clicks, then draws the window, cursor and ripples afterwards and encodes with ffmpeg.
+The agent writes an exact `take.json`, and a script performs it. Take drives the browser with [Playwright](https://playwright.dev), freezes the page's clock and steps it 1/60 s at a time while saving frames at 1.5× resolution, and logs the cursor and clicks. A few frames behind, other browsers draw the window, cursor and ripples from that log, and ffmpeg encodes the video.
 
 The CLI the agent uses (`node skills/take/bin/take <command>`):
 

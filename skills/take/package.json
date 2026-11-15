@@ -13,7 +13,7 @@
   "scripts": {
     "take": "node bin/take",
     "typecheck": "tsc --noEmit",
-    "test": "npm run typecheck && node --test \"test/**/*.test.ts\"",
+    "test": "npm run typecheck && node --test --test-timeout=180000 \"test/**/*.test.ts\"",
     "demo": "node examples/demo-app/serve.mjs",
     "postinstall": "node src/install-browser.ts"
   },

@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import http from 'node:http';
+import { execFileSync } from 'node:child_process';
 import { serve } from '../examples/demo-app/serve.mjs';
 import { record } from '../src/drivers/web/record.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
@@ -70,4 +72,31 @@ test('"ready" lets the page load before filming, unfilmed', async () => {
   assert.ok(!bad.ok && bad.errors.some((e) => /^ready: give a condition/.test(e)));
   const typo = validateTake({ version: 0, title: 't', target: { kind: 'web', url: app.url }, ready: [{ txt: 'x' }], steps: [{ do: 'hold', ms: 100 }] });
   assert.ok(!typo.ok && typo.errors.some((e) => e.startsWith('ready[0]')));
+});
+
+test('the browser\'s own caret is never filmed, and the drawn one keeps the page\'s caret colour', async () => {
+  // A red caret on white: any red pixel in a frame would be the browser's caret.
+  const html = '<!doctype html><body style="margin:40px;background:#fff"><input aria-label="Name" style="font:40px sans-serif;caret-color:rgb(255,0,0);border:1px solid #000">';
+  const server = http.createServer((_, res) => res.end(html));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const r = validateTake({
+      version: 0, title: 'Caret', loop: 'none',
+      target: { kind: 'web', url: `http://127.0.0.1:${(server.address() as { port: number }).port}/`, viewport: [480, 320], scale: 1 },
+      steps: [{ do: 'type', target: { label: 'Name' }, text: 'Ab', cps: 10 }, { do: 'hold', ms: 800 }],
+    });
+    assert.ok(r.ok);
+    const out = path.join(tmp, 'caret');
+    const { capture, events } = await record(r.take, { mode: 'studio', out });
+    const carets = events.carets.filter(([, c]) => c);
+    assert.ok(carets.length > 0 && carets.every(([, c]) => c!.color === 'rgb(255, 0, 0)'), JSON.stringify(events.carets));
+    const from = carets[0][0];
+    const rgb = execFileSync('ffmpeg', ['-v', 'error', '-start_number', String(from), '-i', path.join(out, 'frames/f%05d.jpg'), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 2 ** 30 });
+    const [w, h] = capture.size;
+    assert.equal(rgb.length, (capture.frames.length - from) * w * h * 3);
+    for (let i = 0; i < rgb.length; i += 3)
+      assert.ok(!(rgb[i] > 180 && rgb[i + 1] < 90 && rgb[i + 2] < 90), `frame ${from + Math.floor(i / (w * h * 3))} shows the browser's caret`);
+  } finally {
+    server.close();
+  }
 });

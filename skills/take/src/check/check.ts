@@ -72,7 +72,8 @@ export function check(file: string, { loop = true, fps: expectedFps = 60 }: Chec
   add('frame rate', !constant ? 'fail' : Math.abs(fps - expectedFps) > 0.01 ? 'warn' : 'pass',
     `${+fps.toFixed(3)} fps, ${constant ? 'constant' : 'variable (frames of different lengths: playback will judder)'}${constant && Math.abs(fps - expectedFps) > 0.01 ? `; expected ${expectedFps}` : ''}`);
 
-  add('fast start', fastStart(file) ? 'pass' : 'warn', fastStart(file) ? 'plays before it has fully downloaded' : 'the index is at the end, so browsers must download the whole file before playing; re-encode with +faststart');
+  const fast = fastStart(file);
+  add('fast start', fast ? 'pass' : 'warn', fast ? 'plays before it has fully downloaded' : 'the index is at the end, so browsers must download the whole file before playing; re-encode with +faststart');
 
   // Motion
   const change = tileChanges(file);

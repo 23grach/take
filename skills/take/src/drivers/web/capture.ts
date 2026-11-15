@@ -1,6 +1,6 @@
 // Captures frames while the driver performs a take. Two clocks, same driver:
 // - studio: page time is frozen and moved exactly 1/60 s per frame, and each frame is a screenshot.
-//   Perfectly even and retina-sharp, slower than real time. For final videos.
+//   Perfectly even and sharp, slower than real time. For final videos.
 // - live: the take plays in real time while the browser streams frames. Fast, may hitch. For drafts.
 // Both write frames/ and list, for every video frame, which image shows it (capture.json).
 import fs from 'node:fs';
@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { CDPSession, Page } from 'playwright';
 import type { Clock } from './clock.ts';
 import { realtimeClock } from './clock.ts';
-import { imagesDone } from './browser.ts';
+import { downloadsDone } from './browser.ts';
 
 export type Mode = 'studio' | 'live';
 
@@ -33,10 +33,14 @@ export interface Recorder {
   warmup(ms: number): Promise<void>;
   /** Call once the driver is done. Writes nothing itself; returns what goes into capture.json. */
   finish(): Promise<Omit<CaptureInfo, 'version' | 'size' | 'renderSeconds'>>;
+  /** Studio: resolves once frame f's picture is on disk, at frameFile(f) in the capture folder. */
+  saved?(f: number): Promise<void>;
 }
 
-const QUALITY = 92; // JPEG; visually lossless at 2×, and fast to write
-const name = (i: number) => `frames/f${String(i).padStart(5, '0')}.jpg`;
+const QUALITY = 92; // JPEG; visually lossless at 1.5× and 2×, and fast to write
+/** Where frame i's picture goes in the capture folder (studio: one per frame). */
+export const frameFile = (i: number) => `frames/f${String(i).padStart(5, '0')}.jpg`;
+const name = frameFile;
 
 /** Freezes page time and animations. Must run before the page is opened, so the page never sees real time. */
 export async function freezePage(page: Page): Promise<CDPSession> {
@@ -50,17 +54,24 @@ export async function freezePage(page: Page): Promise<CDPSession> {
   return cdp;
 }
 
-/** Studio: each tick moves animations and page time on exactly one frame, then screenshots it. */
-export function studio(page: Page, dir: string, fps = 60): Recorder {
+/** Studio: each tick moves animations and page time on exactly one frame, then screenshots it.
+ *  `cdp` is the session freezePage opened; `viewport` and `scale` are the take's. */
+export async function studio(page: Page, dir: string, cdp: CDPSession, [width, height]: [number, number], scale: number, fps = 60): Promise<Recorder> {
   fs.mkdirSync(path.join(dir, 'frames'), { recursive: true });
+  // That session takes the pictures (see tick). It sees the page with its own size and pixel density, so give it
+  // the take's; otherwise its first picture switches the page to 1×.
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile: false });
   let frame = 0;
   const dt = 1000 / fps;
+  const writes: Promise<void>[] = [];
+  let writeError: Error | undefined;
   const clock: Clock = {
     fps,
     get frame() {
       return frame;
     },
     async tick() {
+      if (writeError) throw writeError;
       // Animations already on screen move forward one frame; ones that started during this frame begin at 0.
       await page.evaluate((dt) => {
         for (const a of document.getAnimations()) {
@@ -73,11 +84,14 @@ export function studio(page: Page, dir: string, fps = 60): Recorder {
       await page.evaluate(() => {
         for (const a of document.getAnimations()) (a as Animation & { __take?: boolean }).__take = true;
       });
-      // Page time stands still while a picture on screen downloads (up to 3 s of wall time), as if the network
-      // were instant: frozen time makes every download look many times slower, so a banner sliding in would sit
-      // blank for a second of video.
-      for (const until = Date.now() + 3000; !(await imagesDone(page)) && Date.now() < until; ) await new Promise((r) => setTimeout(r, 15));
-      await page.screenshot({ path: path.join(dir, name(frame)), type: 'jpeg', quality: QUALITY });
+      // Page time stands still while a picture on screen or a font downloads (up to 3 s of wall time), as if the
+      // network were instant: frozen time makes every download look many times slower, so a banner sliding in
+      // would sit blank for a second of video, or text would show in a stand-in font.
+      for (const until = Date.now() + 3000; !(await downloadsDone(page)) && Date.now() < until; ) await new Promise((r) => setTimeout(r, 15));
+      // Straight from the browser: Playwright's screenshot does extra work each time (it hides the caret, which
+      // hideCaret already did, and waits for fonts, as the line above does). A tenth faster, the same picture.
+      const jpeg = Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: QUALITY })).data, 'base64');
+      writes[frame] = fs.promises.writeFile(path.join(dir, name(frame)), jpeg).catch((e: Error) => void (writeError ??= e));
       frame++;
     },
   };
@@ -97,8 +111,11 @@ export function studio(page: Page, dir: string, fps = 60): Recorder {
       }
     },
     async finish() {
+      await Promise.all(writes);
+      if (writeError) throw writeError;
       return { mode: 'studio', fps, frames: Array.from({ length: frame }, (_, i) => name(i)), images: frame };
     },
+    saved: (f) => writes[f],
   };
 }
 

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { compose, footageAt, loadTheme, loopProgress, overlayAt, totalFrames } from '../src/compose/compose.ts';
+import { compose, composeWorkers, following, footageAt, loadTheme, loopProgress, overlayAt, totalFrames } from '../src/compose/compose.ts';
 import type { CaptureInfo } from '../src/drivers/web/capture.ts';
 import { layout } from '../src/compose/stage.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
@@ -88,6 +88,76 @@ test('composes a capture into a 2560×1440, 60 fps H.264 MP4', async () => {
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('several browsers share the frames, and the video keeps them in order', async () => {
+  // Each captured frame is a shade lighter than the one before, so the middle of the video brightens frame by frame.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'frames'));
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', "color=c=black:size=1440x900:rate=60,format=gray,geq=lum='16+N*6'", '-frames:v', '30', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
+    const frames = Array.from({ length: 30 }, (_, i) => `frames/f${String(i + 1).padStart(5, '0')}.jpg`);
+    fs.writeFileSync(path.join(dir, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [1440, 900], frames, renderSeconds: 0, images: 30 }));
+    fs.writeFileSync(path.join(dir, 'events.json'), JSON.stringify({ ...log(30), loop: 'none', pointer: Array(30).fill([20, 20]) }));
+    const out = path.join(dir, 'out.mp4');
+    await compose({ capture: dir, out, workers: 3 });
+    const stats = execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-vf', 'crop=400:400:1080:520,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const shades = [...stats.matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
+    assert.equal(shades.length, 30);
+    for (let i = 1; i < shades.length; i++) assert.ok(shades[i] > shades[i - 1], `frame ${i} is out of order: ${shades.join(', ')}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('compose follows a recording as it happens: same frames, in order, and nothing left if it fails', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'frames'));
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', "color=c=black:size=1440x900:rate=60,format=gray,geq=lum='16+N*6'", '-frames:v', '30', '-start_number', '0', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
+    const done: EventLog = { ...log(30), loop: 'none', pointer: Array(30).fill([20, 20]) };
+    // The recording: the log grows a frame at a time, as perform fills it in.
+    const live: EventLog = { ...done, frames: 0, pointer: [], events: [] };
+    const out = path.join(dir, 'out.mp4');
+    const recording = following();
+    const composing = compose({ capture: dir, out, follow: recording.follow });
+    for (let f = 0; f < 30; f++) {
+      live.pointer.push(done.pointer[f]);
+      live.events.push(...done.events.filter((e) => e.frame === f));
+      live.frames = f + 1;
+      recording.frame(live, f + 1);
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    recording.end(live);
+    const r = await composing;
+    assert.equal(r.frames, 30);
+    const stats = execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-vf', 'crop=400:400:1080:520,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const shades = [...stats.matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
+    assert.equal(shades.length, 30);
+    for (let i = 1; i < shades.length; i++) assert.ok(shades[i] > shades[i - 1], `frame ${i} is out of order: ${shades.join(', ')}`);
+
+    // A recording that fails stops the video, and leaves no half-made file.
+    const failed = path.join(dir, 'failed.mp4');
+    const broken = following();
+    const stopped = compose({ capture: dir, out: failed, follow: broken.follow });
+    broken.frame({ ...live, frames: 1 }, 1);
+    broken.fail(new Error('step 2: can\'t find button "Save"'));
+    await assert.rejects(stopped, /can't find button "Save"/);
+    assert.deepEqual(fs.readdirSync(dir).filter((f) => f.startsWith('failed')), []);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('up to 4 browsers compose at once, fewer on small machines and short videos', () => {
+  const GB = 2 ** 30;
+  assert.equal(composeWorkers(600, 10, 16 * GB), 4);
+  assert.equal(composeWorkers(600, 16, 64 * GB), 4);
+  assert.equal(composeWorkers(600, 10, 8 * GB), 2);
+  assert.equal(composeWorkers(600, 4, 16 * GB), 2);
+  assert.equal(composeWorkers(600, 2, 4 * GB), 1);
+  assert.equal(composeWorkers(200, 10, 16 * GB), 2, 'one browser per 2 s of video');
+  assert.equal(composeWorkers(70, 10, 16 * GB), 1);
 });
 
 /** A 30-frame capture of a test pattern, in a fresh folder. */

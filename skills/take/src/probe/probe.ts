@@ -13,6 +13,15 @@ import type { Box } from '../drivers/web/events.ts';
 import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
 import { PACING } from '../drivers/web/pacing.ts';
 
+/** The page outline without link addresses (`- /url: …` under every link): targets never use them, and on a
+ *  big site they're a good share of what the agent reads after each step. A link left with nothing under it
+ *  loses its trailing colon. */
+export function withoutAddresses(outline: string): string {
+  const lines = outline.split('\n').filter((l) => !/^\s*- \/url: /.test(l));
+  const indent = (l: string) => l.length - l.trimStart().length;
+  return lines.map((l, i) => (l.endsWith(':') && !(indent(lines[i + 1] ?? '') > indent(l)) ? l.slice(0, -1) : l)).join('\n');
+}
+
 export interface ProbeShot {
   /** 0 is the first screen, before any step; then one per step, numbered from 1. */
   step: number;
@@ -91,7 +100,7 @@ export async function probe(take: Take, out: string, { headed = false } = {}): P
     const file = `${name}.png`;
     const outline = `${name}.outline.yml`;
     await page.screenshot({ path: path.join(out, file) });
-    fs.writeFileSync(path.join(out, outline), await page.locator('body').ariaSnapshot().catch((e) => `# outline unavailable: ${e.message}\n`));
+    fs.writeFileSync(path.join(out, outline), await page.locator('body').ariaSnapshot().then(withoutAddresses, (e) => `# outline unavailable: ${e.message}\n`));
     shots.push({ step, label, at: +(clock.frame / clock.fps).toFixed(2), file, outline, pointer, cursor: await cursorAt(pointer), ...extra });
   };
   let error: string | undefined;

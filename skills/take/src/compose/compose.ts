@@ -1,11 +1,14 @@
 // Turns a capture (frames + events) into a finished video: the footage sits in a browser window on a
 // background, and the cursor and click ripples are drawn on top from the event log.
 // The stage is an HTML page rendered in Chromium, one screenshot per video frame, piped into ffmpeg.
+// Every frame depends only on the log, so several browsers draw different frames at once.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import type { Browser, Page } from 'playwright';
 import { launchBrowser } from '../browser-binary.ts';
-import type { CaptureInfo } from '../drivers/web/capture.ts';
+import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog } from '../drivers/web/events.ts';
 import { stageHtml, layout, type Theme } from './stage.ts';
 import { ease } from '../drivers/web/pacing.ts';
@@ -24,6 +27,60 @@ export interface ComposeOptions {
   address?: string;
   /** Only these video frames, [first, last] inclusive: for quick checks. */
   range?: [number, number];
+  /** A recording still going on (take run): instead of reading capture.json and events.json, compose draws each
+   *  frame as soon as the recording has everything for it, and finishes shortly after the recording does. */
+  follow?: Follow;
+  /** How many browsers draw frames. Default: composeWorkers(). */
+  workers?: number;
+}
+
+/** Where a recording has got to. `log` is the one the recording is filling in. */
+export interface Progress {
+  log: EventLog;
+  /** Frames recorded so far, with their pictures on disk. */
+  frames: number;
+  ended: boolean;
+}
+
+/** A recording compose can follow. */
+export interface Follow {
+  /** Resolves once at least `frames` frames are recorded, or the recording has ended; rejects if it failed. */
+  wait(frames: number): Promise<Progress>;
+}
+
+/** A Follow fed by a recording: call frame() as frames come in, then end() or fail(). */
+export function following() {
+  let now: Progress | null = null;
+  let error: unknown;
+  let waiting: { frames: number; resolve: (p: Progress) => void; reject: (e: unknown) => void }[] = [];
+  const settle = () => {
+    waiting = waiting.filter((w) => {
+      if (error !== undefined) return w.reject(error), false;
+      if (now && (now.ended || now.frames >= w.frames)) return w.resolve(now), false;
+      return true;
+    });
+  };
+  const follow: Follow = {
+    wait: (frames) => new Promise((resolve, reject) => {
+      waiting.push({ frames, resolve, reject });
+      settle();
+    }),
+  };
+  return {
+    follow,
+    frame(log: EventLog, frames: number) {
+      now = { log, frames, ended: false };
+      settle();
+    },
+    end(log: EventLog) {
+      now = { log, frames: log.frames, ended: true };
+      settle();
+    },
+    fail(e: unknown) {
+      error = e ?? new Error('the recording failed');
+      settle();
+    },
+  };
 }
 
 export interface ComposeResult {
@@ -37,6 +94,14 @@ export interface ComposeResult {
 
 const THEMES = new URL('../../themes/', import.meta.url).pathname;
 const HOST = 'http://take.local/';
+
+/** How many browsers draw frames at once: one per 2 s of video (starting a browser costs more than drawing a
+ *  short clip), up to 4 (beyond that the Mac's graphics are the limit), one per 2 cores and per 3 GB of memory,
+ *  since each holds about 1 GB while drawing. Separate browsers, not tabs: tabs share one graphics process and
+ *  wait on each other. */
+export function composeWorkers(frames: number, cpus = os.availableParallelism(), memory = os.totalmem()): number {
+  return Math.max(1, Math.min(4, Math.floor(cpus / 2), Math.floor(memory / 3 / 2 ** 30), Math.ceil(frames / 120)));
+}
 
 export function loadTheme(name = 'default'): { theme: Theme; dir: string } {
   const dir = path.join(THEMES, name);
@@ -73,41 +138,45 @@ export function shapeAt(log: EventLog, f: number): Cursor {
 }
 
 /** The drawings a video needs, and which one shows for each cursor: a standard cursor by its name (the arrow
- *  when there's no drawing for it), a site's own image as itself; `none` shows nothing, as in the browser. */
+ *  when there's no drawing for it), a site's own image as itself; `none` shows nothing, as in the browser.
+ *  A site image that first shows up later (in a recording still going on) gets its drawing then. */
 export function stageCursors(log: EventLog, art: ArtSet) {
   const cursors: Record<string, StageCursor> = { ...art };
   const sites: string[] = [];
-  for (const [, c] of log.cursors) {
-    if (typeof c === 'object' && !sites.includes(c.image)) {
-      cursors[`site-${sites.length}`] = { src: c.image, hotspot: c.hotspot ?? [0, 0] };
-      sites.push(c.image);
+  const site = (c: Extract<Cursor, object>) => {
+    let i = sites.indexOf(c.image);
+    if (i < 0) {
+      i = sites.push(c.image) - 1;
+      cursors[`site-${i}`] = { src: c.image, hotspot: c.hotspot ?? [0, 0] };
     }
-  }
-  const keyOf = (c: Cursor): string | null =>
-    typeof c === 'object' ? `site-${sites.indexOf(c.image)}` : c === 'none' ? null : art[c] ? c : 'default';
+    return `site-${i}`;
+  };
+  for (const [, c] of log.cursors) if (typeof c === 'object') site(c);
+  const keyOf = (c: Cursor): string | null => (typeof c === 'object' ? site(c) : c === 'none' ? null : art[c] ? c : 'default');
   return { cursors, keyOf };
 }
 
-const opacityCache = new WeakMap<EventLog, number[]>();
-/** Cursor opacity for every video frame. Like macOS, the cursor hides when typing starts and comes back as soon
- *  as it moves; both fade over theme.cursor.hideFade frames so it never pops. */
-export function cursorOpacity(log: EventLog, theme: Theme): number[] {
-  const cached = opacityCache.get(log);
-  if (cached) return cached;
-  const keys = new Set(log.events.filter((e) => e.type === 'key').map((e) => e.frame));
+const opacityCache = new WeakMap<EventLog, { values: number[]; hiding: boolean }>();
+/** Cursor opacity in frame f. Like macOS, the cursor hides when typing starts and comes back as soon as it
+ *  moves; both fade over theme.cursor.hideFade frames so it never pops. Each frame follows from the one before,
+ *  so frames are worked out in order and kept: ask for a frame only once the log has everything up to it. */
+export function opacityAt(log: EventLog, theme: Theme, f: number): number {
+  let c = opacityCache.get(log);
+  if (!c) opacityCache.set(log, (c = { values: [], hiding: false }));
   const step = 1 / Math.max(1, theme.cursor.hideFade);
-  const out: number[] = [];
-  let hiding = false;
-  let o = 1;
-  for (let f = 0; f < totalFrames(log, theme); f++) {
-    const [a, b] = [log.pointer[Math.min(f, log.frames - 1)], log.pointer[Math.max(0, Math.min(f - 1, log.frames - 1))]];
-    if (keys.has(f)) hiding = true;
-    else if (f >= log.frames || a[0] !== b[0] || a[1] !== b[1]) hiding = false;
-    o = hiding ? Math.max(0, o - step) : Math.min(1, o + step);
-    out.push(o);
+  for (let g = c.values.length; g <= f; g++) {
+    const [a, b] = [log.pointer[Math.min(g, log.frames - 1)], log.pointer[Math.max(0, Math.min(g - 1, log.frames - 1))]];
+    if (log.events.some((e) => e.type === 'key' && e.frame === g)) c.hiding = true;
+    else if (g >= log.frames || a[0] !== b[0] || a[1] !== b[1]) c.hiding = false;
+    const o = c.values[g - 1] ?? 1;
+    c.values.push(c.hiding ? Math.max(0, o - step) : Math.min(1, o + step));
   }
-  opacityCache.set(log, out);
-  return out;
+  return c.values[f];
+}
+
+/** Cursor opacity for every frame of a finished log. */
+export function cursorOpacity(log: EventLog, theme: Theme): number[] {
+  return Array.from({ length: totalFrames(log, theme) }, (_, f) => opacityAt(log, theme, f));
 }
 
 /** The text caret in one video frame, with its blink: solid while it moves (typing), then on/off on video
@@ -128,7 +197,7 @@ export function caretAt(log: EventLog, theme: Theme, f: number) {
 
 /** What the cursor and ripples look like in one video frame. Pure: depends only on the log, the theme and the frame. */
 export function overlayAt(log: EventLog, theme: Theme, f: number) {
-  const opacity = cursorOpacity(log, theme)[f] ?? 1;
+  const opacity = opacityAt(log, theme, f);
   if (f >= log.frames) {
     // The loop: the cursor glides back to where it started, arriving as the footage does, and takes on the
     // starting shape halfway, as the first frame fades in under it.
@@ -164,59 +233,139 @@ export function overlayAt(log: EventLog, theme: Theme, f: number) {
   return { x, y, shape: shapeAt(log, f), opacity, pressed, ripples, caret: caretAt(log, theme, f) };
 }
 
-export async function compose({ capture, out, theme: themeName = 'default', address, range }: ComposeOptions): Promise<ComposeResult> {
-  const info: CaptureInfo = JSON.parse(fs.readFileSync(path.join(capture, 'capture.json'), 'utf8'));
-  const log: EventLog = JSON.parse(fs.readFileSync(path.join(capture, 'events.json'), 'utf8'));
-  if (!log.cursors || !log.carets || log.address === undefined || !log.loop)
-    throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
+export async function compose({ capture, out, theme: themeName = 'default', address, range, follow, workers: asked }: ComposeOptions): Promise<ComposeResult> {
   const { theme, dir: themeDir } = loadTheme(themeName);
-  const { cursors, keyOf } = stageCursors(log, cursorArt(theme, themeDir));
-  const [first, last] = range ?? [0, totalFrames(log, theme) - 1];
   const [W, H] = theme.stage.size;
-  const box = layout(theme, log.viewport);
-  const html = stageHtml(theme, address ?? log.address, box, cursors);
   // Videos are 2560×1440: the 1920×1080 stage at a higher pixel density, so every theme length keeps its look.
   const scale = theme.stage.output[0] / W;
   const size = theme.stage.output;
+  const t0 = performance.now();
+  // Following a recording, a couple of browsers keep up with it; more would only slow the recording down.
+  const workers = asked ?? (follow ? Math.min(2, composeWorkers(Infinity)) : undefined);
+  // Browsers start while the recording opens the app.
+  const launches = follow ? Array.from({ length: workers! }, () => launchBrowser({ args: ARGS })) : [];
+
+  let log: EventLog;
+  let info: Pick<CaptureInfo, 'fps' | 'frames'>;
+  let recorded = 0;
+  let ended = true;
+  try {
+    if (follow) {
+      ({ log, frames: recorded, ended } = await follow.wait(1));
+      info = { fps: log.fps, frames: [] };
+    } else {
+      info = JSON.parse(fs.readFileSync(path.join(capture, 'capture.json'), 'utf8'));
+      log = JSON.parse(fs.readFileSync(path.join(capture, 'events.json'), 'utf8'));
+      if (!log.cursors || !log.carets || log.address === undefined || !log.loop)
+        throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
+    }
+  } catch (e) {
+    await Promise.allSettled(launches.map((b) => b.then((b) => b.close())));
+    throw e;
+  }
+  // The standard drawings are on the stage from the start; a site's own images join when first shown.
+  const art = cursorArt(theme, themeDir);
+  const { cursors, keyOf } = stageCursors(log, art);
+  const html = stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art);
+  const staged = new Set(Object.keys(art));
+  const first = range?.[0] ?? 0;
+  const lead = theme.ripple.lead;
+  /** Can frame f be drawn? Following a recording, waits until it has every event that shows in frame f (a
+   *  ripple starts `lead` frames before its click). False once the video has no frame f. */
+  const ready = async (f: number): Promise<boolean> => {
+    while (!ended && recorded <= f + lead) ({ frames: recorded, ended } = await follow!.wait(f + lead + 1));
+    while (info.frames.length < recorded) info.frames.push(frameFile(info.frames.length));
+    return f <= (range ? range[1] : totalFrames(log, theme) - 1);
+  };
 
   fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
-  const t0 = performance.now();
-  const browser = await launchBrowser({ args: ['--force-color-profile=srgb', '--hide-scrollbars'] });
-  const ffmpeg = encoder(out, info.fps);
+  // Written next to the video and renamed at the end, so a failed run never leaves half a video in its place.
+  const part = `${out}.part`;
+  const browsers: Browser[] = [];
+  const ffmpeg = encoder(part, info.fps);
+  let frames = 0;
   try {
-    const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: scale });
-    // The stage loads frames and theme files from disk through a made-up host.
-    await page.route(`${HOST}**`, (route) => {
-      const url = new URL(route.request().url());
-      if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: html });
-      const [root, rel] = url.pathname.startsWith('/theme/') ? [themeDir, url.pathname.slice(7)] : [capture, url.pathname.slice(1)];
-      const file = path.join(root, decodeURIComponent(rel));
-      if (!file.startsWith(root) || !fs.existsSync(file)) return route.fulfill({ status: 404 });
-      return route.fulfill({ path: file });
-    });
-    await page.goto(HOST);
-    await page.evaluate(() => Promise.all([document.fonts.ready, ...[...document.querySelectorAll('img.cursor')].map((i) => (i as HTMLImageElement).decode())]));
-    await page.evaluate(() => (window as unknown as { setup: () => void }).setup());
+    // Settled, not all: a browser that fails to start must not leave the others running.
+    const started = await Promise.allSettled(
+      (follow ? launches : Array.from({ length: workers ?? composeWorkers(range ? range[1] - range[0] + 1 : totalFrames(log, theme)) }, () => launchBrowser({ args: ARGS })))
+        .map(async (launch) => {
+          const browser = await launch;
+          browsers.push(browser);
+          const page = await browser.newPage({ viewport: { width: W, height: H }, deviceScaleFactor: scale });
+          // The stage loads frames and theme files from disk through a made-up host.
+          await page.route(`${HOST}**`, (route) => {
+            const url = new URL(route.request().url());
+            if (url.pathname === '/') return route.fulfill({ contentType: 'text/html', body: html });
+            const [root, rel] = url.pathname.startsWith('/theme/') ? [themeDir, url.pathname.slice(7)] : [capture, url.pathname.slice(1)];
+            const file = path.join(root, decodeURIComponent(rel));
+            if (!file.startsWith(root) || !fs.existsSync(file)) return route.fulfill({ status: 404 });
+            return route.fulfill({ path: file });
+          });
+          await page.goto(HOST);
+          await page.evaluate(() => Promise.all([document.fonts.ready, ...[...document.querySelectorAll('img.cursor')].map((i) => (i as HTMLImageElement).decode())]));
+          await page.evaluate(() => (window as unknown as { setup: () => void }).setup());
+          return page;
+        }),
+    );
+    const failed = started.find((r) => r.status === 'rejected');
+    if (failed) throw failed.reason;
+    const pages = started.map((r) => (r as PromiseFulfilledResult<Page>).value);
 
-    for (let f = first; f <= last; f++) {
-      if (ffmpeg.failed()) break; // the reason comes from `done` below
+    // Browser i draws every n-th frame, each in turn; the pictures reach ffmpeg in frame order.
+    const queues: Promise<unknown>[] = pages.map(() => Promise.resolve());
+    const onEvery = (fn: (page: Page) => Promise<unknown>) => pages.forEach((page, i) => (queues[i] = queues[i].then(() => fn(page))));
+    const draw = (f: number): Promise<Buffer> => {
       const overlay = overlayAt(log, theme, f);
-      const state = { footage: footageAt(info, log, theme, f), overlay: { ...overlay, cursor: keyOf(overlay.shape) } };
-      await page.evaluate((s) => (window as unknown as { render: (s: unknown) => Promise<void> }).render(s), state);
-      const jpeg = await page.screenshot({ type: 'jpeg', quality: 95 });
+      const cursor = keyOf(overlay.shape);
+      if (cursor && !staged.has(cursor)) {
+        // A site's own cursor image: every browser gets its drawing before drawing this frame.
+        staged.add(cursor);
+        const { src, hotspot } = cursors[cursor];
+        onEvery((page) => page.evaluate((c) => (window as unknown as { addCursor: (c: unknown) => Promise<void> }).addCursor(c), { key: cursor, src, hotspot }));
+      }
+      const state = { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor } };
+      const i = (f - first) % pages.length;
+      const jpeg = queues[i].then(async () => {
+        await pages[i].evaluate((s) => (window as unknown as { render: (s: unknown) => Promise<void> }).render(s), state);
+        return pages[i].screenshot({ type: 'jpeg', quality: 95 });
+      });
+      queues[i] = jpeg.catch(() => {}); // a failure is thrown where the frame is awaited, in order
+      return jpeg;
+    };
+    /** Sends the oldest frame to ffmpeg. False when ffmpeg has stopped (the reason comes from `done`). */
+    const ahead: Promise<Buffer>[] = [];
+    const send = async (): Promise<boolean> => {
+      const jpeg = await ahead.shift()!;
+      if (ffmpeg.failed()) return false;
       if (!ffmpeg.stdin.write(jpeg)) await Promise.race([new Promise((r) => ffmpeg.stdin.once('drain', r)), ffmpeg.done]);
+      frames++;
+      return true;
+    };
+    let going = true;
+    // Every browser busy, but only a few frames ahead of ffmpeg.
+    for (let f = first; going && (await ready(f)); f++) {
+      ahead.push(draw(f));
+      if (ahead.length >= 2 * pages.length) going = await send();
     }
+    while (going && ahead.length) going = await send();
     ffmpeg.stdin.end();
     await ffmpeg.done;
+    fs.renameSync(part, out);
   } catch (e) {
-    ffmpeg.kill();
+    // Closing its input first: ffmpeg waiting for the next picture doesn't notice a polite stop.
+    ffmpeg.stdin.destroy();
+    ffmpeg.kill('SIGKILL');
+    fs.rmSync(part, { force: true });
     throw e;
   } finally {
-    await browser.close();
+    await Promise.all(browsers.map((b) => b.close()));
+    // A launch still on its way when something failed.
+    await Promise.allSettled(launches.map((b) => b.then((b) => b.close())));
   }
-  const frames = last - first + 1;
   return { file: out, size, frames, seconds: frames / info.fps, renderSeconds: +((performance.now() - t0) / 1000).toFixed(2) };
 }
+
+const ARGS = ['--force-color-profile=srgb', '--hide-scrollbars'];
 
 /** H.264, constant frame rate, yuv420p (limited range, BT.709), +faststart: plays everywhere. */
 function encoder(out: string, fps: number) {
@@ -228,7 +377,7 @@ function encoder(out: string, fps: number) {
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-profile:v', 'high',
     '-r', String(fps), '-fps_mode', 'cfr',
     '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
-    '-movflags', '+faststart', out,
+    '-movflags', '+faststart', '-f', 'mp4', out,
   ], { stdio: ['pipe', 'ignore', 'pipe'] });
   let err = '';
   let failure: Error | undefined;
@@ -243,7 +392,7 @@ function encoder(out: string, fps: number) {
   });
   done.catch(() => {}); // awaited by the caller; this only stops an early failure counting as unhandled
   return Object.assign(proc, { done, failed: () => failure }) as typeof proc & {
-    stdin: NodeJS.WritableStream;
+    stdin: NodeJS.WritableStream & { destroy(): void };
     done: Promise<void>;
     failed: () => Error | undefined;
   };

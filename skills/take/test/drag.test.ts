@@ -7,6 +7,7 @@ import { openTake } from '../src/drivers/web/browser.ts';
 import { realtimeClock } from '../src/drivers/web/clock.ts';
 import { perform, TakeError } from '../src/drivers/web/driver.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
+import { withShortFind } from './short-find.ts';
 
 // A canvas that reports each stroke as "down x,y > up x,y (n moves)", and a handle that reports where it was dropped.
 const PAGE = `<!doctype html><meta charset="utf-8"><style>
@@ -67,7 +68,7 @@ test('drags an element onto another element', async () => {
 });
 
 test('a drag target that is missing stops with its name', async () => {
-  await assert.rejects(run([{ do: 'drag', from: { text: 'Card' }, to: { label: 'Archive column' } }]), (e: unknown) =>
+  await assert.rejects(withShortFind(() => run([{ do: 'drag', from: { text: 'Card' }, to: { label: 'Archive column' } }])), (e: unknown) =>
     e instanceof TakeError && /can't find .*Archive column/.test(e.message));
 });
 

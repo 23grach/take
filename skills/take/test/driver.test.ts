@@ -7,6 +7,7 @@ import { perform, TakeError } from '../src/drivers/web/driver.ts';
 import { realtimeClock, type Clock } from '../src/drivers/web/clock.ts';
 import { loadTake } from '../src/take/load.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
+import { withShortFind } from './short-find.ts';
 
 let app: { url: string; close: () => Promise<unknown> };
 let browser: Browser | undefined;
@@ -70,13 +71,13 @@ test('performs the example take in real time and logs it', async () => {
 async function failure(steps: unknown[]): Promise<string> {
   const take = takeOf(steps);
   const page = await open(take);
-  const err = await perform(page, take, fastClock()).then(() => undefined, (e) => e);
+  const err = await withShortFind(() => perform(page, take, fastClock())).then(() => undefined, (e) => e);
   assert.ok(err instanceof TakeError, `expected a TakeError, got ${err}`);
   return err.message;
 }
 
 test('says when a target is not on the page', async () => {
-  assert.equal(await failure([{ do: 'click', target: { text: 'Archive' } }]), 'step 1: can\'t find text "Archive" (looked for 8 s)');
+  assert.equal(await failure([{ do: 'click', target: { text: 'Archive' } }]), 'step 1: can\'t find text "Archive" (looked for 1.5 s)');
 });
 
 test('says when a target matches more than one element', async () => {
@@ -85,7 +86,7 @@ test('says when a target matches more than one element', async () => {
 
 test('says when a target is covered or disabled', async () => {
   assert.equal(await failure([openDialog, { do: 'click', target: { text: 'Pricing page' } }]), 'step 2: text "Pricing page" is covered by a div (.backdrop.open)');
-  assert.equal(await failure([openDialog, { do: 'click', target: { role: 'button', name: 'Create' } }]), 'step 2: button "Create" stayed disabled for 8 s');
+  assert.equal(await failure([openDialog, { do: 'click', target: { role: 'button', name: 'Create' } }]), 'step 2: button "Create" stayed disabled for 1.5 s');
 });
 
 test('says what a wait was waiting for', async () => {

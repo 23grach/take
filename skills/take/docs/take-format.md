@@ -6,7 +6,7 @@ A take is the exact list of steps a recording replays. The agent writes it while
 {
   "version": 0,
   "title": "Create a project",
-  "target": { "kind": "web", "url": "http://127.0.0.1:4300/", "viewport": [1440, 900], "scale": 2 },
+  "target": { "kind": "web", "url": "http://127.0.0.1:4300/", "viewport": [1440, 900], "scale": 1.5 },
   "theme": "default",
   "steps": [
     { "do": "hold", "ms": 2000, "mark": "start" },
@@ -32,7 +32,7 @@ A take is the exact list of steps a recording replays. The agent writes it while
 | `target.address` | | the URL's domain, or blank for a local URL | What the window's address bar shows, e.g. `"boards.app"` or `"boards.app/projects"`. Use the product's real domain: the app usually runs on `localhost` while recording, and that address is never shown. Ask the agent to change it any time; it only affects composing, not recording. |
 | `target.login` | | none: starts signed out | The name of a saved login, e.g. `"boards.app"`: the take starts signed in. See [Saved logins](#saved-logins). |
 | `target.viewport` | | `[1440, 900]` | Page size in CSS pixels. The video is always 2560×1440. |
-| `target.scale` | | `2` | `2` records retina-sharp frames; `1` for quick drafts. |
+| `target.scale` | | `1.5` | How sharp the recorded frames are. The video shows the page at about 1.35× its size, so `1.5` is sharp and records about a quarter faster than `2`. `2` for the crispest small text; `1` for quick drafts. |
 | `theme` | | `"default"` | Folder in `themes/`. |
 | `ready` | | none | A condition (like `waitFor`), or a list of them, that must all hold before filming starts, e.g. `{ "visible": { "role": "button", "name": "Deposit" } }`. The page loads in the meantime and none of it is filmed, so the video opens on a finished page instead of loading placeholders. Pictures that are downloading finish first, then fades get 0.5 s. Up to 30 s; then the take stops and says which condition never showed. |
 | `steps` | yes | | At least one step, performed in order. |

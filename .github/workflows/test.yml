@@ -1,12 +1,21 @@
 name: test
 
 on:
+  # Branches are tested through their pull request; pushes are tested on main only.
   push:
+    branches: [main]
   pull_request:
+
+# A newer push to the same branch or pull request replaces a run still going.
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test:
     runs-on: ubuntu-latest
+    # The suite takes about a minute; a hang shouldn't hold the runner for GitHub's default 6 hours.
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -21,8 +30,8 @@ jobs:
           node-version: ${{ matrix.node }}
           cache: npm
           cache-dependency-path: skills/take/package-lock.json
-      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npm ci
-      - run: npx playwright install-deps chromium
+      # One package-list update: Playwright's step runs it, ffmpeg installs right after.
+      - run: npx playwright install-deps chromium && sudo apt-get install -y ffmpeg
       - run: node bin/take doctor
       - run: xvfb-run -a npm test

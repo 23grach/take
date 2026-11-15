@@ -26,14 +26,21 @@ export const NO_BROWSER = `no browser to record with: install Google Chrome, or 
 
 const isMissing = (e: unknown) => /Executable doesn.t exist/i.test(String((e as Error)?.message ?? e));
 
+/** Browsers that are Google Chrome, and whether Chrome was installed but failed to start. */
+const chromes = new WeakSet<Browser>();
+let chromeFailed = false;
+
 /** Starts Google Chrome when it's installed (fresh profile), else Playwright's Chromium. `chrome: false` skips Chrome. */
 export async function launchBrowser(options: LaunchOptions = {}, { chrome = true } = {}): Promise<Browser> {
   let chromeError: unknown;
   if (chrome && hasChrome()) {
     try {
-      return await chromium.launch({ ...options, channel: 'chrome' });
+      const browser = await chromium.launch({ ...options, channel: 'chrome' });
+      chromes.add(browser);
+      return browser;
     } catch (e) {
       chromeError = e;
+      chromeFailed = true;
     }
   }
   try {
@@ -45,12 +52,14 @@ export async function launchBrowser(options: LaunchOptions = {}, { chrome = true
   }
 }
 
-/** The browser `launchBrowser` would start, as people know it: "Google Chrome 147.0…" or "Chromium 156.0… (Playwright)". */
+/** The browser `launchBrowser` starts, as people know it: "Google Chrome 147.0…" or "Chromium 156.0… (Playwright)",
+ *  and says so when Chrome is installed but wouldn't start, so Chromium stood in. */
 export async function browserLabel(): Promise<string> {
   const browser = await launchBrowser();
   try {
     const version = browser.version();
-    return hasChrome() ? `Google Chrome ${version}` : `Chromium ${version} (Playwright)`;
+    if (chromes.has(browser)) return `Google Chrome ${version}`;
+    return `Chromium ${version} (Playwright${chromeFailed ? "; Google Chrome is installed but didn't start" : ''})`;
   } finally {
     await browser.close();
   }

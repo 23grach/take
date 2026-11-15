@@ -1,6 +1,6 @@
 // take run: one command from take.json to a finished, checked video.
-// Validate → is the app up? → record → compose → check + contact sheet. Each stage is the same code the
-// separate commands use; run only chooses the paths and reports progress.
+// Validate → is the app up? → record and compose (at once, in studio mode) → check + contact sheet. Each stage
+// is the same code the separate commands use; run only chooses the paths and reports progress.
 import { VISIBLE_NOTE } from './drivers/web/browser.ts';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import { readyTake } from './take/load.ts';
 import { record } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/driver.ts';
 import type { Mode } from './drivers/web/capture.ts';
-import { compose } from './compose/compose.ts';
+import { compose, following } from './compose/compose.ts';
 import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { addressWarning, shownAddress } from './take/format.ts';
@@ -59,17 +59,25 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
     return `${s.toFixed(1)} s`;
   };
 
+  // In studio mode the video is composed while recording, a few frames behind, so it's ready soon after.
+  const recording = mode === 'studio' ? following() : undefined;
+  const options = { capture, out: video, theme: theme ?? take.theme, address: shownAddress(take.target) };
+  const composing = recording && compose({ ...options, follow: recording.follow });
+  composing?.catch(() => {}); // awaited below
   try {
-    const { capture: info } = await record(take, { mode, out: capture, headed });
+    const { capture: info, events } = await record(take, { mode, out: capture, headed, onFrame: recording?.frame });
+    recording?.end(events);
     log(`✓ recorded  ${info.frames.length} frames (${(info.frames.length / info.fps).toFixed(2)} s of app) in ${lap()} → ${rel(capture)}`);
     if (info.visibleWindow) log(`⚠ ${VISIBLE_NOTE}`);
   } catch (e) {
+    recording?.fail(e);
+    await composing?.catch(() => {}); // it stops and cleans up
     // A step that couldn't be performed: the message already says which step and why.
     if (e instanceof TakeError) return { ...stop(e.message), capture };
     throw e;
   }
 
-  const composed = await compose({ capture, out: video, theme: theme ?? take.theme, address: shownAddress(take.target) });
+  const composed = await (composing ?? compose(options));
   log(`✓ composed  ${composed.size.join('×')}, ${composed.frames} frames (${composed.seconds.toFixed(2)} s of video) in ${lap()} → ${rel(video)}`);
 
   const loop = take.loop !== 'none';

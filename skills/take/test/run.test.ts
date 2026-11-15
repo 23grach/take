@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { serve } from '../examples/demo-app/serve.mjs';
 import { run } from '../src/run.ts';
+import { withShortFind } from './short-find.ts';
 
 let app: { url: string; close: () => Promise<unknown> };
 let tmp: string;
@@ -46,7 +47,7 @@ test('run goes from take.json to a checked MP4 with a contact sheet', async () =
 
 test('run stops with the failing step when the app does not match the take', async () => {
   const file = writeTake('missing', [{ do: 'click', target: { role: 'button', name: 'Delete everything' } }]);
-  const r = await run(file);
+  const r = await withShortFind(() => run(file));
   assert.equal(r.ok, false);
   assert.match(r.error ?? '', /^step 1: .*Delete everything/);
   assert.equal(r.video, undefined);
