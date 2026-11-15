@@ -19,6 +19,16 @@ export class TakeError extends Error {
   }
 }
 
+/** The key as a keyboard sends it: with Cmd, Ctrl or Alt held, a letter key gives its lowercase letter ("Meta+K"
+ *  → "Meta+k"), as on a real keyboard; Playwright would send a capital K, which shortcuts listening for "k" ignore.
+ *  With Shift held the capital stays. */
+export function asPressed(key: string): string {
+  const parts = key.split('+');
+  const last = parts.at(-1)!;
+  if (parts.length > 1 && /^[A-Z]$/.test(last) && !parts.slice(0, -1).includes('Shift')) parts[parts.length - 1] = last.toLowerCase();
+  return parts.join('+');
+}
+
 type Point = [number, number];
 const center = (b: Box): Point => [b.x + b.width / 2, b.y + b.height / 2];
 const round = (n: number) => Math.round(n * 10) / 10;
@@ -196,7 +206,9 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       }
       const onTarget = await loc.evaluate((el, [x, y]) => {
         const hit = document.elementFromPoint(x, y);
-        return !!hit && (el === hit || el.contains(hit));
+        // A radio or checkbox hidden under its own label is clicked through the label, as a person would.
+        const labels = [...((el as HTMLInputElement).labels ?? [])];
+        return !!hit && (el === hit || el.contains(hit) || labels.some((l) => l === hit || l.contains(hit)));
       }, pointer);
       const disabled = onTarget && (await loc.isDisabled());
       if (onTarget && !disabled) return box;
@@ -326,7 +338,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       }
       case 'press':
         events.push({ frame: clock.frame, type: 'key', key: s.key });
-        await page.keyboard.press(s.key).catch((e: Error) => {
+        await page.keyboard.press(asPressed(s.key)).catch((e: Error) => {
           // validate catches most; the browser may still refuse one, so say which step and which key.
           const unknown = /Unknown key: "([^"]*)"/.exec(e.message)?.[1];
           throw unknown === undefined ? e : new TakeError(current, `unknown key "${unknown}" in "${s.key}"; use the browser's key names, e.g. Meta, Control, Alt, Shift, Enter, Escape`);

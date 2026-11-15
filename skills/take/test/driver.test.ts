@@ -93,3 +93,38 @@ test('says when a target is covered or disabled', async () => {
 test('says what a wait was waiting for', async () => {
   assert.equal(await failure([{ do: 'wait', for: { text: 'Welcome back' }, timeout: 500 }]), 'step 1: waited 0.5 s for text "Welcome back" to show');
 });
+
+test('a shortcut letter is sent lowercase, as a real keyboard does, unless Shift is held', async () => {
+  const { asPressed } = await import('../src/drivers/web/driver.ts');
+  assert.equal(asPressed('Meta+K'), 'Meta+k');
+  assert.equal(asPressed('Control+Alt+P'), 'Control+Alt+p');
+  assert.equal(asPressed('Shift+Meta+P'), 'Shift+Meta+P');
+  assert.equal(asPressed('K'), 'K');
+  assert.equal(asPressed('Enter'), 'Enter');
+});
+
+test('Meta+K reaches a site that listens for "k", and a radio hidden under its label is clicked through the label', async () => {
+  const http = await import('node:http');
+  const { validateTake } = await import('../src/take/format.ts');
+  const html = `<!doctype html><style>.opt{position:relative;display:inline-block;margin:40px}.opt input{position:absolute;inset:0;opacity:0}
+    .opt label{position:relative;display:block;padding:20px 40px;border:1px solid #888}</style>
+    <div class="opt"><input type="radio" name="c" id="blue" aria-label="Blue"><label for="blue">Blue</label></div>
+    <p id="out">waiting</p>
+    <script>addEventListener('keydown', (e) => { if (e.metaKey && e.key === 'k') out.textContent = 'search open'; });</script>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(html));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+  const r = validateTake({ version: 0, title: 'Keys', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, steps: [
+    { do: 'press', key: 'Meta+K', waitFor: { text: 'search open' } },
+    { do: 'click', target: { role: 'radio', name: 'Blue' } },
+  ] });
+  assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+  const { browser, page } = await openTake(r.take);
+  try {
+    await perform(page, r.take, realtimeClock());
+    assert.equal(await page.isChecked('#blue'), true);
+  } finally {
+    await browser.close();
+    server.close();
+  }
+});

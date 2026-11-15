@@ -8,7 +8,7 @@ import path from 'node:path';
 import type { CDPSession, Page } from 'playwright';
 import type { Clock } from './clock.ts';
 import { realtimeClock } from './clock.ts';
-import { downloadsDone } from './browser.ts';
+import { downloadsDone, giveUpDownloads } from './browser.ts';
 import { stepVideos } from './media.ts';
 import type { Box } from './events.ts';
 
@@ -75,6 +75,22 @@ export function quickTimerYield(): boolean {
 
 const videoSeen = new WeakMap<Page, { video: boolean }>();
 
+/** Under the frozen clock, Playwright runs the page's idle callbacks with no time left (timeRemaining() is always
+ *  0), so code that only works while there is time left waits forever: Wikipedia's script loader never loads the
+ *  article's scripts. Idle callbacks run on page time instead, a page frame later, each with a little time to work
+ *  with. The time left counts down per question asked, so a loop that works "while there's time" always ends. */
+export function idleWithTime(): void {
+  const w = globalThis as unknown as { __takeIdle?: true } & Window;
+  if (w.__takeIdle) return;
+  w.__takeIdle = true;
+  w.requestIdleCallback = (cb, opts) =>
+    w.setTimeout(() => {
+      let left = 50;
+      cb({ didTimeout: false, timeRemaining: () => Math.max(0, left--) });
+    }, Math.min(16, opts?.timeout ?? 16));
+  w.cancelIdleCallback = (id) => w.clearTimeout(id);
+}
+
 /** Freezes page time and animations. Must run before the page is opened, so the page never sees real time. */
 export async function freezePage(page: Page): Promise<CDPSession> {
   // Page time starts at the real time, so dates in the app ("Today", "2 min ago") match the storyboard, and moves
@@ -91,6 +107,8 @@ export async function freezePage(page: Page): Promise<CDPSession> {
   await page.context().exposeBinding('__takeVideoPlays', () => void (seen.video = true));
   await page.context().addInitScript(() => document.addEventListener('playing', (e) => e.target instanceof HTMLVideoElement && (globalThis as unknown as { __takeVideoPlays: () => void }).__takeVideoPlays(), true));
   await page.evaluate(quickTimerYield);
+  await page.context().addInitScript(idleWithTime);
+  await page.evaluate(idleWithTime);
   // Freeze the browser's animation clock too, so CSS transitions that start mid-take begin frozen.
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Animation.enable');
@@ -121,7 +139,7 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
       await page.evaluate((dt) => {
         for (const a of document.getAnimations()) {
           const seen = a as Animation & { __take?: boolean };
-          if (seen.__take) a.currentTime = Number(a.currentTime ?? 0) + dt;
+          if (seen.__take && a.timeline === document.timeline) a.currentTime = Number(a.currentTime ?? 0) + dt; // scroll-driven ones follow the scroll, and refuse a time
         }
       }, dt);
       // Page time steps 16 or 17 ms so it never drifts from the frame count.
@@ -130,12 +148,26 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
       const boxes = videoSeen.get(page)?.video ? await stepVideos(page, ms) : [];
       if (JSON.stringify(videos.at(-1)?.[1] ?? []) !== JSON.stringify(boxes)) videos.push([frame, boxes]);
       await page.evaluate(() => {
-        for (const a of document.getAnimations()) (a as Animation & { __take?: boolean }).__take = true;
+        for (const a of document.getAnimations()) {
+          const seen = a as Animation & { __take?: boolean };
+          if (seen.__take) continue;
+          seen.__take = true;
+          // Starts now. Pages that time an animation's start with the page clock (frozen, so it disagrees with the
+          // browser's animation clock) would otherwise schedule it seconds ahead: a panel opening stays invisible.
+          if (a.timeline === document.timeline && a.currentTime !== null && Number(a.currentTime) < 0) a.currentTime = 0;
+        }
       });
       // Page time stands still while a picture on screen or a font downloads (up to 3 s of wall time), as if the
       // network were instant: frozen time makes every download look many times slower, so a banner sliding in
       // would sit blank for a second of video, or text would show in a stand-in font.
-      for (const until = Date.now() + 3000; !(await downloadsDone(page)) && Date.now() < until; ) await new Promise((r) => setTimeout(r, 15));
+      const until = Date.now() + 3000;
+      while (!(await downloadsDone(page))) {
+        if (Date.now() >= until) {
+          await giveUpDownloads(page);
+          break;
+        }
+        await new Promise((r) => setTimeout(r, 15));
+      }
       // Straight from the browser: Playwright's screenshot does extra work each time (it hides the caret, which
       // hideCaret already did, and waits for fonts, as the line above does). A tenth faster, the same picture.
       const jpeg = Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: QUALITY })).data, 'base64');
@@ -151,7 +183,8 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
         await page.evaluate((dt) => {
           for (const a of document.getAnimations()) {
             const seen = a as Animation & { __take?: boolean };
-            if (seen.__take) a.currentTime = Number(a.currentTime ?? 0) + dt;
+            if (seen.__take && a.timeline === document.timeline) a.currentTime = Number(a.currentTime ?? 0) + dt; // scroll-driven ones follow the scroll, and refuse a time
+            if (!seen.__take && a.timeline === document.timeline && a.currentTime !== null && Number(a.currentTime) < 0) a.currentTime = 0; // see tick
             seen.__take = true;
           }
         }, dt);

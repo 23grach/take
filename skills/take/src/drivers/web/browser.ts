@@ -124,6 +124,7 @@ export async function untilReady(page: Page, ready: Condition[] | undefined, pas
     }
   // Pictures and fonts that are downloading finish, so none is half drawn on the first frame.
   for (; !(await downloadsDone(page)) && t < READY_MS; t += 100) await pass(100);
+  if (!(await downloadsDone(page))) await giveUpDownloads(page);
   // What just appeared may still be fading in.
   for (let s = 0; s < SETTLE_MS; s += 100) await pass(100);
 }
@@ -133,8 +134,8 @@ export async function untilReady(page: Page, ready: Condition[] | undefined, pas
  *  not finished. */
 export function downloadsDone(page: Page): Promise<boolean> {
   return page
-    .evaluate(() => document.fonts.status !== 'loading' && [...document.images].every((img) => {
-      if (img.complete) return true;
+    .evaluate(() => (document.fonts.status !== 'loading' || (window as unknown as { __takeFontsGaveUp?: true }).__takeFontsGaveUp === true) && [...document.images].every((img) => {
+      if (img.complete || (img as HTMLImageElement & { __takeGaveUp?: true }).__takeGaveUp) return true;
       const r = img.getBoundingClientRect();
       // On screen or about to be (within a screen of it, like a carousel's next slide), as Chrome reckons for lazy images.
       if (!(r.width > 0 && r.bottom > -innerHeight && r.right > -innerWidth && r.top < 2 * innerHeight && r.left < 2 * innerWidth)) return true;
@@ -142,6 +143,17 @@ export function downloadsDone(page: Page): Promise<boolean> {
       return false;
     }))
     .catch(() => true);
+}
+
+/** Stops waiting for the pictures and fonts still downloading now: they've had their time (some never finish, and
+ *  waiting for them on every frame made a recording take hours). Ones that start later still get waited for. */
+export async function giveUpDownloads(page: Page): Promise<void> {
+  await page
+    .evaluate(() => {
+      if (document.fonts.status === 'loading') (window as unknown as { __takeFontsGaveUp?: true }).__takeFontsGaveUp = true;
+      for (const img of document.images) if (!img.complete) (img as HTMLImageElement & { __takeGaveUp?: true }).__takeGaveUp = true;
+    })
+    .catch(() => {});
 }
 
 /** The take's saved login, if it names one. A plain TakeError when it hasn't been made yet. */

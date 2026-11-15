@@ -191,3 +191,75 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
     server.close();
   }
 });
+
+test('a scroll-driven animation records (it follows the scroll, not page time)', async () => {
+  const page = `<!doctype html><style>
+    @keyframes grow { from { width: 0 } to { width: 100% } }
+    .bar { position: fixed; top: 0; left: 0; height: 8px; background: #36f; animation: grow linear; animation-timeline: scroll(); }
+    main { height: 3000px }
+  </style><div class="bar"></div><main><h1>Long page</h1></main>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(page));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const r = validateTake({ version: 0, title: 'Scroll', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none', steps: [{ do: 'scroll', by: [0, 600] }] });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    const { capture } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'scroll-driven') });
+    assert.ok(capture.frames.length > 10);
+  } finally {
+    server.close();
+  }
+});
+
+test('studio mode: idle work gets done, and an animation timed by the page clock starts at once', async () => {
+  const page = `<!doctype html><div id="box" style="width:50px;height:50px;background:#36f"></div><script>
+    // Work done only "while there is time", as some script loaders do.
+    let left = 20;
+    const work = (d) => { while (left > 0 && d.timeRemaining() > 0) left--; if (left > 0) requestIdleCallback(work); else document.title = 'idle done'; };
+    requestIdleCallback(work);
+    // An animation whose start is set from the page clock, which the frozen clock puts seconds ahead.
+    window.fade = () => { const a = box.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' }); a.startTime = document.timeline.currentTime + 5000; };
+  </script>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(page));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+  const r = validateTake({ version: 0, title: 'Idle', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, steps: [{ do: 'hold', ms: 100 }] });
+  assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+  const { freezePage, studio } = await import('../src/drivers/web/capture.ts');
+  const { openTake } = await import('../src/drivers/web/browser.ts');
+  let cdp;
+  const opened = await openTake(r.take, { prepare: async (p) => (cdp = await freezePage(p)) });
+  try {
+    const rec = await studio(opened.page, path.join(tmp, 'idle'), cdp!, [800, 600], 1);
+    await opened.page.evaluate(() => (window as unknown as { fade: () => void }).fade());
+    for (let i = 0; i < 30; i++) await rec.clock.tick();
+    assert.equal(await opened.page.title(), 'idle done');
+    assert.equal(await opened.page.evaluate(() => getComputedStyle(document.getElementById('box')!).opacity), '1');
+    await rec.finish();
+  } finally {
+    await opened.browser.close();
+    server.close();
+  }
+});
+
+test('a picture that never finishes downloading holds page time once, not on every frame', async () => {
+  const held: http.ServerResponse[] = [];
+  const server = http.createServer((req, res) => {
+    if (req.url === '/never.png') return void held.push(res.writeHead(200, { 'content-type': 'image/png' })); // never ends
+    res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><h1>Page</h1><script>addEventListener("load", () => document.body.insertAdjacentHTML("beforeend", \'<img src="/never.png" width="80" height="80">\'))</script>');
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const r = validateTake({ version: 0, title: 'Never', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none', steps: [{ do: 'hold', ms: 1000 }] });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    const t = performance.now();
+    const { capture } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'never') });
+    const s = (performance.now() - t) / 1000;
+    assert.equal(capture.frames.length, 60);
+    assert.ok(s < 30, `60 frames took ${s.toFixed(0)} s (waiting 3 s a frame would take 180 s)`);
+  } finally {
+    for (const res of held) res.destroy();
+    server.close();
+  }
+});
