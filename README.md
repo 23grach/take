@@ -83,7 +83,7 @@ Since a signed-in video shows a real account, the agent points out personal deta
 
 ## Not yet
 
-Videos are always 2560×1440, with one look. Phone frames, multi-finger gestures, zoom-in camera moves and GIF export aren't there yet. Videos can only start from a page the app's address opens, signed in or not, never from filmed setup steps. Some sites with strong bot protection may still refuse to be recorded. Videos playing inside the page, and animations in pages embedded from other sites, play too fast in a final video.
+Videos are always 2560×1440, with one look. Phone frames, multi-finger gestures, zoom-in camera moves and GIF export aren't there yet. Videos can only start from a page the app's address opens, signed in or not, never from filmed setup steps. Some sites with strong bot protection may still refuse to be recorded. Animations in pages embedded from other sites play too fast in a final video.
 
 ## Under the hood
 

@@ -53,4 +53,7 @@ export interface EventLog {
   marks: Record<string, number>;
   /** How the video should end, from the take. */
   loop: 'crossfade-to-start' | 'none';
+  /** Studio: where videos playing in the page were on screen (page pixels), from each frame where that changed.
+   *  They show at their own frame rate (often 30 fps), which the check mustn't take for stalls. */
+  videos?: [number, Box[]][];
 }

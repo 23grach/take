@@ -26,6 +26,9 @@ export interface CheckOptions {
   /** The video is meant to loop (default true): check that the end runs smoothly into the start. */
   loop?: boolean;
   fps?: number;
+  /** Areas (x, y, width, height in video pixels) where a video inside the page shows in frame f. It runs at its
+   *  own frame rate (30 fps repeats every other frame), so a still frame there isn't a stall. */
+  pageVideos?: (f: number) => [number, number, number, number][];
 }
 
 /** Motion is measured on a small greyscale copy split into tiles, so the cursor moving in one corner
@@ -40,7 +43,7 @@ const MOVING = 2.5;
 /** Nothing moving for longer than this reads as frozen. */
 const LONGEST_STILL_S = 4;
 
-export function check(file: string, { loop = true, fps: expectedFps = 60 }: CheckOptions = {}): Report {
+export function check(file: string, { loop = true, fps: expectedFps = 60, pageVideos }: CheckOptions = {}): Report {
   const findings: Finding[] = [];
   const add = (name: string, status: Status, detail: string) => findings.push({ name, status, detail });
 
@@ -84,14 +87,26 @@ export function check(file: string, { loop = true, fps: expectedFps = 60 }: Chec
   // A hitch: a tile moving, then still for exactly one frame, then moving again. Around the loop too.
   const pairs = loop ? [...change, tileDiff(file, n - 1, 0)] : change;
   const hitches: number[] = [];
+  let videoRepeats = 0;
   for (let i = 0; i < pairs.length; i++) {
     const [before, now, after] = [pairs[(i - 1 + pairs.length) % pairs.length], pairs[i], pairs[(i + 1) % pairs.length]];
     if (!loop && (i === 0 || i === pairs.length - 1)) continue;
-    if (now.some((v, t) => v < STILL && before[t] > MOVING && after[t] > MOVING)) hitches.push((i + 1) % n);
+    const f = (i + 1) % n;
+    const stalled = Array.from(now, (v, t) => v < STILL && before[t] > MOVING && after[t] > MOVING);
+    if (!stalled.some(Boolean)) continue;
+    const areas = pageVideos?.(f) ?? [];
+    const inVideo = (t: number) => {
+      // Any overlap: a tile's motion may come from the video alone, even if it only covers part of the tile.
+      const [tw, th] = [s.width / GRID.cols, s.height / GRID.rows];
+      const [tx, ty] = [(t % GRID.cols) * tw, Math.floor(t / GRID.cols) * th];
+      return areas.some(([x, y, w, h]) => x < tx + tw && x + w > tx && y < ty + th && y + h > ty);
+    };
+    if (stalled.some((st, t) => st && !inVideo(t))) hitches.push(f);
+    else videoRepeats++;
   }
   const at = (f: number) => `${(f / fps).toFixed(2)} s (frame ${f})`;
   add('smoothness', hitches.length ? 'fail' : 'pass',
-    hitches.length ? `${hitches.length} doubled frame${hitches.length > 1 ? 's' : ''}: motion stalls for one frame at ${hitches.slice(0, 5).map(at).join(', ')}${hitches.length > 5 ? '…' : ''}` : 'motion never stalls mid-move');
+    hitches.length ? `${hitches.length} doubled frame${hitches.length > 1 ? 's' : ''}: motion stalls for one frame at ${hitches.slice(0, 5).map(at).join(', ')}${hitches.length > 5 ? '…' : ''}` : `motion never stalls mid-move${videoRepeats ? ' (a video in the page shows at its own frame rate)' : ''}`);
 
   // Long stretches where nothing moves at all.
   let longest = { start: 0, length: 0 };

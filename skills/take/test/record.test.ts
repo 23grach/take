@@ -128,3 +128,66 @@ test('a studio recording starts the page clock at the real time', async () => {
     await browser.close();
   }
 });
+
+test('the frozen clock runs a chain of page timers without the 4 ms clamp', async () => {
+  const { freezePage, quickTimerYield } = await import('../src/drivers/web/capture.ts');
+  const { openTake } = await import('../src/drivers/web/browser.ts');
+  const { browser, page } = await openTake(take(), { prepare: (p) => freezePage(p) });
+  try {
+    await page.evaluate(() => {
+      const w = window as unknown as { n: number };
+      w.n = 0;
+      const next = () => ++w.n < 200 && setTimeout(next, 1);
+      setTimeout(next, 1);
+    });
+    const t = performance.now();
+    await page.clock.runFor(250);
+    const ms = performance.now() - t;
+    assert.equal(await page.evaluate(() => (window as unknown as { n: number }).n), 200);
+    assert.ok(ms < 400, `200 chained timers took ${Math.round(ms)} ms (clamped they take 800+)`);
+    // If a Playwright update renames the clock's insides, this fails here instead of recordings quietly slowing.
+    assert.equal(await page.evaluate(quickTimerYield), true);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('a video in the page plays at its true speed in studio mode, and the log says where it was', async () => {
+  // A 30 fps test video, 4 s, served with a page that autoplays it.
+  const dir = fs.mkdtempSync(path.join(tmp, 'video-'));
+  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=30:duration=4', '-c:v', 'libvpx', '-b:v', '200k', path.join(dir, 'v.webm')]);
+  const page = '<!doctype html><body style="margin:0"><video src="v.webm" autoplay muted loop style="width:320px;height:240px"></video>';
+  const server = http.createServer((req, res) => {
+    if (req.url === '/v.webm') {
+      const data = fs.readFileSync(path.join(dir, 'v.webm'));
+      res.writeHead(200, { 'content-type': 'video/webm', 'content-length': data.length, 'accept-ranges': 'bytes' }).end(data);
+    } else res.writeHead(200, { 'content-type': 'text/html' }).end(page);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+  try {
+    const r = validateTake({ version: 0, title: 'Video', target: { kind: 'web', url, viewport: [480, 360], scale: 1 }, loop: 'none', steps: [{ do: 'hold', ms: 1000 }] });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    const { freezePage } = await import('../src/drivers/web/capture.ts');
+    const { openTake } = await import('../src/drivers/web/browser.ts');
+    const { stepVideos } = await import('../src/drivers/web/media.ts');
+    const opened = await openTake(r.take, { prepare: (p) => freezePage(p) });
+    try {
+      const p = opened.page;
+      for (let i = 0; i < 100 && !(await p.evaluate(() => !document.querySelector('video')!.paused)); i++) await new Promise((res) => setTimeout(res, 50));
+      const start = (await stepVideos(p, 0), await p.evaluate(() => document.querySelector('video')!.currentTime));
+      let boxes;
+      for (let f = 0; f < 60; f++) boxes = await stepVideos(p, Math.round((f + 1) * (1000 / 60)) - Math.round(f * (1000 / 60)));
+      const now = await p.evaluate(() => document.querySelector('video')!.currentTime);
+      assert.ok(Math.abs(now - start - 1) < 0.04, `60 frames moved the video on ${(now - start).toFixed(3)} s, not 1 s`);
+      assert.deepEqual(boxes, [{ x: 0, y: 0, width: 320, height: 240 }]);
+    } finally {
+      await opened.browser.close();
+    }
+    const { events } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'video-capture') });
+    // Logged from the frame it started playing (frame 0, or a little later on a busy machine).
+    assert.deepEqual(events.videos?.find(([, boxes]) => boxes.length)?.[1], [{ x: 0, y: 0, width: 320, height: 240 }]);
+  } finally {
+    server.close();
+  }
+});

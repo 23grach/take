@@ -61,13 +61,13 @@ function launchHardened({ headed, extra }: { headed: boolean; extra: string[] })
  *  and `visible` says so, so the person can be told not to click in it. */
 export async function openTake(
   take: Take,
-  { headed = false, prepare, args = [] }: { headed?: boolean; prepare?: (page: Page) => Promise<unknown>; args?: string[] } = {},
+  { headed = false, prepare, args = [], quietMs = QUIET_MS }: { headed?: boolean; prepare?: (page: Page) => Promise<unknown>; args?: string[]; quietMs?: number } = {},
 ): Promise<{ browser: Browser; page: Page; visible: boolean }> {
   try {
-    return { ...(await open(take, headed, prepare, args)), visible: headed };
+    return { ...(await open(take, headed, prepare, args, quietMs)), visible: headed };
   } catch (e) {
     if (headed || !(e instanceof RefusedHidden)) throw e;
-    return { ...(await open(take, true, prepare, args)), visible: true };
+    return { ...(await open(take, true, prepare, args, quietMs)), visible: true };
   }
 }
 
@@ -76,7 +76,7 @@ class RefusedHidden extends TakeError {}
 /** What to tell the person when a take had to run in a visible window. */
 export const VISIBLE_NOTE = "the site refused Take's hidden browser (error 403), so it ran in a visible window. Don't click in it or close it while Take works; the video isn't affected.";
 
-async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promise<unknown>) | undefined, args: string[]): Promise<{ browser: Browser; page: Page }> {
+async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promise<unknown>) | undefined, args: string[], quietMs: number): Promise<{ browser: Browser; page: Page }> {
   const [width, height] = take.target.viewport;
   const login = savedLogin(take);
   const { browser, context, userAgent } = await launch({ viewport: { width, height }, scale: take.target.scale, headed, login, args });
@@ -96,7 +96,7 @@ async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promi
     if (response && response.status() >= 400) throw new TakeError(-1, `${url} answered with error ${response.status()}; check the address and that the app is running`);
     // Slow apps keep loading after the load event (data, images, lazy code). Give them until the network is
     // quiet, but don't wait forever for apps that poll.
-    await page.waitForLoadState('networkidle', { timeout: QUIET_MS }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: quietMs }).catch(() => {});
     await page.evaluate(() => document.fonts.ready).catch(() => {});
     if (errors.length) throw new TakeError(-1, `the app threw an error while loading: "${errors[0]}". Take stops rather than film a broken app`);
   } catch (e) {

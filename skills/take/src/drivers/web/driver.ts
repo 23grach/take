@@ -29,10 +29,12 @@ export interface PerformOptions {
   /** Called after every frame with the log so far (`frames`: how many frames there are so far). The log is the
    *  one perform returns, growing: `take run` composes from it while recording. */
   onFrame?: (log: EventLog) => void;
+  /** Read the cursor and caret every frame for the event log (default). A rehearsal, which films nothing, skips it. */
+  watch?: boolean;
 }
 
 /** Opens nothing and closes nothing: the page must already show take.target.url. */
-export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame }: PerformOptions = {}): Promise<EventLog> {
+export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true }: PerformOptions = {}): Promise<EventLog> {
   const [vw, vh] = take.target.viewport;
   let pointer: Point = [Math.round(vw * PACING.start[0]), Math.round(vh * PACING.start[1])];
   const path: Point[] = [];
@@ -70,16 +72,21 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     path[clock.frame] = [round(pointer[0]), round(pointer[1])];
     // The page under a still pointer can change too (a dialog opens), so look every frame.
     // While a link opens the next page there is no page to ask: keep the cursor it had.
-    const shape = await cursorAt(pointer).catch((): Cursor => cursors.at(-1)?.[1] ?? 'default');
-    if (!sameCursor(cursors.at(-1)?.[1], shape)) cursors.push([clock.frame, shape]);
-    const caret = await caretAt(page).catch(() => null);
-    if (!carets.length || JSON.stringify(carets.at(-1)![1]) !== JSON.stringify(caret)) carets.push([clock.frame, caret]);
+    if (watch) {
+      const shape = await cursorAt(pointer).catch((): Cursor => cursors.at(-1)?.[1] ?? 'default');
+      if (!sameCursor(cursors.at(-1)?.[1], shape)) cursors.push([clock.frame, shape]);
+      const caret = await caretAt(page).catch(() => null);
+      if (!carets.length || JSON.stringify(carets.at(-1)![1]) !== JSON.stringify(caret)) carets.push([clock.frame, caret]);
+    }
     await clock.tick();
     eventLog.frames = clock.frame;
     onFrame?.(eventLog);
     if (pageErrors.length)
       throw new TakeError(current, `the app threw an error: "${pageErrors[0]}". Take stops rather than film a broken app; fix the app, or the step that sets it off`);
   }
+  /** A time limit in frames: limits are wall time, so a fast-forwarding clock gets as many seconds as a normal one. */
+  const limit = (ms: number) => frames(ms * (clock.speed ?? 1));
+
   async function wait(ms: number) {
     const end = clock.frame + frames(ms);
     while (clock.frame < end) await tick();
@@ -89,7 +96,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
    *  transition (an old and a new copy of a list), so they too get until the deadline to settle to one. */
   async function find(t: Target): Promise<Locator> {
     const loc = locate(page, t).filter({ visible: true });
-    const give = clock.frame + frames(PACING.find);
+    const give = clock.frame + limit(PACING.find);
     for (;;) {
       const n = await loc.count();
       if (n === 1) return loc;
@@ -178,7 +185,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   async function reach(loc: Locator, t: Target): Promise<Box> {
     await travel(loc, t);
     await wait(PACING.settle);
-    const give = clock.frame + frames(PACING.find);
+    const give = clock.frame + limit(PACING.find);
     for (;;) {
       const box = await boxOf(loc, t);
       const inside = pointer[0] >= box.x && pointer[0] <= box.x + box.width && pointer[1] >= box.y && pointer[1] <= box.y + box.height;
@@ -281,7 +288,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   }
 
   async function until(c: Condition, timeout: number): Promise<Box | undefined> {
-    const give = clock.frame + frames(timeout);
+    const give = clock.frame + limit(timeout);
     while (!(await holds(page, c))) {
       if (clock.frame >= give) throw new TakeError(current, `waited ${timeout / 1000} s for ${describeCondition(c)}`);
       await tick();

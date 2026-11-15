@@ -49,7 +49,7 @@ const takeCli = (args: string[], env = process.env, at = bin) => spawnSync(proce
 test('an option the command does not use is an error', () => {
   const r = takeCli(['probe', fixture, '--mode', 'live']);
   assert.equal(r.status, 1);
-  assert.match(r.stderr, /^take probe doesn't take --mode \(it takes --out, --theme, --headed\)\n$/);
+  assert.match(r.stderr, /^take probe doesn't take --mode \(it takes --out, --theme, --headed, --slow\)\n$/);
 });
 
 test('a second file name is an error', () => {

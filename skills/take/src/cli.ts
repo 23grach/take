@@ -35,6 +35,7 @@ Commands:
   validate  check a take.json and explain any problems
   probe     perform a take without recording and screenshot every step → storyboard
             --out <folder> (default: probe/ next to the take)  --theme <name> (cursor drawings)  --headed (show the browser)
+            plays twice as fast as the video; --slow plays at the video's pace
   record    perform a take and capture frames + events
             --mode studio (default, exact, for finals) | live (real time, for drafts)
             --out <folder> (default: capture/ next to the take)  --headed (show the browser)
@@ -59,6 +60,7 @@ try {
       name: { type: 'string' },
       'from-chrome': { type: 'boolean', default: false },
       headed: { type: 'boolean', default: false },
+      slow: { type: 'boolean', default: false },
       'no-loop': { type: 'boolean', default: false },
       help: { type: 'boolean', short: 'h' },
       version: { type: 'boolean', short: 'v' },
@@ -70,7 +72,7 @@ try {
 }
 const { values: opts, positionals } = parsed;
 const [command, file] = positionals;
-const { headed, out: outFlag, theme: themeFlag } = opts;
+const { headed, slow, out: outFlag, theme: themeFlag } = opts;
 
 /** The options each command uses, so one given to a command that ignores it (a typo, a wrong guess) stops with
  *  an error instead of silently doing nothing. */
@@ -79,7 +81,7 @@ const accepts: Record<string, string[]> = {
   login: ['name', 'from-chrome'],
   logout: [],
   validate: [],
-  probe: ['out', 'theme', 'headed'],
+  probe: ['out', 'theme', 'headed', 'slow'],
   record: ['mode', 'out', 'headed'],
   compose: ['theme', 'out', 'address'],
   check: ['no-loop'],
@@ -287,7 +289,7 @@ async function probeCommand(): Promise<number> {
   if (badTheme) return fail(`✗ take probe: ${badTheme}`);
   const out = outFlag ?? path.join(path.dirname(file), 'probe');
   process.stdout.write(`Probing "${take.title}"…\n`);
-  const r = await probe(take, out, { headed });
+  const r = await probe(take, out, { headed, speed: slow ? 1 : undefined });
   if (r.visibleWindow) process.stdout.write(`⚠ ${VISIBLE_NOTE}\n`);
   if (!r.shots.length) return fail(`✗ ${r.error}`);
   for (const s of r.shots.slice(1))

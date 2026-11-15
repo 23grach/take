@@ -113,3 +113,29 @@ test('a rehearsal cuts the opening and closing holds short, and keeps the ones b
   assert.deepEqual(rehearsal(t).steps.map((s) => (s.do === 'hold' ? s.ms : s.do)), [500, 'click', 1500, 'press', 500]);
   assert.equal(t.steps[0].do === 'hold' && t.steps[0].ms, 2000, 'the take itself is unchanged');
 });
+
+test('buttons with no name are listed with a CSS target and where they are', async () => {
+  const { openTake } = await import('../src/drivers/web/browser.ts');
+  const { unnamedHandles } = await import('../src/probe/probe.ts');
+  const { browser, page } = await openTake(take([{ do: 'hold', ms: 100 }]));
+  try {
+    assert.equal(await unnamedHandles(page), '');
+    await page.evaluate(() => {
+      const panel = Object.assign(document.createElement('div'), { className: 'panel' });
+      panel.style.cssText = 'position:fixed;top:10px;right:10px';
+      // Two icon buttons with the same class: only the panel tells the close one apart.
+      panel.innerHTML = '<button class="icon close"><svg width="16" height="16"></svg></button>';
+      const other = Object.assign(document.createElement('button'), { className: 'icon' });
+      other.innerHTML = '<svg width="16" height="16"></svg>';
+      other.style.cssText = 'position:fixed;bottom:10px;left:10px';
+      document.body.append(panel, other);
+    });
+    const listed = await unnamedHandles(page);
+    const targets = [...listed.matchAll(/\{ "css": (".*?") \}/g)].map((m) => JSON.parse(m[1]) as string);
+    assert.equal(targets.length, 2, listed);
+    for (const css of targets) assert.equal(await page.locator(css).count(), 1, css);
+    assert.match(listed, /button at \d+, \d+ \(top right/);
+  } finally {
+    await browser.close();
+  }
+});

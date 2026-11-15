@@ -96,6 +96,7 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal }: Re
     });
     await reported;
     const info = await recorder.finish();
+    if (recorder.videos?.length) events.videos = recorder.videos;
     const capture: CaptureInfo = { version: 0, ...info, size, theme: take.theme, renderSeconds: +((performance.now() - t0) / 1000).toFixed(2), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
     fs.writeFileSync(path.join(out, 'capture.json'), JSON.stringify(capture, null, 1));
     fs.writeFileSync(path.join(out, 'events.json'), JSON.stringify(events));

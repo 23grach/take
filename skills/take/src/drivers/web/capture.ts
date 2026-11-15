@@ -9,6 +9,8 @@ import type { CDPSession, Page } from 'playwright';
 import type { Clock } from './clock.ts';
 import { realtimeClock } from './clock.ts';
 import { downloadsDone } from './browser.ts';
+import { stepVideos } from './media.ts';
+import type { Box } from './events.ts';
 
 export type Mode = 'studio' | 'live';
 
@@ -35,6 +37,8 @@ export interface Recorder {
   warmup(ms: number): Promise<void>;
   /** Call once the driver is done. Writes nothing itself; returns what goes into capture.json. */
   finish(): Promise<Omit<CaptureInfo, 'version' | 'size' | 'renderSeconds'>>;
+  /** Studio: where page videos were on screen (see EventLog.videos). */
+  videos?: [number, Box[]][];
   /** Studio: resolves once frame f's picture is on disk, at frameFile(f) in the capture folder. */
   saved?(f: number): Promise<void>;
 }
@@ -44,6 +48,33 @@ const QUALITY = 92; // JPEG; visually lossless at 1.5× and 2×, and fast to wri
 export const frameFile = (i: number) => `frames/f${String(i).padStart(5, '0')}.jpg`;
 const name = frameFile;
 
+/** After each page timer it fires, Playwright's frozen clock yields to the browser with a real setTimeout(0).
+ *  Chained timers are clamped to 4 ms, so a site running 7–18 timers a frame spent 30–70 ms a frame idle. A
+ *  message-channel task yields the same way (a fresh task, nothing skipped) without the clamp. Returns whether
+ *  the clock was found; if a Playwright update renames its insides, recording stays correct, only slower. */
+export function quickTimerYield(): boolean {
+  type Embedder = { setTimeout: (task: () => void, ms?: number) => () => void };
+  const clock = (globalThis as { __pwClock?: { controller?: { _embedder?: Embedder; __takeQuick?: true } } }).__pwClock?.controller;
+  if (!clock?._embedder?.setTimeout) return false;
+  if (clock.__takeQuick) return true;
+  const embedder = clock._embedder;
+  const original = embedder.setTimeout.bind(embedder);
+  const queue: (() => void)[] = [];
+  const channel = new MessageChannel();
+  channel.port1.onmessage = () => queue.shift()?.();
+  embedder.setTimeout = (task, ms) => {
+    if (ms) return original(task, ms);
+    let cancelled = false;
+    queue.push(() => cancelled || task());
+    channel.port2.postMessage(0);
+    return () => void (cancelled = true);
+  };
+  clock.__takeQuick = true;
+  return true;
+}
+
+const videoSeen = new WeakMap<Page, { video: boolean }>();
+
 /** Freezes page time and animations. Must run before the page is opened, so the page never sees real time. */
 export async function freezePage(page: Page): Promise<CDPSession> {
   // Page time starts at the real time, so dates in the app ("Today", "2 min ago") match the storyboard, and moves
@@ -51,6 +82,15 @@ export async function freezePage(page: Page): Promise<CDPSession> {
   const now = Math.floor(Date.now() / 1000) * 1000;
   await page.clock.install({ time: now });
   await page.clock.pauseAt(now + 1000);
+  // Registered after the clock's own script, so it runs after it in every page and frame the take opens.
+  await page.context().addInitScript(quickTimerYield);
+  // Tells Take when a video starts playing in any frame, so pages without one get no extra work per frame (which
+  // would also make their frames vary by a shade from run to run).
+  const seen = { video: false };
+  videoSeen.set(page, seen);
+  await page.context().exposeBinding('__takeVideoPlays', () => void (seen.video = true));
+  await page.context().addInitScript(() => document.addEventListener('playing', (e) => e.target instanceof HTMLVideoElement && (globalThis as unknown as { __takeVideoPlays: () => void }).__takeVideoPlays(), true));
+  await page.evaluate(quickTimerYield);
   // Freeze the browser's animation clock too, so CSS transitions that start mid-take begin frozen.
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Animation.enable');
@@ -67,6 +107,7 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
   await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile: false });
   let frame = 0;
   const dt = 1000 / fps;
+  const videos: [number, Box[]][] = [];
   const writes: Promise<void>[] = [];
   let writeError: Error | undefined;
   const clock: Clock = {
@@ -84,7 +125,10 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
         }
       }, dt);
       // Page time steps 16 or 17 ms so it never drifts from the frame count.
-      await page.clock.runFor(Math.round((frame + 1) * dt) - Math.round(frame * dt));
+      const ms = Math.round((frame + 1) * dt) - Math.round(frame * dt);
+      await page.clock.runFor(ms);
+      const boxes = videoSeen.get(page)?.video ? await stepVideos(page, ms) : [];
+      if (JSON.stringify(videos.at(-1)?.[1] ?? []) !== JSON.stringify(boxes)) videos.push([frame, boxes]);
       await page.evaluate(() => {
         for (const a of document.getAnimations()) (a as Animation & { __take?: boolean }).__take = true;
       });
@@ -112,6 +156,7 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
           }
         }, dt);
         await page.clock.runFor(Math.round(dt));
+        if (videoSeen.get(page)?.video) await stepVideos(page, Math.round(dt));
       }
     },
     async finish() {
@@ -120,6 +165,7 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
       return { mode: 'studio', fps, frames: Array.from({ length: frame }, (_, i) => name(i)), images: frame };
     },
     saved: (f) => writes[f],
+    videos,
   };
 }
 

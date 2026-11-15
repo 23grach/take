@@ -8,7 +8,9 @@ import { readyTake } from './take/load.ts';
 import { commitCapture, discardRecording, record, stagingDir } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/driver.ts';
 import type { Mode } from './drivers/web/capture.ts';
-import { compose, ffmpegProblem, following, themeProblem } from './compose/compose.ts';
+import { compose, ffmpegProblem, following, loadTheme, themeProblem } from './compose/compose.ts';
+import { layout } from './compose/stage.ts';
+import type { EventLog } from './drivers/web/events.ts';
 import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { addressWarning, shownAddress } from './take/format.ts';
@@ -71,13 +73,14 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   const abort = new AbortController();
   let composeError: unknown;
   let recordFailed = false;
+  let recorded: Awaited<ReturnType<typeof record>> | undefined;
   composing?.catch((e) => {
     if (recordFailed) return; // compose stopped because the recording did: that error is reported below
     composeError = e;
     abort.abort();
   });
   try {
-    const { capture: info, events } = await record(take, { mode, out: capture, headed, onFrame: recording?.frame, commit: !recording, signal: abort.signal });
+    const { capture: info, events } = (recorded = await record(take, { mode, out: capture, headed, onFrame: recording?.frame, commit: !recording, signal: abort.signal }));
     recording?.end(events);
     log(`✓ recorded  ${info.frames.length} frames (${(info.frames.length / info.fps).toFixed(2)} s of app) in ${lap()} → ${rel(capture)}`);
     if (info.visibleWindow) log(`⚠ ${VISIBLE_NOTE}`);
@@ -104,11 +107,27 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   log(`✓ composed  ${composed.size.join('×')}, ${composed.frames} frames (${composed.seconds.toFixed(2)} s of video) in ${lap()} → ${rel(video)}`);
 
   const loop = take.loop !== 'none';
-  const report = check(video, { loop });
+  const report = check(video, { loop, pageVideos: recorded && pageVideoAreas(recorded.events, options.theme) });
   const base = video.replace(/\.mp4$/i, '');
   fs.writeFileSync(`${base}.check.json`, JSON.stringify(report, null, 1));
   const sheet = await contactSheet(report, `${base}.contact.jpg`, { loop });
   log(`✓ checked   in ${lap()}`);
 
   return { ok: report.ok, capture, video, report, sheet, seconds: elapsed() };
+}
+
+/** Where page videos show in each frame of the finished video, in its pixels (see EventLog.videos). */
+export function pageVideoAreas(log: EventLog, theme?: string): ((f: number) => [number, number, number, number][]) | undefined {
+  const list = log.videos;
+  if (!list?.length) return undefined;
+  const look = loadTheme(theme).theme;
+  const box = layout(look, log.viewport);
+  // The stage is laid out at 1920×1080 and rendered at the video's size.
+  const z = look.stage.output[0] / look.stage.size[0];
+  return (f) => {
+    let i = list.length - 1;
+    while (i > 0 && list[i][0] > f) i--;
+    if (list[i][0] > f) return [];
+    return list[i][1].map((b) => [(box.contentLeft + b.x * box.k) * z, (box.contentTop + b.y * box.k) * z, b.width * box.k * z, b.height * box.k * z]);
+  };
 }

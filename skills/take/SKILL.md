@@ -17,7 +17,7 @@ The CLI lives in this skill's base directory, the folder that holds this `SKILL.
 | `take login <url>` | Opens a visible browser window on `<url>` where the user signs in themselves; saves that login when they close the window, under the site's domain (`--name` to choose another). Takes whose target has `"login": "<name>"` then start signed in. |
 | `take logout <name>` | Forgets a saved login. |
 | `take validate takes/<name>/take.json` | Checks the file's shape and explains every problem. |
-| `take probe takes/<name>/take.json` | Plays the take in the app without recording (the opening and closing holds last 0.5 s here, so times on the storyboard run a little short of the video's). Writes `probe/step-00.png` + `step-00.outline.yml` (the first screen, before any step), then `step-NN.*` after step NN, `probe.json` and `probe/storyboard.jpg`. A failing step stops it: the reason is printed, stored as `error` in `probe.json` and shown in red on the storyboard. |
+| `take probe takes/<name>/take.json` | Plays the take in the app without recording, twice as fast as the video (the opening and closing holds last 0.5 s here; times on the storyboard are rough). `--slow` plays at the video's pace: use it when a step fails only because the app hadn't caught up yet. Writes `probe/step-00.png` + `step-00.outline.yml` (the first screen, before any step), then `step-NN.*` after step NN, `probe.json` and `probe/storyboard.jpg`. A failing step stops it: the reason is printed, stored as `error` in `probe.json` and shown in red on the storyboard. |
 | `take run takes/<name>/take.json` | Records, composes and checks: `out/<name>.mp4`, `out/<name>.check.json`, `out/<name>.contact.jpg`. Exit code 1 if the check fails. |
 | `take compose takes/<name>/capture --address …` | Re-composes without re-recording (address, theme). |
 
@@ -47,7 +47,7 @@ Never film setup steps to get there. A signed-in video shows a real account, so 
 ### 3. Rehearse
 
 Write `take.json` following [docs/pacing.md](docs/pacing.md), and prove it with `take probe`:
-1. Start with just the opening hold and probe it. Read `probe/step-00.outline.yml` (the first screen): the page's roles and names, exactly as targets use them. Look at `probe/storyboard.jpg`.
+1. Start with just the opening hold and probe it. Read `probe/step-00.outline.yml` (the first screen): the page's roles and names, exactly as targets use them. Buttons and links with no name (an icon-only close "×") show there only as `- button`; the outline ends with a list of the visible ones, each with where it is on screen and a ready `css` target. Look at `probe/storyboard.jpg`.
 2. Add the steps. Targets on the first screen come from that outline; for screens that only appear later (a dialog a click opens), write your best guess, probe, and correct it from the outline after the step that opened it. Adding the steps one or two at a time works too.
 3. If a step fails, the message says which and why, and that step's outline shows what the page had instead. Fix the target or the wait, and probe again. The driver already waits out the ordinary things (slow loading, elements off screen, a toast passing over a button, a button that enables late, a list that re-renders), so a failure means something real:
    - `can't find …` — the name is wrong, or the element appears only after something you haven't done yet.
@@ -62,7 +62,7 @@ Repeat until every step passes. If the same step still fails after three tries, 
 
 ### 4. Approve (the one question)
 
-Before showing anything, check the storyboard against the first part of [docs/review-checklist.md](docs/review-checklist.md) and fix what you can. Then show the user `probe/storyboard.jpg` with one plain-language line per step (what the viewer sees, not the storyboard's literal labels) and the settings you chose (address, loop, size, rough length), and ask one question: record it? Change requests go back to step 3. Don't record before the user says yes.
+Before showing anything, check the storyboard against the first part of [docs/review-checklist.md](docs/review-checklist.md) and fix what you can. Then show the user `probe/storyboard.jpg` with one plain-language line per step (what the viewer sees, not the storyboard's literal labels) and the settings you chose (address, loop, size, rough length). Then ask one question: record it? Change requests go back to step 3. Don't record before the user says yes.
 
 ### 5. Record
 
@@ -94,6 +94,6 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 
 ## Not supported yet
 
-Multi-finger gestures; setup before the video starts other than signing in; video sizes other than 2560×1440; phone frames. Videos playing inside the page (`<video>`, embedded players) and animations inside pages embedded from other sites run on real time while a final video records, so they play several times too fast in it; a `--mode live` draft shows them at the right speed. Say so plainly when a scenario needs them, and offer the closest version that works.
+Multi-finger gestures; setup before the video starts other than signing in; video sizes other than 2560×1440; phone frames. Animations inside pages embedded from other sites (players, maps, widgets in an iframe from another address) run on real time while a final video records, so they play several times too fast in it; a `--mode live` draft shows them at the right speed. Videos in the page itself (`<video>`) play at their true speed; recording takes longer while one is on screen. Say so plainly when a scenario needs them, and offer the closest version that works.
 
 Never change Take itself (anything in `<base>`: its code, docs, plan or themes) to get a video done, even when a fix looks small. Work only in the user's project. When Take can't do something, say what is missing; the user decides whether Take should learn it.
