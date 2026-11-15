@@ -30,8 +30,8 @@ interface Common {
 
 export type Step = Common &
   (
-    | { do: 'click'; target: Target }
-    | { do: 'hover'; target: Target }
+    | { do: 'click'; target: Spot; clicks?: 2 | 3 }
+    | { do: 'hover'; target: Spot }
     | { do: 'drag'; from: Spot; to: Spot }
     | { do: 'type'; target?: Target; text: string; cps: number }
     | { do: 'press'; key: string }
@@ -86,6 +86,8 @@ export interface Take {
   theme: string;
   /** Wait for all of these after the page opens, before filming starts: the video opens on a loaded page. Not filmed. */
   ready?: Condition[];
+  /** Steps done after the page opens, before filming starts: closing a cookie banner or a welcome pop-up. Not filmed. */
+  setup?: Step[];
   steps: Step[];
   loop: 'crossfade-to-start' | 'none';
 }
@@ -211,9 +213,10 @@ export function validateTake(input: unknown): Result {
     switch (action) {
       case 'click':
       case 'hover':
-        onlyKeys(v, path, [...common, 'target']);
+        onlyKeys(v, path, [...common, 'target', ...(action === 'click' ? ['clicks'] : [])]);
         if (!('target' in v)) fail(path, `missing "target" (what to ${action})`);
-        else target(v.target, `${path}.target`);
+        else spot(v.target, `${path}.target`);
+        if ('clicks' in v && v.clicks !== 2 && v.clicks !== 3) fail(`${path}.clicks`, `must be 2 (double-click: selects a word) or 3 (triple-click: selects a line), got ${show(v.clicks)}`);
         break;
       case 'drag':
         onlyKeys(v, path, [...common, 'from', 'to']);
@@ -258,7 +261,7 @@ export function validateTake(input: unknown): Result {
   }
 
   if (!isObj(input)) return { ok: false, errors: ['the take must be a JSON object'] };
-  onlyKeys(input, '', ['version', 'title', 'target', 'theme', 'ready', 'steps', 'loop']);
+  onlyKeys(input, '', ['version', 'title', 'target', 'theme', 'ready', 'setup', 'steps', 'loop']);
   // One condition or a list; all must hold.
   const ready = 'ready' in input ? (Array.isArray(input.ready) ? input.ready : [input.ready]) : undefined;
   if (ready?.length === 0) fail('ready', 'give a condition, e.g. { "visible": { "role": "button", "name": "Deposit" } }, or a list of them');
@@ -297,6 +300,15 @@ export function validateTake(input: unknown): Result {
     };
   }
 
+  const setup: Step[] = [];
+  if ('setup' in input) {
+    if (!Array.isArray(input.setup) || input.setup.length === 0) fail('setup', 'must be a list of steps, e.g. [{ "do": "click", "target": { "role": "button", "name": "Reject all" } }]');
+    else input.setup.forEach((s, i) => {
+      const out = step(s, `setup[${i}]`);
+      if (out) setup.push(out);
+    });
+  }
+
   const steps: Step[] = [];
   if (!Array.isArray(input.steps) || input.steps.length === 0) fail('steps', 'must be a list with at least one step');
   else input.steps.forEach((s, i) => {
@@ -325,6 +337,7 @@ export function validateTake(input: unknown): Result {
       target: web!,
       theme: (input.theme as string | undefined) ?? DEFAULTS.theme,
       ...(ready ? { ready: ready as Condition[] } : {}),
+      ...(setup.length ? { setup } : {}),
       steps,
       loop: loop as Take['loop'],
     },

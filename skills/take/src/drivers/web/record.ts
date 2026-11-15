@@ -7,12 +7,15 @@ import type { Take } from '../../take/format.ts';
 import { openTake, untilReady } from './browser.ts';
 import { UNTHROTTLED } from '../../browser-binary.ts';
 import { freezePage, live, studio, type CaptureInfo, type Mode, type Recorder } from './capture.ts';
-import { perform } from './driver.ts';
+import { perform, performSetup } from './driver.ts';
+import { realtimeClock } from './clock.ts';
 import { hideCaret } from './caret.ts';
 import type { EventLog } from './events.ts';
 
 /** Time the page gets to settle (fonts, first renders, intro animations) before frame 0. */
 const WARMUP_MS = 1000;
+/** What the page gets after setup steps (a banner fading away) before frame 0. */
+const SETTLE_AFTER_SETUP_MS = 600;
 
 export interface RecordOptions {
   mode?: Mode;
@@ -84,6 +87,10 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal }: Re
       await recorder.warmup(ms);
       await page.screenshot({ clip: { x: 0, y: 0, width: 1, height: 1 } });
     });
+    // Setup steps (a cookie banner, a welcome pop-up) on a clock that moves page time on without filming.
+    let unfilmed = 0;
+    const setupClock = { fps: 60, get frame() { return unfilmed; }, async tick() { await recorder.warmup(1000 / 60); unfilmed++; } };
+    if (await performSetup(page, take, studioMode ? setupClock : realtimeClock())) await recorder.warmup(SETTLE_AFTER_SETUP_MS);
     const t0 = performance.now();
     // Pictures are written in the background and can land out of order: report them in order.
     let reported = Promise.resolve();

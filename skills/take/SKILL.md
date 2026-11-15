@@ -42,23 +42,24 @@ Make sure the app answers at its URL. If it doesn't, start it the way the scenar
 - **Signed in.** Set `target.login` to the site's domain (e.g. `"boards.app"`). If `take validate` says there's no saved login yet, or the first screen shows the app signed out (the login expired), get a login one of two ways. If the user says they're signed in to the site in their own Google Chrome, run `take login <url> --from-chrome` in the background and tell them, in one message, to click **Allow** when Chrome asks to "allow remote debugging" (Chrome's name for this connection; Take only reads that site's login and disconnects) (Chrome asks on every run; the first time they also turn on remote debugging at chrome://inspect/#remote-debugging, and on a Mac the app running you needs Full Disk Access; the command's error says which is missing). It copies only that site's cookies. Otherwise run `take login <url>` in the background and tell the user, in one message, that a browser window has opened where they sign in themselves and then close it. Never type a password, a code or any other secret yourself, and never read or print the saved login file. When the command finishes, probe again.
 - Anything more (a particular record, a setting on): say what is missing and how the user could provide it (a demo mode, a seed script, a URL that opens that state).
 
-Never film setup steps to get there. A signed-in video shows a real account, so look out for personal details on screen (balance, email, phone, account ID) and mention them when asking to record.
+Cookie banners and welcome pop-ups: close them in the take's `setup` steps (done after the page opens, not filmed), so the video doesn't open on them and the loop doesn't return to them. Use `setup` only for getting things out of the way; never film setup steps to reach a state. A signed-in video shows a real account, so look out for personal details on screen (balance, email, phone, account ID) and mention them when asking to record.
 
 ### 3. Rehearse
 
 Write `take.json` following [docs/pacing.md](docs/pacing.md), and prove it with `take probe`:
-1. Start with just the opening hold and probe it. Read `probe/step-00.outline.yml` (the first screen): the page's roles and names, exactly as targets use them. Buttons and links with no name (an icon-only close "×") show there only as `- button`; the outline ends with a list of the visible ones, each with where it is on screen and a ready `css` target. Look at `probe/storyboard.jpg`.
+1. Start with just the opening hold and probe it. Read `probe/step-00.outline.yml` (the first screen): the page's roles and names, exactly as targets use them. The outline ends with ready `css` targets for what a role and name can't pick: buttons and links with no name (an icon-only close "×", listed only as `- button`), and elements that share a name with others (a "Sign up" button in the header and the footer), each with where it is on screen. Use them as they are; don't write your own scripts to inspect the page. Look at `probe/storyboard.jpg`.
 2. Add the steps. Targets on the first screen come from that outline; for screens that only appear later (a dialog a click opens), write your best guess, probe, and correct it from the outline after the step that opened it. Adding the steps one or two at a time works too.
 3. If a step fails, the message says which and why, and that step's outline shows what the page had instead. Fix the target or the wait, and probe again. The driver already waits out the ordinary things (slow loading, elements off screen, a toast passing over a button, a button that enables late, a list that re-renders), so a failure means something real:
    - `can't find …` — the name is wrong, or the element appears only after something you haven't done yet.
-   - `N elements match … ("A", "B")` — add `"exact": true`, or pick a role and name that's unique.
-   - `is covered by …` — something stays on top (a cookie banner, a dialog): close it with a step first, or find a start URL without it.
+   - `N elements match … ("A", "B")` — add `"exact": true`, or take the `css` target for the one you mean from the end of the outline.
+   - `is covered by …` — something stays on top: a cookie banner or welcome pop-up goes in `setup`; a dialog the story opened needs a step that closes it.
    - `stayed disabled` — a step before it didn't do what the app needs (a required field is still empty).
-   - `the app threw an error` / `opening the app: …` — the app itself is broken or not running; tell the user, don't work around it.
+   - `the app threw an error` / `opening the app: …` — the app itself is broken or not running; tell the user, don't work around it. (Errors from other sites' scripts on the page, like a bot-check widget or an ad, are already ignored.)
+   - `⚠ nothing scrolled` / `⚠ the page didn't scroll` under a step — the step passed but may not do what you meant; look at its picture.
    - `⚠ the site refused Take's hidden browser` — Take opened it in a visible window instead, by itself. Tell the user a browser window will appear while you probe and record, and not to click in it or close it.
    - `answered with error 403` even so, or the user says the sign-in captcha keeps coming back or tabs keep flashing in the sign-in window — the site is challenging Take's browser. Do **not** type secrets or solve the captcha yourself. Ask the user to clear the challenge **once** in the `take login` window (they sign in / pass the check, then close it), then probe again with `target.login`. If that still fails after one clear try, say so plainly and stop — don't attach to their everyday Chrome or control their Mac.
 
-Repeat until every step passes. If the same step still fails after three tries, stop and tell the user what you see on the page.
+Repeat until every step passes. If the same step still fails after three tries, stop and tell the user what you see on the page; don't retry the same take hoping for a different result.
 
 ### 4. Approve (the one question)
 
@@ -72,7 +73,9 @@ Before showing anything, check the storyboard against the first part of [docs/re
 
 Read the report `take run` prints and look at `out/<name>.contact.jpg` against the second part of the review checklist.
 - A step failed during recording (the page behaved differently from the probe): probe again, fix, run again.
-- A check failed: the report says what and where. A doubled frame in studio mode means something on the page jumped; look at that moment on the contact sheet. Run once more; if it repeats, tell the user what it is.
+- `rehearsal` ⚠: a step looks different from its rehearsal picture. The contact sheet shows the two side by side. Something missing from the video (a panel, a menu, map tiles) means the recording went wrong: run once more, and if it repeats tell the user. Live content that changed is fine.
+- A doubled frame (`smoothness` ✗): look at that moment on the contact sheet first. If it's the page's own behaviour (content vanishing in one frame, a picture popping in, a video in the page), recording again gives the same result: deliver and tell the user what it is. Run once more only when it looks like a recording glitch.
+- Any other ✗: the report says what and where; fix the take and run again.
 - Never patch the video by hand. Every fix goes into `take.json` and is recorded again.
 
 ### 7. Deliver
@@ -94,6 +97,6 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 
 ## Not supported yet
 
-Multi-finger gestures; setup before the video starts other than signing in; video sizes other than 2560×1440; phone frames. Animations inside pages embedded from other sites (players, maps, widgets in an iframe from another address) run on real time while a final video records, so they play several times too fast in it; a `--mode live` draft shows them at the right speed. Videos in the page itself (`<video>`) play at their true speed; recording takes longer while one is on screen. Say so plainly when a scenario needs them, and offer the closest version that works.
+Multi-finger gestures; setup before the video starts other than signing in and closing things in `setup` (no filling in forms or choosing settings off camera); video sizes other than 2560×1440; phone frames. Animations inside pages embedded from other sites (players, maps, widgets in an iframe from another address) run on real time while a final video records, so they play several times too fast in it; a `--mode live` draft shows them at the right speed. Videos in the page itself (`<video>`) play at their true speed; recording takes longer while one is on screen. Say so plainly when a scenario needs them, and offer the closest version that works.
 
 Never change Take itself (anything in `<base>`: its code, docs, plan or themes) to get a video done, even when a fix looks small. Work only in the user's project. When Take can't do something, say what is missing; the user decides whether Take should learn it.

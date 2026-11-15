@@ -13,6 +13,7 @@ import { layout } from './compose/stage.ts';
 import type { EventLog } from './drivers/web/events.ts';
 import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
+import { compareWithRehearsal, STEP_LIMIT } from './check/rehearsal.ts';
 import { addressWarning, shownAddress } from './take/format.ts';
 
 export interface RunOptions {
@@ -108,9 +109,21 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
 
   const loop = take.loop !== 'none';
   const report = check(video, { loop, pageVideos: recorded && pageVideoAreas(recorded.events, options.theme) });
+  // Does each step look like its rehearsal? Catches what motion checks can't: a panel that never appeared.
+  const matches = mode === 'studio' && recorded ? compareWithRehearsal(capture, recorded.events, path.join(path.dirname(file), 'probe'), file) : undefined;
+  if (matches) {
+    const off = matches.filter((m) => m.differs > STEP_LIMIT);
+    report.findings.push({
+      name: 'rehearsal',
+      status: off.length ? 'warn' : 'pass',
+      detail: off.length
+        ? `${off.map((m) => `${m.step === 0 ? 'the first screen' : `step ${m.step}`} (${(m.frame / 60).toFixed(2)} s) looks different from its rehearsal picture over ${Math.round(m.differs * 100)}% of the page`).join('; ')}: compare them on the contact sheet`
+        : 'every step looks like its rehearsal picture',
+    });
+  }
   const base = video.replace(/\.mp4$/i, '');
   fs.writeFileSync(`${base}.check.json`, JSON.stringify(report, null, 1));
-  const sheet = await contactSheet(report, `${base}.contact.jpg`, { loop });
+  const sheet = await contactSheet(report, `${base}.contact.jpg`, { loop, rehearsal: matches?.filter((m) => m.differs > STEP_LIMIT) });
   log(`✓ checked   in ${lap()}`);
 
   return { ok: report.ok, capture, video, report, sheet, seconds: elapsed() };

@@ -35,6 +35,7 @@ A take is the exact list of steps a recording replays. The agent writes it while
 | `target.scale` | | `1.5` | How sharp the recorded frames are. The video shows the page at about 1.35× its size, so `1.5` is sharp and records about a quarter faster than `2`. `2` for the crispest small text; `1` for quick drafts. |
 | `theme` | | `"default"` | Folder in `themes/`. |
 | `ready` | | none | A condition (like `waitFor`), or a list of them, that must all hold before filming starts, e.g. `{ "visible": { "role": "button", "name": "Deposit" } }`. The page loads in the meantime and none of it is filmed, so the video opens on a finished page instead of loading placeholders. Pictures that are downloading finish first, then fades get 0.5 s. Up to 30 s; then the take stops and says which condition never showed. |
+| `setup` | | none | Steps done after the page opens (and after `ready`), before filming starts, written like `steps`: closing a cookie banner or a welcome pop-up, e.g. `[{ "do": "click", "target": { "role": "button", "name": "Reject all" } }]`. None of it is filmed and the page gets 0.6 s to settle after, so the video opens on the page without them. A failure says `setup step N`. Only for getting things out of the way; anything the viewer should see belongs in `steps`. |
 | `steps` | yes | | At least one step, performed in order. |
 | `loop` | | `"crossfade-to-start"` | How the video ends. `"crossfade-to-start"`: the last frame dissolves back into the first (0.67 s) and the cursor glides home, so the video loops seamlessly. `"none"`: the video simply ends on the last frame, for videos that play once (a talk, a page that doesn't autoplay in a loop). Ask the agent "no loop" / "don't go back to the start". |
 
@@ -44,12 +45,12 @@ Every step has `do`. Any step may also have `mark` (a unique name for that momen
 
 | `do` | Fields | What happens |
 |---|---|---|
-| `click` | `target` | The cursor travels to the element and clicks it. No separate hover step is needed. |
-| `hover` | `target` | The cursor travels to the element and rests there (to show a tooltip or hover state). |
+| `click` | `target`, `clicks`? | The cursor travels to the element and clicks it. No separate hover step is needed. `"clicks": 2` double-clicks (selects a word, opens an item), `3` triple-clicks (selects a line or paragraph). A radio or checkbox hidden under its own label is clicked through the label, as a person would. `target` may also be a point `[x, y]` (as in `drag`) for things no target names, like an icon that only shows on hover: hover the row first, read the point off that step's picture. |
+| `hover` | `target` | The cursor travels to the element (or a point `[x, y]`) and rests there (to show a tooltip or hover state). |
 | `drag` | `from`, `to` | The cursor travels to `from`, presses, moves to `to` with the button held, and lets go: draws a shape, moves a slider, drops a card in a column. Each end is a [target](#targets) (its middle) or a point `[x, y]` in CSS pixels from the page's top left, e.g. `[540, 330]`, for places no element names, like a spot on a drawing canvas. |
 | `type` | `text`, `target`?, `cps`? = 14 | Clicks the field if `target` is given, then types character by character at `cps` characters per second. Without `target`, types into whatever has focus. |
-| `press` | `key` | A single key, e.g. `"Enter"`, `"Escape"`, `"Meta+A"`. The browser's key names: `Meta` (⌘), `Control`, `Alt` (⌥), `Shift`, `ArrowUp`…; join keys with `+`. `take validate` flags others (`Cmd`, `Esc`) and names the right one. |
-| `scroll` | `target` or `by: [x, y]` | Scrolls an element into view, or by a distance in pixels. |
+| `press` | `key` | A single key, e.g. `"Enter"`, `"Escape"`, `"Meta+A"`. The browser's key names: `Meta` (⌘), `Control`, `Alt` (⌥), `Shift`, `ArrowUp`…; join keys with `+`. `take validate` flags others (`Cmd`, `Esc`) and names the right one. With `Meta`, `Control` or `Alt` held a letter is sent lowercase, as a real keyboard does, so `"Meta+K"` opens a ⌘K search; add `Shift` for a capital. |
+| `scroll` | `target` or `by: [x, y]` | Scrolls an element into view, or by a distance in pixels. An element already on screen isn't scrolled to, and the probe says so (`⚠ nothing scrolled`); use `by` to move the page anyway. A `by` scroll goes to whatever is under the cursor, so it also zooms a map or scrolls a list there; the probe notes when the page itself didn't move. |
 | `wait` | `for`, `timeout`? = 10000 | Waits for a condition. The take fails if it isn't met within `timeout` ms. |
 | `hold` | `ms` | Nothing happens for `ms` milliseconds, so the viewer can take it in. |
 

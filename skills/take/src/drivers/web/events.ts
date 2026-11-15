@@ -24,6 +24,8 @@ export interface StepLog {
   start: number;
   end: number;
   mark?: string;
+  /** Something worth knowing about how the step went, e.g. a scroll that had nothing to move. */
+  note?: string;
   /** The element acted on, where it was when the action happened. */
   target?: Box;
   /** The element waitFor was waiting for, where it was when it showed. */

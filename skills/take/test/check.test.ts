@@ -58,3 +58,32 @@ test('the contact sheet is written', async () => {
   const out = await contactSheet(r, path.join(dir, 'sheet.jpg'), { loop: false });
   assert.ok(fs.statSync(out).size > 50_000);
 });
+
+test('a step that looks different from its rehearsal is caught; one that matches is not', async () => {
+  const { compareWithRehearsal, STEP_LIMIT } = await import('../src/check/rehearsal.ts');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-rehearsal-'));
+  try {
+    const probe = path.join(dir, 'probe');
+    const capture = path.join(dir, 'capture');
+    fs.mkdirSync(probe);
+    fs.mkdirSync(path.join(capture, 'frames'), { recursive: true });
+    // A white page; with a dark panel open (half the page) after step 2.
+    const img = (file: string, panel: boolean) =>
+      execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=white:s=320x200', ...(panel ? ['-vf', 'drawbox=x=0:y=0:w=320:h=100:color=black:t=fill'] : []), '-frames:v', '1', '-y', file]);
+    img(path.join(probe, 'step-00.png'), false);
+    img(path.join(probe, 'step-01.png'), false);
+    img(path.join(probe, 'step-02.png'), true);
+    const frames = Array.from({ length: 30 }, (_, i) => `frames/f${String(i).padStart(5, '0')}.jpg`);
+    for (const f of frames) img(path.join(capture, f), false); // the recording never shows the panel
+    fs.writeFileSync(path.join(capture, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [320, 200], frames, renderSeconds: 1, images: 30 }));
+    fs.writeFileSync(path.join(probe, 'probe.json'), JSON.stringify({ ok: true, title: 't', viewport: [320, 200], seconds: 1,
+      shots: [0, 1, 2].map((step) => ({ step, label: '', at: 0, file: `step-0${step}.png`, outline: '', pointer: [0, 0], cursor: 'default' })) }));
+    const log = { version: 0, title: 't', url: '', address: '', fps: 60, viewport: [320, 200], scale: 1, frames: 30, pointer: [], cursors: [], carets: [], events: [], marks: {}, loop: 'none',
+      steps: [{ index: 0, do: 'click', start: 0, end: 9 }, { index: 1, do: 'click', start: 10, end: 19 }] };
+    const m = compareWithRehearsal(capture, log as never, probe)!;
+    assert.deepEqual(m.map((s) => s.differs > STEP_LIMIT), [false, false, true]);
+    assert.ok(m[2].frame >= 19 && m[2].frame <= 29, `compared frame ${m[2].frame}`);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});

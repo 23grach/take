@@ -15,6 +15,9 @@ export const PACING = {
   settle: 140,
   /** How long the button stays pressed, so pressed states show. */
   press: 90,
+  /** Double- and triple-clicks: each press, and the gap between presses (a browser counts clicks within ~500 ms). */
+  multiClickPress: 60,
+  multiClickGap: 70,
   /** Dragging: a held button makes the hand slower and steadier than a free move (drag time = travel time ×
    *  slower), and it rests a moment after pressing and before letting go so the grab and the drop both read. */
   drag: { slower: 1.6, arc: 0.02, grip: 160 },

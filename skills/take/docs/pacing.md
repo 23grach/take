@@ -38,6 +38,8 @@ Rules for writing `take.json` ([take-format.md](take-format.md)) from a scenario
 | `Drag "Card" to "Done"`, `move the slider to 50%`, `draw a box` | `drag` with `from` and `to`. Use targets where elements have names; use points `[x, y]` for spots on a canvas or along a slider. Points are page pixels: read them off the probe's screenshots (`probe/step-NN.png` is the page at its viewport size, 1440×900 by default), and draw in empty space well clear of toolbars. A drawing tool is picked first with a `click`. |
 | `"Saved" appears`, `the new card appears` | `waitFor` on the step before it (preferred), or a `wait` step if nothing triggers it directly |
 | `Pause 1 s`, `show it for 2 s` | `hold` |
+| `Lock the middle colour` (an icon that only appears on hover, with no name) | `hover` the column, probe, read the icon's point off that step's picture, then `click` with `"target": [x, y]`. |
+| `Select the word "started"` (in text or a code editor) | `click` the word with `"clicks": 2`; then `type` replaces it. A triple-click (`3`) selects the whole line. |
 | `Change Name to "Moodboard"` (a field that already has text) | `click` the field, `press` `Meta+A` (select all), then `type` without a target: typing replaces the selection. A `type` with a target adds to what's there. |
 | `slowly` / `quickly` on typing | `cps` 8 / 22 (normal 14) |
 
@@ -53,7 +55,7 @@ Pick from the page outline `take probe` writes after each step (`probe/step-NN.o
 2. `label` for form fields: `{ "label": "Name" }`.
 3. `placeholder`, when a field has no label.
 4. `text`, for things that aren't controls (a card title, a menu item without a role).
-5. `css` only as a last resort; it breaks when the app's code changes.
+5. `css` only as a last resort; it breaks when the app's code changes. When the outline itself offers one (at its end: elements with no name, or several with the same name), use that.
 
 Add `"exact": true` when the name is part of another name on the page (`Create` vs `Create project`, `Save` vs `Save as…`). A target must match exactly one visible element; the probe says when it doesn't.
 

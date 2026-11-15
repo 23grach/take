@@ -128,3 +128,101 @@ test('Meta+K reaches a site that listens for "k", and a radio hidden under its l
     server.close();
   }
 });
+
+test('page errors: other sites\' scripts are ignored, the app\'s own still stop the take', async () => {
+  const { siteOf, ownError } = await import('../src/drivers/web/page-errors.ts');
+  assert.equal(siteOf('www.example.co.uk'), 'example.co.uk');
+  assert.equal(siteOf('app.example.com'), 'example.com');
+  const at = (url: string) => Object.assign(new Error('x'), { stack: `Error: x\n    at f (${url}:1:2)` });
+  assert.equal(ownError(at('https://challenges.cloudflare.com/turnstile/v0/api.js'), 'https://coolors.co/generate'), false);
+  assert.equal(ownError(at('https://static.example.com/app.js'), 'https://www.example.com/'), true);
+  assert.equal(ownError(new Error('no stack lines'), 'https://example.com/'), true);
+  // As seen on a real site: the bot check's error passes through Cloudflare's loader on the site's own address.
+  const turnstile = Object.assign(new Error('[Cloudflare Turnstile] Error: 600010.'), {
+    stack: 'TurnstileError: x\n    at x (https://challenges.cloudflare.com/turnstile/v0/api.js:1:17327)\n    at c (https://coolors.co/cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js:0:9404)',
+  });
+  assert.equal(ownError(turnstile, 'https://coolors.co/generate'), false);
+
+  const http = await import('node:http');
+  const { validateTake } = await import('../src/take/format.ts');
+  // The widget comes from "another site" (localhost vs 127.0.0.1) and throws; the app's own error is opt-in.
+  const widget = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/javascript' }).end('setTimeout(() => { throw new Error("widget broke"); }, 10);'));
+  await new Promise<void>((r) => widget.listen(0, '127.0.0.1', r));
+  const wport = (widget.address() as { port: number }).port;
+  const app = http.createServer((req, res) =>
+    res.writeHead(200, { 'content-type': 'text/html' }).end(`<!doctype html><button onclick="setTimeout(() => { throw new Error('app broke'); })">Break</button><script src="http://localhost:${wport}/w.js"></script>`),
+  );
+  await new Promise<void>((r) => app.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(app.address() as { port: number }).port}/`;
+  const make = (steps: unknown[]) => {
+    const r = validateTake({ version: 0, title: 'E', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, steps });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    return r.take;
+  };
+  try {
+    const quiet = make([{ do: 'hold', ms: 300 }]);
+    let opened = await openTake(quiet);
+    try {
+      await perform(opened.page, quiet, realtimeClock());
+    } finally {
+      await opened.browser.close();
+    }
+    const breaking = make([{ do: 'click', target: { role: 'button', name: 'Break' } }, { do: 'hold', ms: 300 }]);
+    opened = await openTake(breaking);
+    try {
+      await assert.rejects(perform(opened.page, breaking, realtimeClock()), /app broke/);
+    } finally {
+      await opened.browser.close();
+    }
+  } finally {
+    app.close();
+    widget.close();
+  }
+});
+
+test('a double-click selects a word; a scroll with nothing to move says so', async () => {
+  const http = await import('node:http');
+  const { validateTake } = await import('../src/take/format.ts');
+  const html = `<!doctype html><p style="font:20px sans-serif;margin:100px"><span>Get</span> <span id="w">started</span></p><h2>Examples</h2>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(html));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+  const r = validateTake({ version: 0, title: 'D', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, steps: [
+    { do: 'click', target: { css: '#w' }, clicks: 2 },
+    { do: 'scroll', target: { role: 'heading', name: 'Examples' } },
+    { do: 'scroll', by: [0, 300] },
+  ] });
+  assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+  assert.ok(!validateTake({ version: 0, title: 'D', target: { kind: 'web', url }, steps: [{ do: 'click', target: { css: 'p' }, clicks: 4 }] }).ok);
+  const { browser, page } = await openTake(r.take);
+  try {
+    const log = await perform(page, r.take, realtimeClock());
+    assert.equal(await page.evaluate(() => String(getSelection()).trim()), 'started');
+    assert.match(log.steps[1].note ?? '', /already on screen/);
+    assert.match(log.steps[2].note ?? '', /didn't scroll/);
+  } finally {
+    await browser.close();
+    server.close();
+  }
+});
+
+test('a click can aim at a point on the page', async () => {
+  const http = await import('node:http');
+  const { validateTake } = await import('../src/take/format.ts');
+  const html = `<!doctype html><div id="lock" style="position:absolute;left:300px;top:200px;width:40px;height:40px;background:#333" onclick="this.dataset.locked='yes'"></div>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(html));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+  const r = validateTake({ version: 0, title: 'P', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, steps: [{ do: 'click', target: [320, 220] }] });
+  assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+  assert.ok(!validateTake({ version: 0, title: 'P', target: { kind: 'web', url, viewport: [800, 600] }, steps: [{ do: 'click', target: [900, 220] }] }).ok, 'a point off the page is caught');
+  const { browser, page } = await openTake(r.take);
+  try {
+    const log = await perform(page, r.take, realtimeClock());
+    assert.equal(await page.getAttribute('#lock', 'data-locked'), 'yes');
+    assert.equal(log.events.filter((e) => e.type === 'down').length, 1);
+  } finally {
+    await browser.close();
+    server.close();
+  }
+});

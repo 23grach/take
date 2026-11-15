@@ -71,7 +71,9 @@ What happens next:
 1. **Rehearse.** The agent plays the steps in the app without recording and fixes anything that doesn't work.
 2. **Approve.** It shows you the storyboard (one picture per step) and asks one question: record it?
 3. **Record.** Take plays the steps again at a person's pace and records every frame. The agent isn't involved anymore, so the video is exactly what was approved.
-4. **Check.** Take checks the video for smoothness and a clean loop, and makes a contact sheet. You get the MP4.
+4. **Check.** Take checks the video for smoothness and a clean loop, compares each step with its rehearsal picture so a missing panel or blank map doesn't slip through, and makes a contact sheet. You get the MP4.
+
+Cookie banners and welcome pop-ups are closed before filming starts, so the video doesn't open on them.
 
 Everything lives in your project, in `takes/<name>/`: `scenario.md` and `take.json` are worth keeping in git; the recordings and videos can be ignored.
 

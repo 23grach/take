@@ -7,16 +7,18 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { launchBrowser } from '../browser-binary.ts';
 import type { Report } from './check.ts';
+import type { StepMatch } from './rehearsal.ts';
 
 const COLS = 6;
 const TILE = 300;
 
-export async function contactSheet(report: Report, out: string, { loop = true } = {}): Promise<string> {
+export async function contactSheet(report: Report, out: string, { loop = true, rehearsal = [] as StepMatch[] | undefined } = {}): Promise<string> {
   const n = report.frames;
   const picks = Array.from({ length: 24 }, (_, i) => Math.round((i * (n - 1)) / 23));
   const seam = loop ? [n - 3, n - 2, n - 1, 0, 1, 2] : [];
   const hitches = report.hitches.slice(0, 6).flatMap((f) => [Math.max(0, f - 1), f, Math.min(n - 1, f + 1)]);
-  const wanted = [...new Set([...picks, ...seam, ...hitches])].sort((a, b) => a - b);
+  const differs = (rehearsal ?? []).slice(0, 6);
+  const wanted = [...new Set([...picks, ...seam, ...hitches, ...differs.map((m) => m.frame)])].sort((a, b) => a - b);
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'take-contact-'));
   try {
@@ -42,6 +44,7 @@ export async function contactSheet(report: Report, out: string, { loop = true } 
     <h2>Every ${((picks[1] - picks[0]) / report.fps).toFixed(2)} s</h2>
     <div class="grid">${picks.map((f) => tile(f)).join('')}</div>
     ${loop ? `<h2>Loop seam: the last three frames, then the first three</h2><div class="grid">${seam.map((f, i) => tile(f, i === 3 ? ' · start' : '')).join('')}</div>` : ''}
+    ${differs.length ? `<h2>Different from the rehearsal: rehearsal picture, then the video at that moment</h2><div class="grid">${differs.map((m) => `<figure><img src="data:image/png;base64,${fs.readFileSync(m.picture).toString('base64')}"><figcaption>rehearsal · ${m.step === 0 ? 'first screen' : `step ${m.step}`}</figcaption></figure>${tile(m.frame, ` · ${Math.round(m.differs * 100)}% different`)}`).join('')}</div>` : ''}
     ${hitches.length ? `<h2>Hitches: frame before, doubled frame, frame after</h2><div class="grid">${hitches.map((f) => tile(f)).join('')}</div>` : ''}`;
     const browser = await launchBrowser();
     try {

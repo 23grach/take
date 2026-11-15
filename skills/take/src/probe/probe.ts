@@ -7,7 +7,7 @@ import type { Page } from 'playwright';
 import type { Spot, Step, Take } from '../take/format.ts';
 import { openTake, untilReady } from '../drivers/web/browser.ts';
 import { realtimeClock } from '../drivers/web/clock.ts';
-import { perform, TakeError } from '../drivers/web/driver.ts';
+import { perform, performSetup, TakeError } from '../drivers/web/driver.ts';
 import { cursorReader, type Cursor } from '../drivers/web/cursor.ts';
 import type { Box } from '../drivers/web/events.ts';
 import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
@@ -22,62 +22,124 @@ export function withoutAddresses(outline: string): string {
   return lines.map((l, i) => (l.endsWith(':') && !(indent(lines[i + 1] ?? '') > indent(l)) ? l.slice(0, -1) : l)).join('\n');
 }
 
-/** Visible buttons and links with no name, which the outline lists only as `- button`: each with a CSS selector
- *  that matches only it, and where it is on screen, so a target can still reach it (a close "×"). */
-export async function unnamedHandles(page: Page): Promise<string> {
-  const [vw, vh] = page.viewportSize() ? [page.viewportSize()!.width, page.viewportSize()!.height] : [0, 0];
-  const lines: string[] = [];
-  for (const role of ['button', 'link'] as const) {
-    const found = page.getByRole(role, { name: /^$/ }).filter({ visible: true });
-    for (const el of (await found.all().catch(() => [])).slice(0, 30)) {
-      const css = await el.evaluate(uniqueSelector).catch(() => null);
-      const box = await el.boundingBox().catch(() => null);
-      if (!css || !box || box.x + box.width < 0 || box.y + box.height < 0 || box.x > vw || box.y > vh) continue;
-      const [x, y] = [Math.round(box.x + box.width / 2), Math.round(box.y + box.height / 2)];
-      const where = `${y < vh / 3 ? 'top' : y > (2 * vh) / 3 ? 'bottom' : 'middle'} ${x < vw / 3 ? 'left' : x > (2 * vw) / 3 ? 'right' : 'centre'}`;
-      lines.push(`#   ${role} at ${x}, ${y} (${where}, ${Math.round(box.width)}×${Math.round(box.height)}): { "css": ${JSON.stringify(css)} }`);
-    }
+/** Ready-made CSS targets the outline can't give by role and name: buttons and links with no name (an icon-only
+ *  close "×", listed only as `- button`), and elements that share a role and name with others (a "Sign up" button
+ *  in the header and the footer, a "Jupiter" link used five times). One pass over the page, so big pages stay quick;
+ *  each with where it is, so the right one can be picked. */
+export async function targetHandles(page: Page, outline: string): Promise<string> {
+  const vp = page.viewportSize();
+  if (!vp) return '';
+  const counts = new Map<string, number>();
+  for (const m of outline.matchAll(/^\s*- (\w+) "((?:[^"\\]|\\.)*)"/gm)) {
+    const key = `${m[1]} ${m[2]}`;
+    counts.set(key, (counts.get(key) ?? 0) + 1);
   }
-  return lines.length ? `\n# On screen with no name (listed above only as "- button" / "- link"); target them by CSS:\n${lines.join('\n')}\n` : '';
+  const shared = [...counts].filter(([, n]) => n > 1).map(([k]) => k);
+  const found = await page
+    .locator(CONTROLS)
+    .evaluateAll(handlesInPage, { shared, vw: vp.width, vh: vp.height })
+    .catch(() => ({ unnamed: [] as string[], shared: [] as string[] }));
+  return (
+    (found.unnamed.length ? `\n# On screen with no name (listed above only as "- button" / "- link"); target them by CSS:\n${found.unnamed.join('\n')}\n` : '') +
+    (found.shared.length ? `\n# Several elements share these names, so a role-and-name target matches more than one; target one by CSS:\n${found.shared.join('\n')}\n` : '')
+  );
 }
 
-/** A short CSS selector that matches only `el` in its document, or null. Runs in the page. */
-function uniqueSelector(el: Element): string | null {
-  const one = (sel: string) => {
-    try {
-      return document.querySelectorAll(sel).length === 1;
-    } catch {
-      return false;
+const CONTROLS = 'a[href], button, input, select, textarea, summary, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=radio], [role=switch], [role=combobox], [role=searchbox], [role=textbox]';
+
+/** Runs in the page: see targetHandles. Names are matched the simple way (aria-label, else the visible text). */
+function handlesInPage(els: Element[], { shared, vw, vh }: { shared: string[]; vw: number; vh: number }) {
+  function uniqueSelector(el: Element): string | null {
+    const one = (sel: string) => {
+      try {
+        return document.querySelectorAll(sel).length === 1;
+      } catch {
+        return false;
+      }
+    };
+    const own = (e: Element): string[] => {
+      const tag = e.tagName.toLowerCase();
+      const out: string[] = [];
+      for (const a of ['data-testid', 'data-test', 'data-qa', 'aria-controls', 'title', 'name'])
+        if (e.getAttribute(a)) out.push(`${tag}[${a}=${JSON.stringify(e.getAttribute(a))}]`);
+      if (e.id && !/\d{3,}|:/.test(e.id)) out.push(`#${CSS.escape(e.id)}`);
+      const classes = [...e.classList].filter((c) => !/^(is-|has-)|\d{4,}/.test(c)).map((c) => `.${CSS.escape(c)}`);
+      for (const c of classes) out.push(c, `${tag}${c}`);
+      for (let i = 0; i < classes.length; i++) for (let j = i + 1; j < classes.length; j++) out.push(`${tag}${classes[i]}${classes[j]}`);
+      return out;
+    };
+    for (const sel of own(el)) if (one(sel)) return sel;
+    // Inside a nearby ancestor that has a unique selector of its own.
+    let path = el.tagName.toLowerCase() + (el.classList[0] ? `.${CSS.escape(el.classList[0])}` : '');
+    for (let p = el.parentElement, depth = 0; p && p !== document.body && depth < 4; p = p.parentElement, depth++) {
+      for (const sel of own(p)) if (one(sel) && one(`${sel} ${path}`)) return `${sel} ${path}`;
+      path = `${p.tagName.toLowerCase()}${p.classList[0] ? `.${CSS.escape(p.classList[0])}` : ''} > ${path}`;
     }
-  };
-  const own = (e: Element): string[] => {
-    const tag = e.tagName.toLowerCase();
-    const out: string[] = [];
-    for (const a of ['data-testid', 'data-test', 'data-qa', 'aria-controls', 'title', 'name'])
-      if (e.getAttribute(a)) out.push(`${tag}[${a}=${JSON.stringify(e.getAttribute(a))}]`);
-    if (e.id && !/\d{3,}|:/.test(e.id)) out.push(`#${CSS.escape(e.id)}`);
-    const classes = [...e.classList].filter((c) => !/^(is-|has-)|\d{4,}/.test(c)).map((c) => `.${CSS.escape(c)}`);
-    for (const c of classes) out.push(c, `${tag}${c}`);
-    for (let i = 0; i < classes.length; i++) for (let j = i + 1; j < classes.length; j++) out.push(`${tag}${classes[i]}${classes[j]}`);
-    return out;
-  };
-  for (const sel of own(el)) if (one(sel)) return sel;
-  // Inside a nearby ancestor that has a unique selector of its own.
-  let path = el.tagName.toLowerCase() + (el.classList[0] ? `.${CSS.escape(el.classList[0])}` : '');
-  for (let p = el.parentElement, depth = 0; p && p !== document.body && depth < 4; p = p.parentElement, depth++) {
-    for (const sel of own(p)) if (one(sel) && one(`${sel} ${path}`)) return `${sel} ${path}`;
-    path = `${p.tagName.toLowerCase()}${p.classList[0] ? `.${CSS.escape(p.classList[0])}` : ''} > ${path}`;
+    // Last resort: its place among its siblings, up to an ancestor that can be named (or the body).
+    const nth = (e: Element) => `${e.tagName.toLowerCase()}:nth-of-type(${[...(e.parentElement?.children ?? [])].filter((x) => x.tagName === e.tagName).indexOf(e) + 1})`;
+    let chain = nth(el);
+    for (let p = el.parentElement, depth = 0; p && depth < 6; p = p.parentElement, depth++) {
+      const named = p === document.body ? 'body' : own(p).find(one);
+      if (named && one(`${named} > ${chain}`)) return `${named} > ${chain}`;
+      if (p === document.body) break;
+      chain = `${nth(p)} > ${chain}`;
+    }
+    return null;
   }
-  // Last resort: its place among its siblings, up to an ancestor that can be named (or the body).
-  const nth = (e: Element) => `${e.tagName.toLowerCase()}:nth-of-type(${[...(e.parentElement?.children ?? [])].filter((x) => x.tagName === e.tagName).indexOf(e) + 1})`;
-  let chain = nth(el);
-  for (let p = el.parentElement, depth = 0; p && depth < 6; p = p.parentElement, depth++) {
-    const named = p === document.body ? 'body' : own(p).find(one);
-    if (named && one(`${named} > ${chain}`)) return `${named} > ${chain}`;
-    if (p === document.body) break;
-    chain = `${nth(p)} > ${chain}`;
+
+  const roleOf = (el: Element) => {
+    const r = el.getAttribute('role');
+    if (r) return r;
+    const tag = el.tagName.toLowerCase();
+    if (tag === 'a') return 'link';
+    if (tag === 'button' || tag === 'summary') return 'button';
+    if (tag === 'select') return 'combobox';
+    if (tag === 'textarea') return 'textbox';
+    const type = (el as HTMLInputElement).type;
+    return type === 'checkbox' || type === 'radio' ? type : type === 'search' ? 'searchbox' : ['button', 'submit', 'reset'].includes(type) ? 'button' : 'textbox';
+  };
+  const nameOf = (el: Element) => {
+    const label = el.getAttribute('aria-label') ?? (el.getAttribute('aria-labelledby') ? el.getAttribute('aria-labelledby')!.split(/\s+/).map((id) => document.getElementById(id)?.textContent ?? '').join(' ') : null);
+    const text = label ?? ((el as HTMLElement).innerText || (el as HTMLInputElement).placeholder || el.getAttribute('title') || '');
+    return text.replace(/\s+/g, ' ').trim();
+  };
+  const place = (r: DOMRect) => {
+    const [x, y] = [Math.round(r.x + r.width / 2), Math.round(r.y + r.height / 2)];
+    const on = x >= 0 && x <= vw && y >= 0 && y <= vh;
+    const where = `${y < vh / 3 ? 'top' : y > (2 * vh) / 3 ? 'bottom' : 'middle'} ${x < vw / 3 ? 'left' : x > (2 * vw) / 3 ? 'right' : 'centre'}`;
+    return { on, at: on ? `at ${x}, ${y} (${where}, ${Math.round(r.width)}×${Math.round(r.height)})` : y > vh ? `below the screen (y ${y})` : y < 0 ? `above the screen (y ${y})` : `off to the side (x ${x})` };
+  };
+  const wanted = new Set(shared);
+  const groups = new Map<string, Element[]>();
+  const unnamed: string[] = [];
+  for (const el of els) {
+    const r = el.getBoundingClientRect();
+    if (!(r.width > 0 && r.height > 0) || getComputedStyle(el).visibility === 'hidden') continue;
+    const role = roleOf(el);
+    const name = nameOf(el);
+    if (!name && (role === 'button' || role === 'link')) {
+      const p = place(r);
+      const css = p.on && unnamed.length < 30 ? uniqueSelector(el) : null;
+      if (css) unnamed.push(`#   ${role} at ${p.at.slice(3)}: { "css": ${JSON.stringify(css)} }`);
+    } else if (wanted.has(`${role} ${name}`)) {
+      const g = groups.get(`${role} ${name}`) ?? [];
+      g.push(el);
+      groups.set(`${role} ${name}`, g);
+    }
   }
-  return null;
+  const out: string[] = [];
+  for (const [key, g] of groups) {
+    if (g.length < 2 || out.length >= 40) continue;
+    const places = g.map((el) => place(el.getBoundingClientRect()));
+    if (!places.some((p) => p.on)) continue;
+    const role = key.slice(0, key.indexOf(' '));
+    const name = key.slice(key.indexOf(' ') + 1);
+    g.slice(0, 8).forEach((el, i) => {
+      const css = uniqueSelector(el);
+      if (css) out.push(`#   ${role} "${name}" ${places[i].at}: { "css": ${JSON.stringify(css)} }`);
+    });
+  }
+  return { unnamed, shared: out };
 }
 
 export interface ProbeShot {
@@ -96,6 +158,8 @@ export interface ProbeShot {
   waitedFor?: Box;
   /** Set on the step that failed. */
   error?: string;
+  /** Something worth knowing about how the step went (see StepLog.note). */
+  note?: string;
 }
 
 export interface ProbeResult {
@@ -113,8 +177,8 @@ export interface ProbeResult {
 export function describeStep(s: Step): string {
   let text: string;
   switch (s.do) {
-    case 'click': text = `Click ${describe(s.target)}`; break;
-    case 'hover': text = `Hover ${describe(s.target)}`; break;
+    case 'click': text = `${s.clicks === 2 ? 'Double-click' : s.clicks === 3 ? 'Triple-click' : 'Click'} ${Array.isArray(s.target) ? `at ${s.target.join(', ')}` : describe(s.target)}`; break;
+    case 'hover': text = `Hover ${Array.isArray(s.target) ? `at ${s.target.join(', ')}` : describe(s.target)}`; break;
     case 'drag': text = `Drag from ${describeSpot(s.from)} to ${describeSpot(s.to)}`; break;
     case 'type': text = `Type "${s.text}"${s.target ? ` into ${describe(s.target)}` : ''}`; break;
     case 'press': text = `Press ${s.key}`; break;
@@ -185,7 +249,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
     const outline = `${name}.outline.yml`;
     await page.screenshot({ path: path.join(out, file) });
     const tree = await page.locator('body').ariaSnapshot().then(withoutAddresses, (e) => `# outline unavailable: ${e.message}\n`);
-    fs.writeFileSync(path.join(out, outline), tree + (await unnamedHandles(page)));
+    fs.writeFileSync(path.join(out, outline), tree + (await targetHandles(page, tree)));
     shots.push({ step, label, at: +(clock.frame / clock.fps).toFixed(2), file, outline, pointer, cursor: await cursorAt(pointer), ...extra });
   };
   let error: string | undefined;
@@ -193,6 +257,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
     await page.waitForLoadState('load');
     try {
       await untilReady(page, take.ready, (ms) => page.waitForTimeout(ms));
+      if (await performSetup(page, take, realtimeClock(60, speed))) await page.waitForTimeout(600 / speed);
     } catch (e) {
       if (!(e instanceof TakeError)) throw e;
       error = e.message;
@@ -213,11 +278,11 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
           // dialog), outlining where it was would point at nothing.
           const s = take.steps[log.index];
           let target: Box | undefined;
-          if ('target' in s && s.target) {
+          if ('target' in s && s.target && !Array.isArray(s.target)) {
             const loc = locate(page, s.target).filter({ visible: true });
             if ((await loc.count()) === 1) target = (await loc.boundingBox()) ?? undefined;
           }
-          await shoot(log.index + 1, describeStep(s), p, { target, waitedFor: log.waitedFor });
+          await shoot(log.index + 1, describeStep(s), p, { target, waitedFor: log.waitedFor, ...(log.note ? { note: log.note } : {}) });
           // Screenshots and outlines aren't part of the take: times on the storyboard stay video time.
           clock.resume();
         },

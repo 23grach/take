@@ -179,7 +179,8 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
       let boxes;
       for (let f = 0; f < 60; f++) boxes = await stepVideos(p, Math.round((f + 1) * (1000 / 60)) - Math.round(f * (1000 / 60)));
       const now = await p.evaluate(() => document.querySelector('video')!.currentTime);
-      assert.ok(Math.abs(now - start - 1) < 0.04, `60 frames moved the video on ${(now - start).toFixed(3)} s, not 1 s`);
+      // Within two of the video's own frames (30 fps): seeks are skipped while the same picture still shows.
+      assert.ok(Math.abs(now - start - 1) < 0.07, `60 frames moved the video on ${(now - start).toFixed(3)} s, not 1 s`);
       assert.deepEqual(boxes, [{ x: 0, y: 0, width: 320, height: 240 }]);
     } finally {
       await opened.browser.close();
@@ -260,6 +261,29 @@ test('a picture that never finishes downloading holds page time once, not on eve
     assert.ok(s < 30, `60 frames took ${s.toFixed(0)} s (waiting 3 s a frame would take 180 s)`);
   } finally {
     for (const res of held) res.destroy();
+    server.close();
+  }
+});
+
+test('setup steps close a banner before filming, and are not filmed', async () => {
+  const page = `<!doctype html><button style="margin:200px">Go</button>
+    <div id="banner" style="position:fixed;inset:0;background:#fffe;display:grid;place-items:center"><button onclick="banner.remove()">Reject all</button></div>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(page));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const r = validateTake({
+      version: 0, title: 'Setup', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none',
+      setup: [{ do: 'click', target: { role: 'button', name: 'Reject all' } }],
+      steps: [{ do: 'click', target: { role: 'button', name: 'Go' } }],
+    });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    const { events } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'setup') });
+    assert.equal(events.steps.length, 1);
+    assert.equal(events.events.filter((e) => e.type === 'down').length, 1, 'only the filmed click is in the log');
+    const bad = validateTake({ version: 0, title: 'S', target: { kind: 'web', url }, setup: [], steps: [{ do: 'hold', ms: 100 }] });
+    assert.ok(!bad.ok && bad.errors.some((e) => e.startsWith('setup')));
+  } finally {
     server.close();
   }
 });

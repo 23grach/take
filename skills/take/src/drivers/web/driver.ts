@@ -1,5 +1,6 @@
 // Performs a take in a real page at a human pace, one frame at a time, and logs what happened.
 // The real mouse follows the same path the cursor will be drawn on, so hover states show in the footage.
+import { ownError } from './page-errors.ts';
 import type { Locator, Page } from 'playwright';
 import { DEFAULTS, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
@@ -43,6 +44,19 @@ export interface PerformOptions {
   watch?: boolean;
 }
 
+/** The take's setup steps (closing a cookie banner, a welcome pop-up), done on `clock` without recording anything:
+ *  the caller's clock moves page time on without filming. A failure says "setup step N". */
+export async function performSetup(page: Page, take: Take, clock: Clock): Promise<boolean> {
+  if (!take.setup?.length) return false;
+  try {
+    await perform(page, { ...take, steps: take.setup, loop: 'none' }, clock, { watch: false });
+  } catch (e) {
+    if (e instanceof TakeError && e.step >= 0) throw new TakeError(-1, `setup ${e.message}`);
+    throw e;
+  }
+  return true;
+}
+
 /** Opens nothing and closes nothing: the page must already show take.target.url. */
 export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true }: PerformOptions = {}): Promise<EventLog> {
   const [vw, vh] = take.target.viewport;
@@ -55,7 +69,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const cursorAt = cursorReader(page);
   const carets: [number, Caret | null][] = [];
   const pageErrors: string[] = [];
-  const onError = (e: Error) => pageErrors.push(e.message);
+  const onError = (e: Error) => void (ownError(e, page.url()) && pageErrors.push(e.message));
   page.on('pageerror', onError);
   const eventLog: EventLog = {
     version: 0,
@@ -220,22 +234,40 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
   }
 
-  async function press() {
+  async function press(clickCount = 1) {
     events.push({ frame: clock.frame, type: 'down', x: round(pointer[0]), y: round(pointer[1]) });
-    await page.mouse.down();
+    await page.mouse.down({ clickCount });
   }
-  async function release() {
+  async function release(clickCount = 1) {
     events.push({ frame: clock.frame, type: 'up', x: round(pointer[0]), y: round(pointer[1]) });
-    await page.mouse.up();
+    await page.mouse.up({ clickCount });
   }
 
-  async function click(loc: Locator, t: Target): Promise<Box> {
+  /** `clicks` 2 or 3: a double- or triple-click, quick as a person's (each press shorter, a short gap between). */
+  async function click(loc: Locator, t: Target, clicks = 1): Promise<Box> {
     const box = await reach(loc, t);
-    await press();
-    await wait(PACING.press);
-    await release();
+    for (let n = 1; n <= clicks; n++) {
+      if (n > 1) await wait(PACING.multiClickGap);
+      await press(n);
+      await wait(clicks > 1 ? PACING.multiClickPress : PACING.press);
+      await release(n);
+    }
     await tick();
     return box;
+  }
+
+  /** A click at a point on the page, for things no target names (an icon that only shows on hover). */
+  async function clickAt(point: Point, clicks = 1): Promise<undefined> {
+    await moveTo(async () => point);
+    await wait(PACING.settle);
+    for (let n = 1; n <= clicks; n++) {
+      if (n > 1) await wait(PACING.multiClickGap);
+      await press(n);
+      await wait(clicks > 1 ? PACING.multiClickPress : PACING.press);
+      await release(n);
+    }
+    await tick();
+    return undefined;
   }
 
   /** Press at `from`, move to `to` with the button held, let go: draws a shape, moves a slider, reorders a list. */
@@ -314,10 +346,13 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   async function run(s: Step, log: StepLog) {
     switch (s.do) {
       case 'click':
-        log.target = await click(await find(s.target), s.target);
+        log.target = Array.isArray(s.target) ? await clickAt(s.target, s.clicks) : await click(await find(s.target), s.target, s.clicks);
         break;
       case 'hover':
-        log.target = await travel(await find(s.target), s.target);
+        if (Array.isArray(s.target)) {
+          const point = s.target;
+          await moveTo(async () => point);
+        } else log.target = await travel(await find(s.target), s.target);
         break;
       case 'drag':
         log.target = await drag(s.from, s.to);
@@ -346,13 +381,20 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         await tick();
         break;
       case 'scroll':
-        if ('by' in s) await scroll(...s.by);
-        else {
+        if ('by' in s) {
+          const at = () => page.evaluate(() => [scrollX, scrollY]).catch(() => [0, 0]);
+          const before = await at();
+          await scroll(...s.by);
+          const after = await at();
+          if (before[0] === after[0] && before[1] === after[1])
+            log.note = "the page didn't scroll (fine if something under the pointer was meant to, like a map or a list; otherwise the page may be locked, e.g. by an open menu)";
+        } else {
           const loc = await find(s.target);
           const box = await boxOf(loc, s.target);
           const inView = fitsAxis(box.x, box.width, vw) && fitsAxis(box.y, box.height, vh);
           // Bring it to the middle of the screen, which reads better than the edge.
           if (!inView) await scroll(0, Math.round(center(box)[1] - vh / 2));
+          else log.note = `nothing scrolled: ${describe(s.target)} is already on screen; scroll "by" a distance to move the page`;
           log.target = await boxOf(loc, s.target);
         }
         break;

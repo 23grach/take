@@ -116,7 +116,8 @@ test('a rehearsal cuts the opening and closing holds short, and keeps the ones b
 
 test('buttons with no name are listed with a CSS target and where they are', async () => {
   const { openTake } = await import('../src/drivers/web/browser.ts');
-  const { unnamedHandles } = await import('../src/probe/probe.ts');
+  const { targetHandles } = await import('../src/probe/probe.ts');
+  const unnamedHandles = async (p: typeof page) => targetHandles(p, await p.locator('body').ariaSnapshot());
   const { browser, page } = await openTake(take([{ do: 'hold', ms: 100 }]));
   try {
     assert.equal(await unnamedHandles(page), '');
@@ -135,6 +136,26 @@ test('buttons with no name are listed with a CSS target and where they are', asy
     assert.equal(targets.length, 2, listed);
     for (const css of targets) assert.equal(await page.locator(css).count(), 1, css);
     assert.match(listed, /button at \d+, \d+ \(top right/);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('elements that share a name get a CSS target each, with where they are', async () => {
+  const { openTake } = await import('../src/drivers/web/browser.ts');
+  const { targetHandles: sharedNameHandles } = await import('../src/probe/probe.ts');
+  const { browser, page } = await openTake(take([{ do: 'hold', ms: 100 }]));
+  try {
+    await page.evaluate(() => {
+      document.body.insertAdjacentHTML('afterbegin', '<header><button class="cta">Sign up</button></header>');
+      document.body.insertAdjacentHTML('beforeend', '<div style="height:3000px"></div><footer><button class="cta">Sign up</button></footer>');
+    });
+    const outline = await page.locator('body').ariaSnapshot();
+    const listed = await sharedNameHandles(page, outline);
+    const targets = [...listed.matchAll(/button "Sign up" (at \d+, \d+ \([^)]*\)|below the screen[^:]*): \{ "css": (".*?") \}/g)];
+    assert.equal(targets.length, 2, listed);
+    for (const [, , css] of targets) assert.equal(await page.locator(JSON.parse(css)).count(), 1, css);
+    assert.match(listed, /below the screen/);
   } finally {
     await browser.close();
   }

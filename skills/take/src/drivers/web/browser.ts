@@ -2,6 +2,7 @@
 import type { Browser, BrowserContext, Page } from 'playwright';
 import { launchBrowser } from '../../browser-binary.ts';
 import type { Take } from '../../take/format.ts';
+import { ownError } from './page-errors.ts';
 import { TakeError } from './driver.ts';
 import { describeCondition, holds } from './targets.ts';
 import type { Condition } from '../../take/format.ts';
@@ -83,7 +84,7 @@ async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promi
   const page = await context.newPage();
   await hardenClientHints(context, page, userAgent);
   const errors: string[] = [];
-  const onError = (e: Error) => errors.push(e.message);
+  const onError = (e: Error) => void (ownError(e, page.url()) && errors.push(e.message));
   page.on('pageerror', onError);
   try {
     await prepare?.(page);
