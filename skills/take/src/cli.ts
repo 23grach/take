@@ -14,6 +14,7 @@ import { run } from './run.ts';
 import { addressWarning } from './take/format.ts';
 import { probe } from './probe/probe.ts';
 import { storyboard } from './probe/storyboard.ts';
+import { formatScript } from './probe/script.ts';
 import { defaultLoginName, forgetLogin, isLoginName, loginPath, readLogin, savedLogins, signIn } from './drivers/web/login.ts';
 import { loginCommand, VISIBLE_NOTE } from './drivers/web/browser.ts';
 import { loginFromChrome } from './drivers/web/chrome-login.ts';
@@ -36,6 +37,7 @@ Commands:
   probe     perform a take without recording and screenshot every step → storyboard
             --out <folder> (default: probe/ next to the take)  --theme <name> (cursor drawings)  --headed (show the browser)
             plays twice as fast as the video; --slow plays at the video's pace
+            prints the timecoded script: when each step starts and how long it lasts (a step's "ms" sets it)
   record    perform a take and capture frames + events
             --mode studio (default, exact, for finals) | live (real time, for drafts)
             --out <folder> (default: capture/ next to the take)  --headed (show the browser)
@@ -276,6 +278,7 @@ async function runCommand(): Promise<number> {
   say('');
   say(formatReport({ ...report, file: path.relative(process.cwd(), report.file) }).trimEnd());
   if (!r.ok && mode === 'live') say('Live drafts stutter where the app animates quickly; record without --mode live for the final video.');
+  if (r.script) say(`\n${formatScript(r.script).trimEnd()}\n`);
   say(`Contact sheet: ${path.relative(process.cwd(), r.sheet!)}`);
   say(`Done in ${r.seconds} s.`);
   return r.ok ? 0 : 1;
@@ -299,5 +302,6 @@ async function probeCommand(): Promise<number> {
   const sheet = await storyboard(r, out, path.join(out, 'storyboard.jpg'), { theme: themeFlag ?? take.theme });
   const done = r.shots.length - 1 - (r.ok ? 0 : 1);
   process.stdout.write(`${r.ok ? `All ${take.steps.length} steps work` : `Stopped at step ${done + 1} of ${take.steps.length}`} (${r.seconds} s). Storyboard: ${path.relative(process.cwd(), sheet)}\n`);
+  if (r.script) process.stdout.write(`\n${formatScript(r.script)}`);
   return r.ok ? 0 : 1;
 }

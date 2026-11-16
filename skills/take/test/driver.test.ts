@@ -69,6 +69,24 @@ test('performs the example take in real time and logs it', async () => {
   assert.ok(log.steps[3].waitedFor);
 });
 
+test('a step given a length lasts exactly that long, and typing fits into it', async () => {
+  const take = takeOf([
+    { ...openDialog, ms: 3000 },
+    { do: 'type', target: { label: 'Name' }, text: 'Moodboard', ms: 2500 },
+    { do: 'press', key: 'Escape' },
+  ]);
+  const page = await open(take);
+  const log = await perform(page, take, fastClock(), { watch: false });
+  const [click, type, press] = log.steps;
+  assert.equal(type.start - click.start, 180);
+  assert.equal(press.start - type.start, 150);
+  // Typing slowed down to fill the step, leaving the usual pause after it.
+  const keys = log.events.filter((e) => e.type === 'key' && e.frame < press.start);
+  assert.equal(keys.length, 9);
+  assert.ok(keys.at(-1)!.frame - keys[0].frame > 50, `typing took ${keys.at(-1)!.frame - keys[0].frame} frames`);
+  assert.ok(keys.at(-1)!.frame <= press.start - 27);
+});
+
 async function failure(steps: unknown[]): Promise<string> {
   const take = takeOf(steps);
   const page = await open(take);

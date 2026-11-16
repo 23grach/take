@@ -12,6 +12,8 @@ import { cursorReader, type Cursor } from '../drivers/web/cursor.ts';
 import type { Box } from '../drivers/web/events.ts';
 import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
 import { PACING } from '../drivers/web/pacing.ts';
+import { loadTheme } from '../compose/compose.ts';
+import { timeline, type Script } from './script.ts';
 
 /** The page outline without link addresses (`- /url: …` under every link): targets never use them, and on a
  *  big site they're a good share of what the agent reads after each step. A link left with nothing under it
@@ -169,6 +171,8 @@ export interface ProbeResult {
   shots: ProbeShot[];
   error?: string;
   seconds: number;
+  /** When each step starts in the video and how long it lasts, estimated from this rehearsal. Only when every step passed. */
+  script?: Script;
   /** The site refused the hidden browser, so it ran in a visible window. */
   visibleWindow?: true;
 }
@@ -253,6 +257,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
     shots.push({ step, label, at: +(clock.frame / clock.fps).toFixed(2), file, outline, pointer, cursor: await cursorAt(pointer), ...extra });
   };
   let error: string | undefined;
+  let script: Script | undefined;
   try {
     await page.waitForLoadState('load');
     try {
@@ -269,7 +274,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
     await page.mouse.move(...pointer);
     await shoot(0, 'First screen', pointer, error ? { error } : {});
     if (!error) try {
-      await perform(page, rehearsal(take), clock, {
+      const log = await perform(page, rehearsal(take), clock, {
         watch: false,
         onStep: async (log, p) => {
           pointer = p;
@@ -287,6 +292,8 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
           clock.resume();
         },
       });
+      const loopFrames = take.loop === 'none' ? 0 : loadTheme(take.theme).theme.loop.frames;
+      script = timeline(take, log.steps, log.frames, { fps: clock.fps, speed, loopFrames });
     } catch (e) {
       if (!(e instanceof TakeError)) throw e;
       error = e.message;
@@ -295,7 +302,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   } finally {
     await browser.close();
   }
-  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
+  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(script ? { script } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
   fs.writeFileSync(path.join(out, 'probe.json'), JSON.stringify(result, null, 1));
   return result;
 }

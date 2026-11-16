@@ -26,6 +26,9 @@ interface Common {
   mark?: string;
   /** Wait for this after the step, before the next one. */
   waitFor?: Condition;
+  /** How long the step lasts in the video, in ms, from its start to the next step's start (on the last step, to
+   *  the end of the take). Without it, the step takes as long as the action needs, plus the usual pause after it. */
+  ms?: number;
 }
 
 export type Step = Common &
@@ -205,8 +208,9 @@ export function validateTake(input: unknown): Result {
       const near = typeof action === 'string' ? closest(action, ACTIONS) : undefined;
       return void fail(`${path}.do`, `unknown action ${show(action)}${near ? ` (did you mean "${near}"?)` : ''}; use one of ${ACTIONS.join(', ')}`);
     }
-    const common = ['do', 'mark', 'waitFor'];
+    const common = ['do', 'mark', 'waitFor', 'ms'];
     optText(v, 'mark', path);
+    if (action !== 'hold' && 'ms' in v) positive(v, 'ms', path);
     if ('waitFor' in v) condition(v.waitFor, `${path}.waitFor`);
     const out: Obj = { ...v };
 
@@ -230,6 +234,7 @@ export function validateTake(input: unknown): Result {
         if ('target' in v) target(v.target, `${path}.target`);
         if (!('text' in v)) fail(path, 'missing "text" (what to type)');
         else if (typeof v.text !== 'string' || v.text === '') fail(`${path}.text`, `must be non-empty text, got ${show(v.text)}`);
+        if ('cps' in v && 'ms' in v) fail(path, 'give "cps" (typing speed) or "ms" (how long the step lasts: the typing speed follows), not both');
         out.cps = positive(v, 'cps', path, DEFAULTS.cps);
         break;
       case 'press': {
@@ -253,7 +258,7 @@ export function validateTake(input: unknown): Result {
         out.timeout = positive(v, 'timeout', path, DEFAULTS.timeout);
         break;
       case 'hold':
-        onlyKeys(v, path, [...common, 'ms']);
+        onlyKeys(v, path, common);
         positive(v, 'ms', path);
         break;
     }

@@ -15,6 +15,7 @@ import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { compareWithRehearsal, STEP_LIMIT } from './check/rehearsal.ts';
 import { addressWarning, shownAddress } from './take/format.ts';
+import { timeline, type Script } from './probe/script.ts';
 
 export interface RunOptions {
   mode?: Mode;
@@ -35,6 +36,8 @@ export interface RunResult {
   video?: string;
   report?: Report;
   sheet?: string;
+  /** When each step starts in the video and how long it lasts, as recorded. */
+  script?: Script;
   seconds: number;
 }
 
@@ -126,7 +129,8 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   const sheet = await contactSheet(report, `${base}.contact.jpg`, { loop, rehearsal: matches?.filter((m) => m.differs > STEP_LIMIT) });
   log(`✓ checked   in ${lap()}`);
 
-  return { ok: report.ok, capture, video, report, sheet, seconds: elapsed() };
+  const script = recorded && timeline(take, recorded.events.steps, recorded.events.frames, { fps: recorded.events.fps, loopFrames: composed.frames - recorded.events.frames });
+  return { ok: report.ok, capture, video, report, sheet, script, seconds: elapsed() };
 }
 
 /** Where page videos show in each frame of the finished video, in its pixels (see EventLog.videos). */

@@ -93,3 +93,12 @@ test('press keys use the browser\'s names; common other names get the right one'
   assert.match(keyProblem('Ctrl+Shift+P') ?? '', /use Control \(e\.g\. "Control\+Shift\+P"\)/);
   assert.match(keyProblem('Enterr') ?? '', /use Enter/);
 });
+
+test('any step can be given a length in ms; a type step takes cps or ms, not both', () => {
+  const take = (steps: unknown[]) => ({ ...minimal(), steps });
+  const r = validateTake(take([{ do: 'click', target: { role: 'button', name: 'New project' }, ms: 3000 }, { do: 'type', text: 'Hi', ms: 2000 }]));
+  assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+  assert.equal(r.take.steps[0].ms, 3000);
+  assert.deepEqual(errorsOf(take([{ do: 'press', key: 'Enter', ms: 0 }])), ['steps[0].ms: must be a number above 0, got 0']);
+  assert.deepEqual(errorsOf(take([{ do: 'type', text: 'Hi', cps: 8, ms: 2000 }])), ['steps[0]: give "cps" (typing speed) or "ms" (how long the step lasts: the typing speed follows), not both']);
+});
