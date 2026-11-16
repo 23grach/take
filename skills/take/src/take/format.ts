@@ -93,6 +93,8 @@ export interface Take {
   setup?: Step[];
   steps: Step[];
   loop: 'crossfade-to-start' | 'none';
+  /** The page's own sound (clicks, chimes, a video's soundtrack) in the final video. */
+  sound: boolean;
 }
 
 export const DEFAULTS = {
@@ -100,6 +102,7 @@ export const DEFAULTS = {
   scale: 1.5 as const,
   theme: 'default',
   loop: 'crossfade-to-start' as const,
+  sound: true,
   /** Typing speed in characters per second. 14 reads as quick but human. */
   cps: 14,
   /** How long a `wait` step waits before the take fails, in ms. */
@@ -266,7 +269,7 @@ export function validateTake(input: unknown): Result {
   }
 
   if (!isObj(input)) return { ok: false, errors: ['the take must be a JSON object'] };
-  onlyKeys(input, '', ['version', 'title', 'target', 'theme', 'ready', 'setup', 'steps', 'loop']);
+  onlyKeys(input, '', ['version', 'title', 'target', 'theme', 'ready', 'setup', 'steps', 'loop', 'sound']);
   // One condition or a list; all must hold.
   const ready = 'ready' in input ? (Array.isArray(input.ready) ? input.ready : [input.ready]) : undefined;
   if (ready?.length === 0) fail('ready', 'give a condition, e.g. { "visible": { "role": "button", "name": "Deposit" } }, or a list of them');
@@ -332,6 +335,8 @@ export function validateTake(input: unknown): Result {
 
   const loop = input.loop ?? DEFAULTS.loop;
   if (!LOOPS.includes(loop as (typeof LOOPS)[number])) fail('loop', `must be one of ${LOOPS.join(', ')}, got ${show(input.loop)}`);
+  const sound = input.sound ?? DEFAULTS.sound;
+  if (typeof sound !== 'boolean') fail('sound', `must be true or false, got ${show(input.sound)}`);
 
   if (errors.length) return { ok: false, errors };
   return {
@@ -345,6 +350,7 @@ export function validateTake(input: unknown): Result {
       ...(setup.length ? { setup } : {}),
       steps,
       loop: loop as Take['loop'],
+      sound: sound as boolean,
     },
   };
 }

@@ -35,7 +35,14 @@ test('defaults are filled in', () => {
   assert.equal(r.take.target.scale, 1.5);
   assert.equal(r.take.theme, 'default');
   assert.equal(r.take.loop, 'crossfade-to-start');
+  assert.equal(r.take.sound, true);
   assert.deepEqual(r.take.steps.map((s) => ('cps' in s ? s.cps : 'timeout' in s ? s.timeout : null)), [14, 10_000]);
+});
+
+test('"sound" turns the page\'s own sound off, and is true or false', () => {
+  const r = validateTake({ ...minimal(), sound: false });
+  assert.ok(r.ok && r.take.sound === false);
+  assert.deepEqual(errorsOf({ ...minimal(), sound: 'off' }), ['sound: must be true or false, got "off"']);
 });
 
 test('typos get a suggestion', () => {

@@ -38,6 +38,7 @@ A take is the exact list of steps a recording replays. The agent writes it while
 | `setup` | | none | Steps done after the page opens (and after `ready`), before filming starts, written like `steps`: closing a cookie banner or a welcome pop-up, e.g. `[{ "do": "click", "target": { "role": "button", "name": "Reject all" } }]`. None of it is filmed and the page gets 0.6 s to settle after, so the video opens on the page without them. A failure says `setup step N`. Only for getting things out of the way; anything the viewer should see belongs in `steps`. |
 | `steps` | yes | | At least one step, performed in order. |
 | `loop` | | `"crossfade-to-start"` | How the video ends. `"crossfade-to-start"`: the last frame dissolves back into the first (0.67 s) and the cursor glides home, so the video loops seamlessly. `"none"`: the video simply ends on the last frame, for videos that play once (a talk, a page that doesn't autoplay in a loop). Ask the agent "no loop" / "don't go back to the start". |
+| `sound` | | `true` | The page's own sound in the final video: click sounds, chimes, a video's soundtrack, each on the frame it was made on. `false`: a silent video, and nothing is caught. See [Sound](#sound). |
 
 ## Steps
 
@@ -97,6 +98,17 @@ Used by `waitFor` and `wait.for`. Exactly one of:
 - `{ "text": "Saved" }`: this text is on the page.
 - `{ "visible": target }`: this element is showing.
 - `{ "hidden": target }`: this element is gone or hidden.
+
+## Sound
+
+A final video (studio mode) carries the sounds the page itself makes, landing on the frames they belong to: a click sound on the click, a chime when a notification arrives, a video playing in the page. Drafts (`--mode live`) and probes are silent. A page that makes no sound gives a video with no sound track. Take catches:
+- sounds a page makes with the browser's audio engine (Web Audio), as most click and notification sounds are made;
+- `<audio>` and `<video>` elements and `new Audio(…)`, from their files (fetched with the take's login, if it has one);
+- streamed players such as YouTube's, from the data the player loads.
+
+Things that keep a sound from playing keep it out of the video too: a video behind a cookie dialog never starts, so close the dialog in `setup`. With the loop, the sound fades out as the picture crossfades back to the start. Each sound engine a page starts is caught for up to 3 minutes; past that Take says so.
+
+Not caught: speech the browser reads aloud (speech synthesis), players that load their media in a background worker, and live streams from a camera or a call. A streamed video that seeks, changes quality or plays an ad may have its sound out of place after that moment.
 
 ## Saved logins
 

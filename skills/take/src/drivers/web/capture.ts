@@ -9,8 +9,9 @@ import type { CDPSession, Page } from 'playwright';
 import type { Clock } from './clock.ts';
 import { realtimeClock } from './clock.ts';
 import { downloadsDone, giveUpDownloads } from './browser.ts';
-import { stepVideos } from './media.ts';
+import { stepMedia, watchMedia, type Played } from './media.ts';
 import type { Box } from './events.ts';
+import type { SoundCatcher } from './sound.ts';
 
 export type Mode = 'studio' | 'live';
 
@@ -73,7 +74,7 @@ export function quickTimerYield(): boolean {
   return true;
 }
 
-const videoSeen = new WeakMap<Page, { video: boolean }>();
+const mediaSeen = new WeakMap<Page, { media: boolean }>();
 
 /** Under the frozen clock, Playwright runs the page's idle callbacks with no time left (timeRemaining() is always
  *  0), so code that only works while there is time left waits forever: Wikipedia's script loader never loads the
@@ -100,12 +101,12 @@ export async function freezePage(page: Page): Promise<CDPSession> {
   await page.clock.pauseAt(now + 1000);
   // Registered after the clock's own script, so it runs after it in every page and frame the take opens.
   await page.context().addInitScript(quickTimerYield);
-  // Tells Take when a video starts playing in any frame, so pages without one get no extra work per frame (which
+  // Tells Take when media starts playing in any frame, so pages without any get no extra work per frame (which
   // would also make their frames vary by a shade from run to run).
-  const seen = { video: false };
-  videoSeen.set(page, seen);
-  await page.context().exposeBinding('__takeVideoPlays', () => void (seen.video = true));
-  await page.context().addInitScript(() => document.addEventListener('playing', (e) => e.target instanceof HTMLVideoElement && (globalThis as unknown as { __takeVideoPlays: () => void }).__takeVideoPlays(), true));
+  const seen = { media: false };
+  mediaSeen.set(page, seen);
+  await page.context().exposeBinding('__takeMediaPlays', () => void (seen.media = true));
+  await page.context().addInitScript(watchMedia);
   await page.evaluate(quickTimerYield);
   await page.context().addInitScript(idleWithTime);
   await page.evaluate(idleWithTime);
@@ -116,9 +117,12 @@ export async function freezePage(page: Page): Promise<CDPSession> {
   return cdp;
 }
 
+const stepPlaying = (page: Page, ms: number) => (mediaSeen.get(page)?.media ? stepMedia(page, ms) : { boxes: [], played: [] as Played[] });
+
 /** Studio: each tick moves animations and page time on exactly one frame, then screenshots it.
- *  `cdp` is the session freezePage opened; `viewport` and `scale` are the take's. */
-export async function studio(page: Page, dir: string, cdp: CDPSession, [width, height]: [number, number], scale: number, fps = 60): Promise<Recorder> {
+ *  `cdp` is the session freezePage opened; `viewport` and `scale` are the take's. `sound` hears the page as page
+ *  time moves on. */
+export async function studio(page: Page, dir: string, cdp: CDPSession, [width, height]: [number, number], scale: number, fps = 60, sound?: SoundCatcher): Promise<Recorder> {
   fs.mkdirSync(path.join(dir, 'frames'), { recursive: true });
   // That session takes the pictures (see tick). It sees the page with its own size and pixel density, so give it
   // the take's; otherwise its first picture switches the page to 1×.
@@ -145,7 +149,8 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
       // Page time steps 16 or 17 ms so it never drifts from the frame count.
       const ms = Math.round((frame + 1) * dt) - Math.round(frame * dt);
       await page.clock.runFor(ms);
-      const boxes = videoSeen.get(page)?.video ? await stepVideos(page, ms) : [];
+      const { boxes, played } = await stepPlaying(page, ms);
+      await sound?.moved(played, true);
       if (JSON.stringify(videos.at(-1)?.[1] ?? []) !== JSON.stringify(boxes)) videos.push([frame, boxes]);
       await page.evaluate(() => {
         for (const a of document.getAnimations()) {
@@ -189,7 +194,8 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
           }
         }, dt);
         await page.clock.runFor(Math.round(dt));
-        if (videoSeen.get(page)?.video) await stepVideos(page, Math.round(dt));
+        const { played } = await stepPlaying(page, Math.round(dt));
+        await sound?.moved(played, false);
       }
     },
     async finish() {

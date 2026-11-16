@@ -179,8 +179,9 @@ async function recordCommand(): Promise<number> {
   const m = mode ?? 'studio';
   process.stdout.write(`Recording "${take.title}" in ${m} mode…\n`);
   try {
-    const { capture } = await record(take, { mode: m, out, headed });
+    const { capture, warnings } = await record(take, { mode: m, out, headed });
     if (capture.visibleWindow) process.stdout.write(`⚠ ${VISIBLE_NOTE}\n`);
+    for (const w of warnings) process.stdout.write(`⚠ ${w}\n`);
     const secs = capture.frames.length / capture.fps;
     process.stdout.write(`✓ ${capture.frames.length} frames (${secs.toFixed(2)} s at ${capture.fps} fps, ${capture.size.join('×')}) in ${capture.renderSeconds} s → ${out}\n`);
     return 0;
