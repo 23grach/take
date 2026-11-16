@@ -1,6 +1,6 @@
 ---
 name: take
-description: Make a demo video of a web app from a plain-text scenario. Plays the steps in the real app at human pace, records frames straight from the browser, and composes a finished 60 fps MP4 with a browser window, cursor, click ripples and a seamless loop (2560×1440). Use when the user asks for a demo video, product video, screen recording, walkthrough clip or "video of the app doing X", or wants an existing take re-recorded or changed.
+description: Make a demo video of a web app from a plain-text scenario. Plays the steps in the real app at human pace, records frames straight from the browser, and composes a finished 60 fps MP4 with a browser window, cursor, click ripples and a seamless loop (2560×1440), or just the page at 1920×1080. Use when the user asks for a demo video, product video, screen recording, walkthrough clip or "video of the app doing X", or wants an existing take re-recorded or changed.
 ---
 
 # Take
@@ -87,6 +87,7 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 | The user asks | Do |
 |---|---|
 | "no loop" / "loop it" | `loop` → `"none"` / `"crossfade-to-start"`, then `take run`. |
+| "no window", "just the page", "plain 1920×1080" | `theme` → `"plain"` and `target.viewport` → `[1920, 1080]`: the page fills a 1920×1080 video, no window or background. The viewport changes the layout, so probe again, then run. |
 | "change the address" | `target.address`, then `take compose takes/<name>/capture --address <new>` (no re-record), or `take run`. |
 | "show the result longer", "start slower", "pause after X" | Change or add `hold` steps, then probe and run. |
 | The first frame shows loading placeholders, empty banners or skeletons | Add `ready` to take.json: what the loaded page shows, e.g. `{ "visible": { "role": "button", "name": "Deposit" } }` (a list if several things load separately), then run. |
@@ -97,6 +98,6 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 
 ## Not supported yet
 
-Multi-finger gestures; setup before the video starts other than signing in and closing things in `setup` (no filling in forms or choosing settings off camera); video sizes other than 2560×1440; phone frames. Animations inside pages embedded from other sites (players, maps, widgets in an iframe from another address) run on real time while a final video records, so they play several times too fast in it; a `--mode live` draft shows them at the right speed. Videos in the page itself (`<video>`) play at their true speed; recording takes longer while one is on screen. Say so plainly when a scenario needs them, and offer the closest version that works.
+Multi-finger gestures; setup before the video starts other than signing in and closing things in `setup` (no filling in forms or choosing settings off camera); video sizes other than 2560×1440 (window) and 1920×1080 (`plain`, just the page); phone frames. Animations inside pages embedded from other sites (players, maps, widgets in an iframe from another address) run on real time while a final video records, so they play several times too fast in it; a `--mode live` draft shows them at the right speed. Videos in the page itself (`<video>`) play at their true speed; recording takes longer while one is on screen. Say so plainly when a scenario needs them, and offer the closest version that works.
 
 Never change Take itself (anything in `<base>`: its code, docs, plan or themes) to get a video done, even when a fix looks small. Work only in the user's project. When Take can't do something, say what is missing; the user decides whether Take should learn it.

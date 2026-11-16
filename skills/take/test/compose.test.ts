@@ -90,6 +90,29 @@ test('composes a capture into a 2560×1440, 60 fps H.264 MP4', async () => {
   }
 });
 
+test('the plain theme is just the page: a 1920×1080 page fills the 1920×1080 video to its edges', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
+  try {
+    fs.mkdirSync(path.join(dir, 'frames'));
+    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=0x303030:size=1920x1080:rate=60', '-frames:v', '10', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
+    const frames = Array.from({ length: 10 }, (_, i) => `frames/f${String(i + 1).padStart(5, '0')}.jpg`);
+    fs.writeFileSync(path.join(dir, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [1920, 1080], frames, renderSeconds: 0, images: 10 }));
+    fs.writeFileSync(path.join(dir, 'events.json'), JSON.stringify({ ...log(10), viewport: [1920, 1080], loop: 'none', events: [], pointer: Array(10).fill([960, 540]) }));
+    const out = path.join(dir, 'out.mp4');
+    await compose({ capture: dir, out, theme: 'plain' });
+    const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=width,height', '-of', 'json', out], { encoding: 'utf8' }));
+    assert.deepEqual([probe.streams[0].width, probe.streams[0].height], [1920, 1080]);
+    // Each edge of the frame is the page's dark grey: no title bar, no backdrop, no rounded corners.
+    for (const crop of ['1920:8:0:0', '1920:8:0:1072', '8:1080:0:0', '8:1080:1912:0']) {
+      const stats = execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-frames:v', '1', '-vf', `crop=${crop},signalstats,metadata=print:key=lavfi.signalstats.YMAX:file=-`, '-f', 'null', '-'], { encoding: 'utf8' });
+      const max = Number(/YMAX=([\d.]+)/.exec(stats)![1]);
+      assert.ok(max < 70, `edge ${crop} has something lighter than the page (brightest ${max})`);
+    }
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('several browsers share the frames, and the video keeps them in order', async () => {
   // Each captured frame is a shade lighter than the one before, so the middle of the video brightens frame by frame.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
