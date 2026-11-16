@@ -17,7 +17,7 @@ The CLI lives in this skill's base directory, the folder that holds this `SKILL.
 | `take login <url>` | Opens a visible browser window on `<url>` where the user signs in themselves; saves that login when they close the window, under the site's domain (`--name` to choose another). Takes whose target has `"login": "<name>"` then start signed in. |
 | `take logout <name>` | Forgets a saved login. |
 | `take validate takes/<name>/take.json` | Checks the file's shape and explains every problem. |
-| `take probe takes/<name>/take.json` | Plays the take in the app without recording, twice as fast as the video (the opening and closing holds last 0.5 s here; times on the storyboard are rough). `--slow` plays at the video's pace: use it when a step fails only because the app hadn't caught up yet. Writes `probe/step-00.png` + `step-00.outline.yml` (the first screen, before any step), then `step-NN.*` after step NN, `probe.json` and `probe/storyboard.jpg`. A failing step stops it: the reason is printed, stored as `error` in `probe.json` and shown in red on the storyboard. |
+| `take probe takes/<name>/take.json` | Plays the take in the app without recording, twice as fast as the video (the opening and closing holds last 0.5 s here; times on the storyboard are rough). `--slow` plays at the video's pace: use it when a step fails only because the app hadn't caught up yet. When every step passes it ends with the timecoded script: each step's start and length in the video, the loop and the total. Writes `probe/step-00.png` + `step-00.outline.yml` (the first screen, before any step), then `step-NN.*` after step NN, `probe.json` and `probe/storyboard.jpg`. A failing step stops it: the reason is printed, stored as `error` in `probe.json` and shown in red on the storyboard. |
 | `take run takes/<name>/take.json` | Records, composes and checks: `out/<name>.mp4`, `out/<name>.check.json`, `out/<name>.contact.jpg`. Exit code 1 if the check fails. |
 | `take compose takes/<name>/capture --address …` | Re-composes without re-recording (address, theme). |
 
@@ -63,7 +63,12 @@ Repeat until every step passes. If the same step still fails after three tries, 
 
 ### 4. Approve (the one question)
 
-Before showing anything, check the storyboard against the first part of [docs/review-checklist.md](docs/review-checklist.md) and fix what you can. Then show the user `probe/storyboard.jpg` with one plain-language line per step (what the viewer sees, not the storyboard's literal labels) and the settings you chose (address, loop, size, rough length). Then ask one question: record it? Change requests go back to step 3. Don't record before the user says yes.
+Before showing anything, check the storyboard against the first part of [docs/review-checklist.md](docs/review-checklist.md) and fix what you can. Then show the user:
+- `probe/storyboard.jpg`;
+- the script with timecodes, from the end of the probe's output, as a table: start, length, and one plain-language line per step (what the viewer sees, not the probe's literal labels), the loop and the total length;
+- the settings you chose (address, loop, size).
+
+Say they can change any step's length ("make the dialog stay 3 s", "type slower"). Then ask one question: record it, or change the timing first? A new length goes into that step's `"ms"` ([Timing](docs/take-format.md#timing)); probe again and show the new script, with the storyboard only if it changed. A `⚠ … it can't be under …` means the step can't be that short: tell the user the shortest it can be. Any other change request goes back to step 3. Don't record before the user says yes.
 
 ### 5. Record
 
@@ -71,7 +76,7 @@ Before showing anything, check the storyboard against the first part of [docs/re
 
 ### 6. Check
 
-Read the report `take run` prints and look at `out/<name>.contact.jpg` against the second part of the review checklist.
+Read the report `take run` prints (it ends with the script as recorded: lengths the user set should match) and look at `out/<name>.contact.jpg` against the second part of the review checklist.
 - A step failed during recording (the page behaved differently from the probe): probe again, fix, run again.
 - `rehearsal` ⚠: a step looks different from its rehearsal picture. The contact sheet shows the two side by side. Something missing from the video (a panel, a menu, map tiles) means the recording went wrong: run once more, and if it repeats tell the user. Live content that changed is fine.
 - A doubled frame (`smoothness` ✗): look at that moment on the contact sheet first. If it's the page's own behaviour (content vanishing in one frame, a picture popping in, a video in the page), recording again gives the same result: deliver and tell the user what it is. Run once more only when it looks like a recording glitch.
@@ -90,6 +95,7 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 | "no window", "just the page", "plain 1920×1080" | `theme` → `"plain"` and `target.viewport` → `[1920, 1080]`: the page fills a 1920×1080 video, no window or background. The viewport changes the layout, so probe again, then run. |
 | "change the address" | `target.address`, then `take compose takes/<name>/capture --address <new>` (no re-record), or `take run`. |
 | "show the result longer", "start slower", "pause after X" | Change or add `hold` steps, then probe and run. |
+| "make step 3 last 4 s", "the dialog should stay longer", a new length in the script | `"ms"` on that step, then probe (show the new script) and run. |
 | The first frame shows loading placeholders, empty banners or skeletons | Add `ready` to take.json: what the loaded page shows, e.g. `{ "visible": { "role": "button", "name": "Deposit" } }` (a list if several things load separately), then run. |
 | "type slower" / "faster" | `cps` on the type step (8 slow, 14 normal, 22 fast). |
 | "the app changed" / "re-record" | Probe; fix any step that fails; run. |

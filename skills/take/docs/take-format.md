@@ -41,20 +41,40 @@ A take is the exact list of steps a recording replays. The agent writes it while
 
 ## Steps
 
-Every step has `do`. Any step may also have `mark` (a unique name for that moment, e.g. `"result"`) and `waitFor` (a condition to wait for after the step).
+Every step has `do`. Any step may also have `mark` (a unique name for that moment, e.g. `"result"`), `waitFor` (a condition to wait for after the step) and `ms` (how long the step lasts, see [Timing](#timing)).
 
 | `do` | Fields | What happens |
 |---|---|---|
 | `click` | `target`, `clicks`? | The cursor travels to the element and clicks it. No separate hover step is needed. `"clicks": 2` double-clicks (selects a word, opens an item), `3` triple-clicks (selects a line or paragraph). A radio or checkbox hidden under its own label is clicked through the label, as a person would. `target` may also be a point `[x, y]` (as in `drag`) for things no target names, like an icon that only shows on hover: hover the row first, read the point off that step's picture. |
 | `hover` | `target` | The cursor travels to the element (or a point `[x, y]`) and rests there (to show a tooltip or hover state). |
 | `drag` | `from`, `to` | The cursor travels to `from`, presses, moves to `to` with the button held, and lets go: draws a shape, moves a slider, drops a card in a column. Each end is a [target](#targets) (its middle) or a point `[x, y]` in CSS pixels from the page's top left, e.g. `[540, 330]`, for places no element names, like a spot on a drawing canvas. |
-| `type` | `text`, `target`?, `cps`? = 14 | Clicks the field if `target` is given, then types character by character at `cps` characters per second. Without `target`, types into whatever has focus. |
+| `type` | `text`, `target`?, `cps`? = 14 | Clicks the field if `target` is given, then types character by character at `cps` characters per second. Without `target`, types into whatever has focus. Give `cps` or `ms`, not both: with `ms` the typing speed follows from the length (between 5 and 40 characters per second; any time left over is a pause after). |
 | `press` | `key` | A single key, e.g. `"Enter"`, `"Escape"`, `"Meta+A"`. The browser's key names: `Meta` (⌘), `Control`, `Alt` (⌥), `Shift`, `ArrowUp`…; join keys with `+`. `take validate` flags others (`Cmd`, `Esc`) and names the right one. With `Meta`, `Control` or `Alt` held a letter is sent lowercase, as a real keyboard does, so `"Meta+K"` opens a ⌘K search; add `Shift` for a capital. |
 | `scroll` | `target` or `by: [x, y]` | Scrolls an element into view, or by a distance in pixels. An element already on screen isn't scrolled to, and the probe says so (`⚠ nothing scrolled`); use `by` to move the page anyway. A `by` scroll goes to whatever is under the cursor, so it also zooms a map or scrolls a list there; the probe notes when the page itself didn't move. |
 | `wait` | `for`, `timeout`? = 10000 | Waits for a condition. The take fails if it isn't met within `timeout` ms. |
 | `hold` | `ms` | Nothing happens for `ms` milliseconds, so the viewer can take it in. |
 
-How the cursor moves, and the pauses between steps, are decided by the driver, not written into the take.
+How the cursor moves, and the pauses between steps, are decided by the driver, not written into the take, unless a step is given a length.
+
+## Timing
+
+`take probe` ends with the timecoded script: when each step starts in the video and how long it lasts, the loop back to the start, and the total. `take run` prints it again as recorded.
+
+```
+Script: "Create a project", 10.12 s (from the rehearsal: steps that wait for the app may come out a little different)
+   #  start      length  step
+   1  0:00.00   2.00 s*  Hold 2 s [start]
+   2  0:02.00   1.40 s   Click button "New project", then wait for dialog "New project" to show
+   3  0:03.40   2.13 s   Type "Moodboard" into field labelled "Name"
+   4  0:05.53   1.92 s   Click button "Create", then wait for heading "Moodboard" to show
+   5  0:07.45   2.00 s*  Hold 2 s [result]
+      0:09.45   0.67 s   Back to the start (loop)
+      0:10.12            End
+```
+
+A step's length runs from its start to the start of the next step. Without `ms` it's as long as the action takes (the cursor's travel, the typing, waiting for the app) plus a 0.45 s pause. With `"ms": 3000` the step lasts exactly 3 s: the action plays at its usual pace and the pause after it fills the rest, so the viewer sees the result longer. A `type` step fills it with slower or faster typing instead. A hold's `ms` is its length already. A length shorter than the action needs can't be met: the step runs at its usual pace with no pause after, and the probe says how short it can be (`⚠ … it can't be under 1.20 s`).
+
+Lengths marked `*` are set in the take. Rehearsals play twice as fast, so a step that waits for the app is an estimate there, usually within a few hundredths of a second; set lengths come out exact.
 
 ## Targets
 

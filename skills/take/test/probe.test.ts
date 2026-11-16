@@ -59,6 +59,11 @@ test('probe screenshots the first screen and every step, and makes a storyboard'
   assert.equal(r.shots[2].cursor, 'text', 'the cursor is a text cursor on the field');
   assert.equal(r.shots[3].target, undefined, 'Create closed with its dialog: nothing to outline');
   assert.ok(r.shots.every((s, i) => i === 0 || s.at >= r.shots[i - 1].at), 'times only go forward');
+  // The timecoded script: one line per step, back to back, adding up to the video with its loop.
+  assert.ok(r.script && r.script.estimated);
+  assert.deepEqual(r.script.lines.map((l) => l.step), [1, 2, 3]);
+  assert.ok(r.script.lines.every((l, i) => l.length > 0 && (i === 0 || Math.abs(l.start - r.script!.lines[i - 1].start - r.script!.lines[i - 1].length) < 1e-9)));
+  assert.ok(Math.abs(r.script.total - (r.script.lines.at(-1)!.start + r.script.lines.at(-1)!.length + r.script.loop)) < 1e-9);
   const sheet = await storyboard(r, out, path.join(out, 'storyboard.jpg'));
   assert.ok(fs.statSync(sheet).size > 10_000);
 });

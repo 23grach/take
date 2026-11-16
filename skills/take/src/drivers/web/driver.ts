@@ -89,6 +89,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     loop: take.loop,
   };
   let current = 0; // index of the step being performed, for messages
+  let waited = 0; // frames of the current step spent waiting for the app
+  const speed = clock.speed ?? 1;
   await page.mouse.move(...pointer);
 
   /** Records where the pointer is in this frame, then moves one frame on. */
@@ -108,8 +110,16 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     if (pageErrors.length)
       throw new TakeError(current, `the app threw an error: "${pageErrors[0]}". Take stops rather than film a broken app; fix the app, or the step that sets it off`);
   }
+  /** One frame spent waiting for the app rather than acting (see StepLog.waited). */
+  async function idle() {
+    await tick();
+    waited++;
+  }
   /** A time limit in frames: limits are wall time, so a fast-forwarding clock gets as many seconds as a normal one. */
-  const limit = (ms: number) => frames(ms * (clock.speed ?? 1));
+  const limit = (ms: number) => frames(ms * speed);
+  /** Frames since `start`, as the video will have them: waiting for the app, fast-forwarded in a rehearsal, counts
+   *  at the video's pace. */
+  const since = (start: number) => clock.frame - start - waited * (1 - 1 / speed);
 
   async function wait(ms: number) {
     const end = clock.frame + frames(ms);
@@ -129,7 +139,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         const names = await loc.evaluateAll((els) => els.slice(0, 3).map((e) => ((e as HTMLElement).innerText || e.getAttribute('aria-label') || e.tagName.toLowerCase()).trim().replace(/\s+/g, ' ').slice(0, 40)));
         throw new TakeError(current, `${n} elements match ${describe(t)} (${names.map((x) => `"${x}"`).join(', ')}${n > 3 ? ', …' : ''}); make the target more specific (add "exact": true, or use a role and name)`);
       }
-      await tick();
+      await idle();
     }
   }
 
@@ -230,7 +240,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         const why = disabled ? `stayed disabled for ${PACING.find / 1000} s` : `is covered by ${await whatIsAt(pointer)}`;
         throw new TakeError(current, `${describe(t)} ${why}`);
       }
-      await tick();
+      await idle();
     }
   }
 
@@ -335,7 +345,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     const give = clock.frame + limit(timeout);
     while (!(await holds(page, c))) {
       if (clock.frame >= give) throw new TakeError(current, `waited ${timeout / 1000} s for ${describeCondition(c)}`);
-      await tick();
+      await idle();
     }
     if ('visible' in c) {
       const b = await locate(page, c.visible).filter({ visible: true }).first().boundingBox();
@@ -344,6 +354,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   }
 
   async function run(s: Step, log: StepLog) {
+    const length = s.do === 'hold' || s.ms === undefined ? undefined : frames(s.ms);
     switch (s.do) {
       case 'click':
         log.target = Array.isArray(s.target) ? await clickAt(s.target, s.clicks) : await click(await find(s.target), s.target, s.clicks);
@@ -360,9 +371,17 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       case 'type': {
         if (s.target) log.target = await click(await find(s.target), s.target);
         if (s.target) await wait(PACING.settle);
-        // Characters land on whole frames, at a person's uneven rhythm that averages the typing speed.
+        // Characters land on whole frames, at a person's uneven rhythm that averages the typing speed. Given a
+        // length, the typing fills what's left of it after the usual pause, within a believable speed.
         const f0 = clock.frame;
-        const at = typingSchedule(s.text, s.cps, clock.fps);
+        const chars = [...s.text].length;
+        let cps = s.cps;
+        if (length !== undefined && chars > 1) {
+          const room = Math.max(1, length - since(log.start) - frames(PACING.gap));
+          const { min, max } = PACING.fittedTyping;
+          cps = Math.min(max, Math.max(min, ((chars - 1) * clock.fps) / room));
+        }
+        const at = typingSchedule(s.text, cps, clock.fps);
         for (const [i, ch] of [...s.text].entries()) {
           while (clock.frame < f0 + at[i]) await tick();
           events.push({ frame: clock.frame, type: 'key', key: ch });
@@ -410,6 +429,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
 
   for (const [i, s] of take.steps.entries()) {
     current = i;
+    waited = 0;
     const log: StepLog = { index: i, do: s.do, start: clock.frame, end: clock.frame };
     if (s.mark) {
       log.mark = s.mark;
@@ -417,10 +437,18 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
     await run(s, log);
     log.end = Math.max(log.start, clock.frame - 1);
+    // A step given a length: the pause after it fills the rest. One whose action alone takes longer runs over.
+    const length = s.do === 'hold' || s.ms === undefined ? undefined : frames(s.ms);
+    if (length !== undefined && since(log.start) > length + 1) {
+      const over = `takes ${(since(log.start) / clock.fps).toFixed(2)} s, longer than the ${+(s.ms! / 1000).toFixed(2)} s its "ms" gives: the action itself${s.waitFor || s.do === 'wait' ? ', with waiting for the app,' : ''} takes that long`;
+      log.note = log.note ? `${log.note}; ${over}` : over;
+    }
+    if (waited) log.waited = waited;
     steps.push(log);
     await onStep?.(log, pointer);
+    if (length !== undefined) while (since(log.start) < length) await tick();
     // No gap after a hold: a hold already is a pause, and the last one ends the take.
-    if (s.do !== 'hold' && i < take.steps.length - 1) await wait(PACING.gap);
+    else if (s.do !== 'hold' && i < take.steps.length - 1) await wait(PACING.gap);
   }
   page.off('pageerror', onError);
   fillSkipped(path);

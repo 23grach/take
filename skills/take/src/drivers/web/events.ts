@@ -26,6 +26,10 @@ export interface StepLog {
   mark?: string;
   /** Something worth knowing about how the step went, e.g. a scroll that had nothing to move. */
   note?: string;
+  /** Frames of the step spent waiting for the app (a target to show, a waitFor), rather than acting at the
+   *  driver's pace. A rehearsal that fast-forwards counts these at its own speed, so its estimate of the video's
+   *  timing scales them back. */
+  waited?: number;
   /** The element acted on, where it was when the action happened. */
   target?: Box;
   /** The element waitFor was waiting for, where it was when it showed. */

@@ -69,7 +69,7 @@ Steps:
 What happens next:
 
 1. **Rehearse.** The agent plays the steps in the app without recording and fixes anything that doesn't work.
-2. **Approve.** It shows you the storyboard (one picture per step) and asks one question: record it?
+2. **Approve.** It shows you the storyboard (one picture per step) and the script with timecodes (when each step starts and how long it lasts), and asks one question: record it? Change any step's length first if you like ("keep the dialog on screen for 3 s").
 3. **Record.** Take plays the steps again at a person's pace and records every frame. The agent isn't involved anymore, so the video is exactly what was approved.
 4. **Check.** Take checks the video for smoothness and a clean loop, compares each step with its rehearsal picture so a missing panel or blank map doesn't slip through, and makes a contact sheet. You get the MP4.
 
@@ -97,7 +97,7 @@ The CLI the agent uses (`node skills/take/bin/take <command>`):
 |---|---|
 | `take doctor` | Checks Node, the browser (your Chrome, or Take's Chromium) and ffmpeg, and says what to install |
 | `take validate <take.json>` | Checks the take and explains any problems |
-| `take probe <take.json>` | Plays the steps without recording and makes the storyboard |
+| `take probe <take.json>` | Plays the steps without recording and makes the storyboard and the timecoded script |
 | `take run <take.json>` | Records, composes and checks the video |
 | `take compose <capture>` | Composes again without re-recording (for example, a new address) |
 | `take check <video.mp4>` | Checks smoothness, length and the loop, and makes a contact sheet |

@@ -23,6 +23,9 @@ export const PACING = {
   drag: { slower: 1.6, arc: 0.02, grip: 160 },
   /** Scroll time: base + perPx × distance, clamped. */
   scroll: { base: 300, perPx: 0.6, min: 400, max: 1400 },
+  /** A type step given a length (`ms`) types as fast or slow as fits it, within these characters per second;
+   *  the rest becomes a pause after. */
+  fittedTyping: { min: 5, max: 40 },
   /** How long to look for a target before giving up. */
   find: 8000,
 };
