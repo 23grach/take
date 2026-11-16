@@ -37,6 +37,12 @@ export function watchMedia(): void {
       sent?: string;
       /** Reached its end on Take's count. */
       ended?: boolean;
+      /** Take is moving it to a new time: called when it gets there. */
+      seeked?: () => void;
+      /** Take's own seek made it wait for data, so the "playing" after that is Take's too. */
+      waited?: boolean;
+      /** Speed changes Take made that the page hasn't been told about (it never is). */
+      rates?: number;
     };
   };
   const w = globalThis as unknown as { __takeMedia?: (ms: number) => Promise<{ shown: Box[]; played: Played[] }>; __takeMediaPlays: () => void };
@@ -57,6 +63,8 @@ export function watchMedia(): void {
       const moved = () => s.since && (s.since.media = undefined);
       el.addEventListener('seeking', moved);
       el.addEventListener('emptied', moved);
+      // An element outside the document never reaches the window: it hears Take's seeks, but Take still knows.
+      el.addEventListener('seeked', () => s.seeked?.());
     }
     if (el.__take.ended) {
       // Starting over: from wherever it is now.
@@ -64,6 +72,28 @@ export function watchMedia(): void {
       el.__take.set = undefined;
     }
     el.__take.since ??= { page: Date.now(), media: now(el) };
+  };
+  // Take's own seeks (one per frame) and speed changes are hidden from the page: a player that saw them would think
+  // it keeps buffering (YouTube then starts the film again the moment it's paused). Listening on the window before
+  // the page's own scripts, so nothing in the page hears them; only Take does.
+  const hidden = (e: Event) => {
+    const el = e.target as Held;
+    const s = el?.__take;
+    if (!s) return;
+    const mine =
+      e.type === 'ratechange' ? !!s.rates && s.rates-- > 0
+      : e.type === 'playing' ? s.waited && !(s.waited = false)
+      : !!s.seeked;
+    if (e.type === 'waiting' && s.seeked) s.waited = true;
+    if (e.type === 'seeked') s.seeked?.();
+    if (mine) e.stopImmediatePropagation();
+  };
+  for (const type of ['seeking', 'waiting', 'seeked', 'playing', 'ratechange']) addEventListener(type, hidden, true);
+  /** Sets its speed without the page hearing of it. */
+  const setRate = (el: Held, rate: number) => {
+    if (el.playbackRate === rate) return;
+    el.__take!.rates = (el.__take!.rates ?? 0) + 1;
+    el.playbackRate = rate;
   };
   const play = HTMLMediaElement.prototype.play;
   HTMLMediaElement.prototype.play = function (this: Held) {
@@ -85,7 +115,7 @@ export function watchMedia(): void {
         // Just started, or the page changed its speed: hold it, and count its time from here.
         s.time = now(v);
         s.rate = v.playbackRate;
-        v.playbackRate = 0;
+        setRate(v, 0);
         s.set = v.currentTime;
       }
       // Started during this step (or while it was loading, as if the network were instant): from that moment.
@@ -107,7 +137,7 @@ export function watchMedia(): void {
         // Its end, on page time: let it go there at its own rate, so the page gets its "ended" (at once, or after
         // playing out unheard when its server doesn't let it seek).
         s.ended = true;
-        v.playbackRate = s.rate;
+        setRate(v, s.rate);
         v.currentTime = d;
         continue;
       }
@@ -129,7 +159,10 @@ export function watchMedia(): void {
         if (gap > 1e-3 && gap < 0.1) f.__takeFrameLen = Math.min(f.__takeFrameLen ?? Infinity, gap);
         f.__takeShown = meta.mediaTime;
       });
-      moving.push(new Promise((done) => v.addEventListener('seeked', done, { once: true })));
+      moving.push(new Promise<void>((done) => (s.seeked = () => {
+        s.seeked = undefined;
+        done();
+      })));
       v.currentTime = t;
       s.set = v.currentTime;
     }

@@ -74,7 +74,57 @@ export function quickTimerYield(): boolean {
   return true;
 }
 
-const mediaSeen = new WeakMap<Page, { media: boolean }>();
+/** What Take knows about a studio page: whether media ever played in it, and, in a browser that draws as fast as it
+ *  can (see NeedsFrameLimit), whether a view transition started. */
+const pageState = new WeakMap<Page, { media: boolean; unthrottled: boolean; viewTransition: boolean }>();
+
+/** Studio browsers draw a picture the moment one is asked for, instead of waiting for the screen's next 60 Hz
+ *  refresh (UNTHROTTLED): recording is much quicker. But Chrome launched that way never draws again once a page
+ *  starts a view transition (the browser's own animation between two states of a page; YouTube starts one as it
+ *  loads): every picture after it waits forever. Thrown as soon as one starts, or when a picture doesn't come back,
+ *  so the take is recorded again in a browser that keeps to 60 Hz. */
+export class NeedsFrameLimit extends Error {
+  constructor(why: string) {
+    super(`${why}, which the fast studio browser can't draw; recording again at the screen's usual pace`);
+  }
+}
+
+/** In every page and frame before its own scripts: tells Take when a view transition starts, whether the page
+ *  starts it (document.startViewTransition) or the browser does between two pages (@view-transition). */
+export function watchViewTransitions(): void {
+  const w = globalThis as unknown as { __takeViewTransition?: () => void; __takeWatchesTransitions?: true };
+  if (w.__takeWatchesTransitions || typeof Document === 'undefined') return;
+  w.__takeWatchesTransitions = true;
+  const proto = Document.prototype;
+  const start = proto.startViewTransition as typeof proto.startViewTransition | undefined;
+  if (start)
+    proto.startViewTransition = function (this: Document, ...a: Parameters<typeof start>) {
+      w.__takeViewTransition?.();
+      return start.apply(this, a);
+    };
+  for (const type of ['pageswap', 'pagereveal']) addEventListener(type, (e) => (e as Event & { viewTransition?: unknown }).viewTransition && w.__takeViewTransition?.());
+}
+
+/** How long a picture may take before the page counts as no longer drawing. Pictures normally take milliseconds. */
+const STALL_MS = 15_000;
+
+/** Studio: a picture from the page, or NeedsFrameLimit if the fast browser has stopped drawing. */
+export async function picture<T>(page: Page, shot: Promise<T>): Promise<T> {
+  shot.catch(() => {}); // when it's given up on below, it may still fail later
+  checkDrawing(page);
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<'late'>((r) => (timer = setTimeout(() => r('late'), STALL_MS)));
+  const got = await Promise.race([shot, late]).finally(() => clearTimeout(timer));
+  if (got !== 'late') return got as T;
+  if (pageState.get(page)?.unthrottled) throw new NeedsFrameLimit(`the page stopped drawing (no picture for ${STALL_MS / 1000} s)`);
+  throw new Error(`the page stopped drawing: no picture came back for ${STALL_MS / 1000} s`);
+}
+
+/** Throws NeedsFrameLimit once a view transition has started in the fast browser: its next picture would never come. */
+function checkDrawing(page: Page): void {
+  const state = pageState.get(page);
+  if (state?.unthrottled && state.viewTransition) throw new NeedsFrameLimit('the page started a view transition');
+}
 
 /** Under the frozen clock, Playwright runs the page's idle callbacks with no time left (timeRemaining() is always
  *  0), so code that only works while there is time left waits forever: Wikipedia's script loader never loads the
@@ -92,8 +142,9 @@ export function idleWithTime(): void {
   w.cancelIdleCallback = (id) => w.clearTimeout(id);
 }
 
-/** Freezes page time and animations. Must run before the page is opened, so the page never sees real time. */
-export async function freezePage(page: Page): Promise<CDPSession> {
+/** Freezes page time and animations. Must run before the page is opened, so the page never sees real time.
+ *  `unthrottled`: the browser was launched with UNTHROTTLED (see NeedsFrameLimit). */
+export async function freezePage(page: Page, unthrottled = false): Promise<CDPSession> {
   // Page time starts at the real time, so dates in the app ("Today", "2 min ago") match the storyboard, and moves
   // only when we advance it (install alone keeps it running).
   const now = Math.floor(Date.now() / 1000) * 1000;
@@ -103,10 +154,14 @@ export async function freezePage(page: Page): Promise<CDPSession> {
   await page.context().addInitScript(quickTimerYield);
   // Tells Take when media starts playing in any frame, so pages without any get no extra work per frame (which
   // would also make their frames vary by a shade from run to run).
-  const seen = { media: false };
-  mediaSeen.set(page, seen);
+  const seen = { media: false, unthrottled, viewTransition: false };
+  pageState.set(page, seen);
   await page.context().exposeBinding('__takeMediaPlays', () => void (seen.media = true));
   await page.context().addInitScript(watchMedia);
+  if (unthrottled) {
+    await page.context().exposeBinding('__takeViewTransition', () => void (seen.viewTransition = true));
+    await page.context().addInitScript(watchViewTransitions);
+  }
   await page.evaluate(quickTimerYield);
   await page.context().addInitScript(idleWithTime);
   await page.evaluate(idleWithTime);
@@ -117,7 +172,11 @@ export async function freezePage(page: Page): Promise<CDPSession> {
   return cdp;
 }
 
-const stepPlaying = (page: Page, ms: number) => (mediaSeen.get(page)?.media ? stepMedia(page, ms) : { boxes: [], played: [] as Played[] });
+/** onTime, written out in each page.evaluate (which can't see this file): animations Take moves on frame
+ *  by frame. Scroll-driven ones (their timeline has an axis) follow the scroll, and refuse a time. Not "the
+ *  timeline is document.timeline": a page can replace that global (YouTube sometimes installs a stand-in), and
+ *  then none of its animations would ever move: a view transition would cover the page for good. */
+const stepPlaying = (page: Page, ms: number) => (pageState.get(page)?.media ? stepMedia(page, ms) : { boxes: [], played: [] as Played[] });
 
 /** Studio: each tick moves animations and page time on exactly one frame, then screenshots it.
  *  `cdp` is the session freezePage opened; `viewport` and `scale` are the take's. `sound` hears the page as page
@@ -141,9 +200,10 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
       if (writeError) throw writeError;
       // Animations already on screen move forward one frame; ones that started during this frame begin at 0.
       await page.evaluate((dt) => {
+        const onTime = (a: Animation) => !!a.timeline && !('axis' in a.timeline); // see "onTime" above
         for (const a of document.getAnimations()) {
           const seen = a as Animation & { __take?: boolean };
-          if (seen.__take && a.timeline === document.timeline) a.currentTime = Number(a.currentTime ?? 0) + dt; // scroll-driven ones follow the scroll, and refuse a time
+          if (seen.__take && onTime(a)) a.currentTime = Number(a.currentTime ?? 0) + dt;
         }
       }, dt);
       // Page time steps 16 or 17 ms so it never drifts from the frame count.
@@ -153,13 +213,14 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
       await sound?.moved(played, true);
       if (JSON.stringify(videos.at(-1)?.[1] ?? []) !== JSON.stringify(boxes)) videos.push([frame, boxes]);
       await page.evaluate(() => {
+        const onTime = (a: Animation) => !!a.timeline && !('axis' in a.timeline); // see "onTime" above
         for (const a of document.getAnimations()) {
           const seen = a as Animation & { __take?: boolean };
           if (seen.__take) continue;
           seen.__take = true;
           // Starts now. Pages that time an animation's start with the page clock (frozen, so it disagrees with the
           // browser's animation clock) would otherwise schedule it seconds ahead: a panel opening stays invisible.
-          if (a.timeline === document.timeline && a.currentTime !== null && Number(a.currentTime) < 0) a.currentTime = 0;
+          if (onTime(a) && a.currentTime !== null && Number(a.currentTime) < 0) a.currentTime = 0;
         }
       });
       // Page time stands still while a picture on screen or a font downloads (up to 3 s of wall time), as if the
@@ -175,7 +236,7 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
       }
       // Straight from the browser: Playwright's screenshot does extra work each time (it hides the caret, which
       // hideCaret already did, and waits for fonts, as the line above does). A tenth faster, the same picture.
-      const jpeg = Buffer.from((await cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: QUALITY })).data, 'base64');
+      const jpeg = Buffer.from((await picture(page, cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: QUALITY }))).data, 'base64');
       writes[frame] = fs.promises.writeFile(path.join(dir, name(frame)), jpeg).catch((e: Error) => void (writeError ??= e));
       frame++;
     },
@@ -186,14 +247,16 @@ export async function studio(page: Page, dir: string, cdp: CDPSession, [width, h
     async warmup(ms: number) {
       for (let t = 0; t < ms; t += dt) {
         await page.evaluate((dt) => {
+          const onTime = (a: Animation) => !!a.timeline && !('axis' in a.timeline); // see "onTime" above
           for (const a of document.getAnimations()) {
             const seen = a as Animation & { __take?: boolean };
-            if (seen.__take && a.timeline === document.timeline) a.currentTime = Number(a.currentTime ?? 0) + dt; // scroll-driven ones follow the scroll, and refuse a time
-            if (!seen.__take && a.timeline === document.timeline && a.currentTime !== null && Number(a.currentTime) < 0) a.currentTime = 0; // see tick
+            if (seen.__take && onTime(a)) a.currentTime = Number(a.currentTime ?? 0) + dt;
+            if (!seen.__take && onTime(a) && a.currentTime !== null && Number(a.currentTime) < 0) a.currentTime = 0; // see tick
             seen.__take = true;
           }
         }, dt);
         await page.clock.runFor(Math.round(dt));
+        checkDrawing(page);
         const { played } = await stepPlaying(page, Math.round(dt));
         await sound?.moved(played, false);
       }

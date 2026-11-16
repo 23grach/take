@@ -156,7 +156,10 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
   // A 30 fps test video, 4 s, served with a page that autoplays it.
   const dir = fs.mkdtempSync(path.join(tmp, 'video-'));
   execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=30:duration=4', '-c:v', 'libvpx', '-b:v', '200k', path.join(dir, 'v.webm')]);
-  const page = '<!doctype html><body style="margin:0"><video src="v.webm" autoplay muted loop style="width:320px;height:240px"></video>';
+  // The page counts what its player hears: Take's own seeks, one a frame, must not reach it (a player would think it
+  // keeps buffering).
+  const page = '<!doctype html><body style="margin:0"><video src="v.webm" autoplay muted loop style="width:320px;height:240px"></video>'
+    + '<script>window.heard = []; for (const t of ["seeking", "seeked", "waiting", "ratechange"]) document.querySelector("video").addEventListener(t, () => heard.push(t));</script>';
   const server = http.createServer((req, res) => {
     if (req.url === '/v.webm') {
       const data = fs.readFileSync(path.join(dir, 'v.webm'));
@@ -182,6 +185,7 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
       // Within two of the video's own frames (30 fps): seeks are skipped while the same picture still shows.
       assert.ok(Math.abs(now - start - 1) < 0.07, `60 frames moved the video on ${(now - start).toFixed(3)} s, not 1 s`);
       assert.deepEqual(boxes, [{ x: 0, y: 0, width: 320, height: 240 }]);
+      assert.deepEqual(await p.evaluate(() => (window as unknown as { heard: string[] }).heard), []);
     } finally {
       await opened.browser.close();
     }
@@ -283,6 +287,53 @@ test('setup steps close a banner before filming, and are not filmed', async () =
     assert.equal(events.events.filter((e) => e.type === 'down').length, 1, 'only the filmed click is in the log');
     const bad = validateTake({ version: 0, title: 'S', target: { kind: 'web', url }, setup: [], steps: [{ do: 'hold', ms: 100 }] });
     assert.ok(!bad.ok && bad.errors.some((e) => e.startsWith('setup')));
+  } finally {
+    server.close();
+  }
+});
+
+test('a view transition records: the page replaced document.timeline, and the transition still finishes', async () => {
+  // A cookie banner the setup step closes, behind a view transition that starts as the page loads. The page swaps
+  // document.timeline for a stand-in, as some sites' animation libraries do.
+  const page = `<!doctype html><style>::view-transition-group(*) { animation-duration: .4s }</style>
+    <button style="margin:200px">Go</button><div id="box" style="width:60px;height:60px;background:#36f;view-transition-name:box"></div>
+    <div id="banner" style="position:fixed;inset:0;background:#fffe;display:grid;place-items:center"><button onclick="banner.remove()">Reject all</button></div>
+    <script>
+      Object.defineProperty(document, 'timeline', { value: { currentTime: undefined } });
+      setTimeout(() => document.startViewTransition(() => { box.style.marginLeft = '300px'; }), 100);
+    </script>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(page));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const r = validateTake({
+      version: 0, title: 'Transition', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none',
+      setup: [{ do: 'click', target: { role: 'button', name: 'Reject all' } }],
+      steps: [{ do: 'click', target: { role: 'button', name: 'Go' } }],
+    });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    const { capture } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'transition') });
+    assert.ok(capture.frames.length > 10);
+  } finally {
+    server.close();
+  }
+});
+
+test('a view transition mid-take: recorded again at 60 Hz, or handed back once frames were passed on', async () => {
+  const page = `<!doctype html><button onclick="document.startViewTransition(() => box.style.marginLeft = '300px')">Move</button>
+    <div id="box" style="width:60px;height:60px;background:#36f;view-transition-name:box"></div>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(page));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const r = validateTake({ version: 0, title: 'Move', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none', steps: [{ do: 'click', target: { role: 'button', name: 'Move' } }, { do: 'hold', ms: 500 }] });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    // Nothing passed on yet: record does it again itself.
+    const { capture, events } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'mid-take') });
+    assert.equal(capture.frames.length, events.frames);
+    // take run composes frames as they come: it's told, and starts over (run.ts).
+    const { NeedsFrameLimit } = await import('../src/drivers/web/capture.ts');
+    await assert.rejects(record(r.take, { mode: 'studio', out: path.join(tmp, 'mid-take-2'), onFrame: () => {} }), NeedsFrameLimit);
   } finally {
     server.close();
   }
