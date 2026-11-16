@@ -12,7 +12,8 @@ export interface Theme {
     shadow: string;
     border: string;
     bar: { height: number; background: string; divider: string };
-    dots: { size: number; gap: number; color: string };
+    /** The close, minimize and zoom buttons: a fill and a thin ring inside it, outlineWidth wide. */
+    dots: { size: number; gap: number; outlineWidth: number } & Record<WindowButton, { fill: string; outline: string }>;
     address: { show: boolean; width: number; height: number; background: string; color: string; font: string };
   };
   /** art "system": macOS's own cursors when Take runs on a Mac; otherwise, and without it, the shapes below.
@@ -21,6 +22,9 @@ export interface Theme {
   caret: { width: number; solidFrames: number; blinkFrames: number };
   loop: { frames: number };
 }
+
+export type WindowButton = 'close' | 'minimize' | 'zoom';
+const BUTTONS: WindowButton[] = ['close', 'minimize', 'zoom'];
 
 export interface Layout {
   /** Window position and size on the stage, in output pixels. */
@@ -69,7 +73,8 @@ export function stageHtml(theme: Theme, address: string, box: Layout, cursors: R
   .window::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: ${win.border}; pointer-events: none; }
   .bar { height: ${win.bar.height}px; background: ${win.bar.background}; border-bottom: 1px solid ${win.bar.divider};
     box-sizing: border-box; display: flex; align-items: center; padding: 0 ${win.bar.height / 2 - win.dots.size / 2 + 2}px; position: relative; }
-  .dot { width: ${win.dots.size}px; height: ${win.dots.size}px; border-radius: 50%; background: ${win.dots.color}; margin-right: ${win.dots.gap}px; }
+  .dot { width: ${win.dots.size}px; height: ${win.dots.size}px; border-radius: 50%; margin-right: ${win.dots.gap}px; }
+${BUTTONS.map((b) => `  .dot.${b} { background: ${win.dots[b].fill}; box-shadow: inset 0 0 0 ${win.dots.outlineWidth}px ${win.dots[b].outline}; }`).join('\n')}
   .address { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: ${win.address.width}px; height: ${win.address.height}px;
     border-radius: ${win.address.height / 2}px; background: ${win.address.background}; color: ${win.address.color}; font: ${win.address.font};
     display: ${win.address.show ? 'flex' : 'none'}; align-items: center; justify-content: center; }
@@ -79,7 +84,7 @@ export function stageHtml(theme: Theme, address: string, box: Layout, cursors: R
   .cursor { position: absolute; left: 0; top: 0; visibility: hidden; }
 </style>
 <div class="window">
-  <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><div class="address">${esc(address)}</div></div>
+  <div class="bar">${BUTTONS.map((b) => `<span class="dot ${b}"></span>`).join('')}<div class="address">${esc(address)}</div></div>
   <div class="content"><img id="shot" alt=""><img id="fade" alt="" style="opacity: 0"><div id="caret"></div></div>
 </div>
 ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${i}" src="${esc(cursors[key].src)}" alt="">`).join('')}

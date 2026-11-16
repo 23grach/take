@@ -37,3 +37,11 @@ test('the stage puts the address in the bar, escaped', () => {
   const html = stageHtml(theme, 'boards.app/<x>', layout(theme, [1440, 900]), {});
   assert.match(html, /<div class="address">boards\.app\/&#60;x&#62;<\/div>/);
 });
+
+test('the window has close, minimize and zoom buttons in the theme\'s colours', () => {
+  const { theme } = loadTheme();
+  const html = stageHtml(theme, '', layout(theme, [1440, 900]), {});
+  assert.match(html, /<span class="dot close"><\/span><span class="dot minimize"><\/span><span class="dot zoom"><\/span>/);
+  for (const b of ['close', 'minimize', 'zoom'] as const)
+    assert.ok(html.includes(`.dot.${b} { background: ${theme.window.dots[b].fill}; box-shadow: inset 0 0 0 0.5px ${theme.window.dots[b].outline}; }`), b);
+});
