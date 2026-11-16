@@ -20,7 +20,6 @@ export interface Theme {
   cursor: { art?: 'system'; size: number; pressScale: number; hideFade: number; shapes: Record<'arrow' | 'hand' | 'text', { file: string; hotspot: [number, number] }> };
   caret: { width: number; solidFrames: number; blinkFrames: number };
   loop: { frames: number };
-  ripple: { lead: number; frames: number; from: number; contact: number; to: number; color: string; fill: string; width: number };
 }
 
 export interface Layout {
@@ -57,7 +56,7 @@ export type StageCursor = Omit<CursorArt, 'size'> & { size?: [number, number] };
 /** `address` is the text in the address bar; empty leaves the bar blank. `cursors` are the drawings the video
  *  uses, by the key overlayAt's cursor maps to. */
 export function stageHtml(theme: Theme, address: string, box: Layout, cursors: Record<string, StageCursor>): string {
-  const { window: win, cursor, ripple } = theme;
+  const { window: win, cursor } = theme;
   const [W, H] = theme.stage.size;
   const keys = Object.keys(cursors);
   return `<!doctype html>
@@ -77,14 +76,12 @@ export function stageHtml(theme: Theme, address: string, box: Layout, cursors: R
   .content { position: absolute; left: 0; top: ${win.bar.height}px; width: ${box.width}px; height: ${box.height - win.bar.height}px; overflow: hidden; }
   .content img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   #caret { position: absolute; left: 0; top: 0; display: none; }
-  .ripple { position: absolute; border-radius: 50%; box-sizing: border-box; border: ${ripple.width}px solid ${ripple.color}; background: ${ripple.fill}; }
   .cursor { position: absolute; left: 0; top: 0; visibility: hidden; }
 </style>
 <div class="window">
   <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><div class="address">${esc(address)}</div></div>
   <div class="content"><img id="shot" alt=""><img id="fade" alt="" style="opacity: 0"><div id="caret"></div></div>
 </div>
-<div id="ripples"></div>
 ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${i}" src="${esc(cursors[key].src)}" alt="">`).join('')}
 <script>
   const box = ${JSON.stringify(box)};
@@ -111,7 +108,7 @@ ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${
     await img.decode();
     fit(img);
   };
-  const shot = document.getElementById('shot'), fade = document.getElementById('fade'), rip = document.getElementById('ripples');
+  const shot = document.getElementById('shot'), fade = document.getElementById('fade');
   const sx = (x) => box.contentLeft + x * box.k, sy = (y) => box.contentTop + y * box.k;
   const show = async (img, src) => { if (img.getAttribute('src') !== src) { img.src = src; await img.decode(); } };
   window.render = async ({ footage, overlay: o }) => {
@@ -133,12 +130,6 @@ ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${
       cur.style.opacity = o.opacity;
       cur.style.transform = 'translate(' + (sx(o.x) - h[0] * box.k) + 'px,' + (sy(o.y) - h[1] * box.k) + 'px) scale(' + (o.pressed ? pressScale : 1) + ')';
     }
-    rip.replaceChildren(...o.ripples.map((r) => {
-      const d = document.createElement('div');
-      d.className = 'ripple';
-      Object.assign(d.style, { left: sx(r.x) - r.radius + 'px', top: sy(r.y) - r.radius + 'px', width: 2 * r.radius + 'px', height: 2 * r.radius + 'px', opacity: r.opacity });
-      return d;
-    }));
   };
 </script>`;
 }

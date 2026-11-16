@@ -30,18 +30,6 @@ test('the window fits inside the stage, centred, keeping the page proportions', 
   assert.ok(Math.abs((box.height - theme.window.bar.height) / box.width - 900 / 1440) < 0.002);
 });
 
-test('the ripple starts before the press and is gone after it', () => {
-  const l = log(60);
-  const { lead, frames, contact } = theme.ripple;
-  assert.equal(overlayAt(l, theme, 10 - lead - 1).ripples.length, 0);
-  assert.equal(overlayAt(l, theme, 10 - lead).ripples.length, 1, 'starts `lead` frames early');
-  const atPress = overlayAt(l, theme, 10).ripples[0];
-  assert.equal(atPress.radius, contact);
-  assert.deepEqual([atPress.x, atPress.y], [200, 200]);
-  assert.ok(overlayAt(l, theme, 14).ripples[0].radius > contact, 'spreads after the press');
-  assert.equal(overlayAt(l, theme, 10 - lead + frames).ripples.length, 0);
-});
-
 test('the cursor follows the log and shrinks while pressed', () => {
   const l = log(60);
   assert.deepEqual([overlayAt(l, theme, 3).x, overlayAt(l, theme, 3).y], [130, 200]);
@@ -68,7 +56,6 @@ test('the loop crossfades to the first frame and brings the cursor home, with no
   const first = overlayAt(l, theme, 60), final = overlayAt(l, theme, 60 + C - 1);
   assert.ok(Math.hypot(first.x - end[0], first.y - end[1]) < 5);
   assert.ok(Math.hypot(final.x - start[0], final.y - start[1]) < 5);
-  assert.equal(final.ripples.length, 0);
 });
 
 test('composes a capture into a 2560×1440, 60 fps H.264 MP4', async () => {

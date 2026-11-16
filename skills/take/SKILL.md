@@ -1,6 +1,6 @@
 ---
 name: take
-description: Make a demo video of a web app from a plain-text scenario. Plays the steps in the real app at human pace, records frames straight from the browser, and composes a finished 60 fps MP4 with a browser window, cursor, click ripples and a seamless loop (2560×1440), or just the page at 1920×1080. Use when the user asks for a demo video, product video, screen recording, walkthrough clip or "video of the app doing X", or wants an existing take re-recorded or changed.
+description: Make a demo video of a web app from a plain-text scenario. Plays the steps in the real app at human pace, records frames straight from the browser, and composes a finished 60 fps MP4 with a browser window, cursor and a seamless loop (2560×1440), or just the page at 1920×1080. Use when the user asks for a demo video, product video, screen recording, walkthrough clip or "video of the app doing X", or wants an existing take re-recorded or changed.
 ---
 
 # Take

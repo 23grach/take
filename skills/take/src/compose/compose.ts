@@ -1,5 +1,5 @@
 // Turns a capture (frames + events) into a finished video: the footage sits in a browser window on a
-// background, and the cursor and click ripples are drawn on top from the event log.
+// background, and the cursor is drawn on top from the event log.
 // The stage is an HTML page rendered in Chromium, one screenshot per video frame, piped into ffmpeg.
 // Every frame depends only on the log, so several browsers draw different frames at once.
 import fs from 'node:fs';
@@ -212,7 +212,7 @@ export function caretAt(log: EventLog, theme: Theme, f: number) {
   return { ...c, opacity: on ? fade : 0 };
 }
 
-/** What the cursor and ripples look like in one video frame. Pure: depends only on the log, the theme and the frame. */
+/** What the cursor looks like in one video frame. Pure: depends only on the log, the theme and the frame. */
 export function overlayAt(log: EventLog, theme: Theme, f: number) {
   const opacity = opacityAt(log, theme, f);
   if (f >= log.frames) {
@@ -221,7 +221,7 @@ export function overlayAt(log: EventLog, theme: Theme, f: number) {
     const [a, b] = [log.pointer[log.pointer.length - 1], log.pointer[0]];
     const p = loopProgress(log, theme, f);
     const shape = p < 0.5 ? shapeAt(log, log.frames - 1) : shapeAt(log, 0);
-    return { x: a[0] + (b[0] - a[0]) * p, y: a[1] + (b[1] - a[1]) * p, shape, opacity, pressed: false, ripples: [], caret: caretAt(log, theme, f) };
+    return { x: a[0] + (b[0] - a[0]) * p, y: a[1] + (b[1] - a[1]) * p, shape, opacity, pressed: false, caret: caretAt(log, theme, f) };
   }
   const [x, y] = log.pointer[f];
   const downs = log.events.filter((e) => e.type === 'down');
@@ -230,24 +230,7 @@ export function overlayAt(log: EventLog, theme: Theme, f: number) {
     const up = ups.find((u) => u.frame >= d.frame);
     return f >= d.frame && f < (up?.frame ?? Infinity);
   });
-  const r = theme.ripple;
-  const ripples = [];
-  for (const d of downs) {
-    if (d.type !== 'down') continue;
-    // The ripple starts a few frames before the press (anticipation), gathers to the contact size on the
-    // press, then spreads out and fades.
-    const t = f - (d.frame - r.lead);
-    if (t < 0 || t >= r.frames) continue;
-    const easeOut = (u: number) => 1 - (1 - u) ** 3;
-    if (t < r.lead) {
-      const u = easeOut(t / r.lead);
-      ripples.push({ x: d.x, y: d.y, radius: r.from + (r.contact - r.from) * u, opacity: u });
-    } else {
-      const u = (t - r.lead) / (r.frames - r.lead);
-      ripples.push({ x: d.x, y: d.y, radius: r.contact + (r.to - r.contact) * easeOut(u), opacity: (1 - u) ** 1.5 });
-    }
-  }
-  return { x, y, shape: shapeAt(log, f), opacity, pressed, ripples, caret: caretAt(log, theme, f) };
+  return { x, y, shape: shapeAt(log, f), opacity, pressed, caret: caretAt(log, theme, f) };
 }
 
 export async function compose({ capture, out, theme: themeName = 'default', address, range, follow, workers: asked }: ComposeOptions): Promise<ComposeResult> {
@@ -286,11 +269,10 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
   const html = stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art);
   const staged = new Set(Object.keys(art));
   const first = range?.[0] ?? 0;
-  const lead = theme.ripple.lead;
-  /** Can frame f be drawn? Following a recording, waits until it has every event that shows in frame f (a
-   *  ripple starts `lead` frames before its click). False once the video has no frame f. */
+  /** Can frame f be drawn? Following a recording, waits until it has recorded frame f. False once the video
+   *  has no frame f. */
   const ready = async (f: number): Promise<boolean> => {
-    while (!ended && recorded <= f + lead) ({ frames: recorded, ended } = await follow!.wait(f + lead + 1));
+    while (!ended && recorded <= f) ({ frames: recorded, ended } = await follow!.wait(f + 1));
     while (info.frames.length < recorded) info.frames.push(frameFile(info.frames.length));
     return f <= (range ? range[1] : totalFrames(log, theme) - 1);
   };

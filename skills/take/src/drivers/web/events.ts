@@ -2,7 +2,7 @@ import type { Cursor } from './cursor.ts';
 import type { Caret } from './caret.ts';
 
 // The event log a performance leaves behind (events.json). Everything the compositor draws
-// afterwards (cursor, click ripples, zoom, the loop) comes from here. Positions and boxes are in CSS pixels
+// afterwards (cursor, zoom, the loop) comes from here. Positions and boxes are in CSS pixels
 // of the page viewport; times are frame numbers at the log's fps.
 
 export interface Box {
