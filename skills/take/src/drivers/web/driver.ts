@@ -3,7 +3,7 @@ import type { Locator, Page } from 'playwright';
 import { DEFAULTS, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
 import type { Box, Event, EventLog, StepLog } from './events.ts';
-import { PACING, dragMs, ease, frames, scrollMs, travelMs, typingSchedule } from './pacing.ts';
+import { PACING, dragMs, ease, frames, scrollMs, spring, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
 import { caretAt, type Caret } from './caret.ts';
@@ -163,7 +163,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     const f0 = clock.frame;
     for (;;) {
       const k = Math.min(n, clock.frame - f0 + 1);
-      const p = ease(k / n);
+      const p = spring(k / n);
       const [dx, dy] = [dest[0] - from[0], dest[1] - from[1]];
       const bend = Math.sin(Math.PI * p) * arc;
       pointer = [from[0] + dx * p - dy * bend, from[1] + dy * p + dx * bend];

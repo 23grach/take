@@ -4,6 +4,7 @@ export const PACING = {
   start: [0.62, 0.72] as [number, number],
   travel: { base: 200, perDoubling: 150, unit: 50, min: 300, max: 1000 },
   arc: 0.06,
+  stiffness: 7,
   settle: 140,
   press: 90,
   multiClickPress: 60,
@@ -29,6 +30,11 @@ export function scrollMs(distance: number): number {
 }
 
 export const ease = (t: number) => t * t * t * (10 - 15 * t + 6 * t * t);
+
+export function spring(t: number, stiffness = PACING.stiffness): number {
+  const settled = (x: number) => 1 - (1 + x) * Math.exp(-x);
+  return settled(stiffness * t) / settled(stiffness);
+}
 
 export function typingSchedule(text: string, cps: number, fps = PACING.fps): number[] {
   const chars = [...text];
