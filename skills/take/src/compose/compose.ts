@@ -16,9 +16,10 @@ import { ease } from '../drivers/web/pacing.ts';
 import type { Cursor } from '../drivers/web/cursor.ts';
 import { cursorArt, type ArtSet } from './cursor-art.ts';
 import type { StageCursor } from './stage.ts';
+import { addSound, readSound } from './sound.ts';
 
 export interface ComposeOptions {
-  /** Folder with capture.json, events.json and frames/. */
+  /** Folder with capture.json, events.json and frames/, and sound.json with sound/ when the take made sound. */
   capture: string;
   /** The MP4 to write. */
   out: string;
@@ -280,6 +281,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
   fs.mkdirSync(path.dirname(path.resolve(out)), { recursive: true });
   // Written next to the video and renamed at the end, so a failed run never leaves half a video in its place.
   const part = `${out}.part`;
+  const mixed = `${out}.sound.part`;
   const browsers: Browser[] = [];
   const ffmpeg = encoder(part, info.fps);
   let frames = 0;
@@ -349,12 +351,21 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
     while (going && ahead.length) going = await send();
     ffmpeg.stdin.end();
     await ffmpeg.done;
-    fs.renameSync(part, out);
+    // Read only now: following a recording, its sound is written as it ends.
+    const sound = readSound(capture);
+    const seconds = frames / info.fps;
+    // With the loop, the sound fades out as the picture crossfades back to the start, so it doesn't jump at the seam.
+    const loopFrom = log.loop === 'crossfade-to-start' && log.frames - first < frames ? (log.frames - first) / info.fps : undefined;
+    if (sound && (await addSound(part, mixed, sound, capture, { seconds, offset: first / info.fps, fadeFrom: loopFrom }))) {
+      fs.renameSync(mixed, out);
+      fs.rmSync(part);
+    } else fs.renameSync(part, out);
   } catch (e) {
     // Closing its input first: ffmpeg waiting for the next picture doesn't notice a polite stop.
     ffmpeg.stdin.destroy();
     ffmpeg.kill('SIGKILL');
     fs.rmSync(part, { force: true });
+    fs.rmSync(mixed, { force: true });
     throw e;
   } finally {
     await Promise.all(browsers.map((b) => b.close()));

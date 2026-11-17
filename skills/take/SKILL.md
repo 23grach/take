@@ -74,6 +74,8 @@ Say they can change any step's length ("make the dialog stay 3 s", "type slower"
 
 `take run takes/<name>/take.json`. It records in studio mode (exact 60 fps), composes and checks; expect a few seconds of work per second of video. Don't use `--mode live` for a video you deliver: it's a quick draft and stutters on fast animations.
 
+The video carries the page's own sound (click sounds, chimes, a video's soundtrack), each on its frame: Web Audio, `<audio>`/`<video>`/`new Audio()`, and streamed players like YouTube's. Studio mode only; `"sound": false` makes it silent. A sound that doesn't play in the app (a video behind a cookie dialog: close the dialog in `setup`) isn't in the video either. Not caught: speech synthesis, media loaded in a background worker, and a streamed video's sound after it seeks, changes quality or plays an ad. See [Sound](docs/take-format.md#sound).
+
 ### 6. Check
 
 Read the report `take run` prints (it ends with the script as recorded: lengths the user set should match) and look at `out/<name>.contact.jpg` against the second part of the review checklist.
@@ -92,6 +94,7 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 | The user asks | Do |
 |---|---|
 | "no loop" / "loop it" | `loop` → `"none"` / `"crossfade-to-start"`, then `take run`. |
+| "no sound", "mute it" | `"sound": false`, then `take run`. |
 | "no window", "just the page", "plain 1920×1080" | `theme` → `"plain"` and `target.viewport` → `[1920, 1080]`: the page fills a 1920×1080 video, no window or background. The viewport changes the layout, so probe again, then run. |
 | "change the address" | `target.address`, then `take compose takes/<name>/capture --address <new>` (no re-record), or `take run`. |
 | "show the result longer", "start slower", "pause after X" | Change or add `hold` steps, then probe and run. |

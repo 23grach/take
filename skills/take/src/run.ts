@@ -84,10 +84,11 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
     abort.abort();
   });
   try {
-    const { capture: info, events } = (recorded = await record(take, { mode, out: capture, headed, onFrame: recording?.frame, commit: !recording, signal: abort.signal }));
+    const { capture: info, events, warnings } = (recorded = await record(take, { mode, out: capture, headed, onFrame: recording?.frame, commit: !recording, signal: abort.signal }));
     recording?.end(events);
     log(`✓ recorded  ${info.frames.length} frames (${(info.frames.length / info.fps).toFixed(2)} s of app) in ${lap()} → ${rel(capture)}`);
     if (info.visibleWindow) log(`⚠ ${VISIBLE_NOTE}`);
+    for (const w of warnings) log(`⚠ ${w}`);
   } catch (e) {
     recordFailed = composeError === undefined;
     recording?.fail(e);

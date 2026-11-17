@@ -170,14 +170,14 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
     assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
     const { freezePage } = await import('../src/drivers/web/capture.ts');
     const { openTake } = await import('../src/drivers/web/browser.ts');
-    const { stepVideos } = await import('../src/drivers/web/media.ts');
+    const { stepMedia } = await import('../src/drivers/web/media.ts');
     const opened = await openTake(r.take, { prepare: (p) => freezePage(p) });
     try {
       const p = opened.page;
       for (let i = 0; i < 100 && !(await p.evaluate(() => !document.querySelector('video')!.paused)); i++) await new Promise((res) => setTimeout(res, 50));
-      const start = (await stepVideos(p, 0), await p.evaluate(() => document.querySelector('video')!.currentTime));
+      const start = (await stepMedia(p, 0), await p.evaluate(() => document.querySelector('video')!.currentTime));
       let boxes;
-      for (let f = 0; f < 60; f++) boxes = await stepVideos(p, Math.round((f + 1) * (1000 / 60)) - Math.round(f * (1000 / 60)));
+      for (let f = 0; f < 60; f++) ({ boxes } = await stepMedia(p, Math.round((f + 1) * (1000 / 60)) - Math.round(f * (1000 / 60))));
       const now = await p.evaluate(() => document.querySelector('video')!.currentTime);
       // Within two of the video's own frames (30 fps): seeks are skipped while the same picture still shows.
       assert.ok(Math.abs(now - start - 1) < 0.07, `60 frames moved the video on ${(now - start).toFixed(3)} s, not 1 s`);
