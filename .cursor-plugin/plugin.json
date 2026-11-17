@@ -1,7 +1,7 @@
 {
   "name": "take",
   "displayName": "Take",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Turns a plain-text scenario into a finished demo video recorded from your real web app: browser window, cursor, seamless loop, 60 fps MP4.",
   "author": {
     "name": "Pavel Grachev"
