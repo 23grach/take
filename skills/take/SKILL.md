@@ -5,7 +5,7 @@ description: Make a demo video of a web app from a plain-text scenario. Plays th
 
 # Take
 
-You turn the user's scenario into an exact `take.json`, prove every step works with a storyboard, get one approval, then a script records and composes the video. You are never in the loop while recording: everything you decide goes into `take.json`.
+You turn the user's scenario into an exact `take.json`, prove every step works with a storyboard, show the user the timeline and wait for them to press Record, then a script records and composes the video. You are never in the loop while recording: everything you decide goes into `take.json`.
 
 The CLI lives in this skill's base directory, the folder that holds this `SKILL.md`: run it as `node <base>/bin/take <command>`. Below, `take` means that.
 
@@ -63,12 +63,14 @@ Repeat until every step passes. If the same step still fails after three tries, 
 
 ### 4. Approve (the one question)
 
-Before showing anything, check the storyboard against the first part of [docs/review-checklist.md](docs/review-checklist.md) and fix what you can. Then show the user:
-- `probe/storyboard.jpg`;
-- the script with timecodes, from the end of the probe's output, as a table: start, length, and one plain-language line per step (what the viewer sees, not the probe's literal labels), the loop and the total length;
-- the settings you chose (address, loop, size).
+Every video waits here for the user's yes, even when they asked for it in one message: the scenario is not the approval. Never start `take run` in the same turn as the probe that passed.
 
-Say they can change any step's length ("make the dialog stay 3 s", "type slower"). Then ask one question: record it, or change the timing first? A new length goes into that step's `"ms"` ([Timing](docs/take-format.md#timing)); probe again and show the new script, with the storyboard only if it changed. A `⚠ … it can't be under …` means the step can't be that short: tell the user the shortest it can be. Any other change request goes back to step 3. Don't record before the user says yes.
+Before showing anything, check the storyboard against the first part of [docs/review-checklist.md](docs/review-checklist.md) and fix what you can. Then show the user, in this order:
+1. **The timeline** of the video, from the timecoded script at the end of the probe's output, as a table: start, length, and one plain-language line per step (what the viewer sees, not the probe's literal labels), then the loop and the total length.
+2. `probe/storyboard.jpg`.
+3. The settings you chose (address, loop, size, sound), and anything personal on screen in a signed-in video.
+
+Say they can change any step's length ("make the dialog stay 3 s", "type slower"). Then end your turn with one question, **Record?**, answered by a **Record** button (first) and a **Change timing** button when your host has buttons or a question tool, otherwise as the last line of your message. A new length goes into that step's `"ms"` ([Timing](docs/take-format.md#timing)); probe again and show the new timeline, with the storyboard only if it changed, and ask again. A `⚠ … it can't be under …` means the step can't be that short: tell the user the shortest it can be. Any other change request goes back to step 3. Record only after the user answers Record or says yes in their own words.
 
 ### 5. Record
 
@@ -98,7 +100,7 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 | "no window", "just the page", "plain 1920×1080" | `theme` → `"plain"` and `target.viewport` → `[1920, 1080]`: the page fills a 1920×1080 video, no window or background. The viewport changes the layout, so probe again, then run. |
 | "change the address" | `target.address`, then `take compose takes/<name>/capture --address <new>` (no re-record), or `take run`. |
 | "show the result longer", "start slower", "pause after X" | Change or add `hold` steps, then probe and run. |
-| "make step 3 last 4 s", "the dialog should stay longer", a new length in the script | `"ms"` on that step, then probe (show the new script) and run. |
+| "make step 3 last 4 s", "the dialog should stay longer", a new length in the script | `"ms"` on that step, then probe, show the new timeline and ask **Record?** again (step 4). |
 | The first frame shows loading placeholders, empty banners or skeletons | Add `ready` to take.json: what the loaded page shows, e.g. `{ "visible": { "role": "button", "name": "Deposit" } }` (a list if several things load separately), then run. |
 | "type slower" / "faster" | `cps` on the type step (8 slow, 14 normal, 22 fast). |
 | "the app changed" / "re-record" | Probe; fix any step that fails; run. |

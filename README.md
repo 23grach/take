@@ -69,7 +69,7 @@ Steps:
 What happens next:
 
 1. **Rehearse.** The agent plays the steps in the app without recording and fixes anything that doesn't work.
-2. **Approve.** It shows you the storyboard (one picture per step) and the script with timecodes (when each step starts and how long it lasts), and asks one question: record it? Change any step's length first if you like ("keep the dialog on screen for 3 s").
+2. **Approve.** It shows you the timeline (when each step starts and how long it lasts) and the storyboard (one picture per step), then waits for you to press **Record**. Change any step's length first if you like ("keep the dialog on screen for 3 s").
 3. **Record.** Take plays the steps again at a person's pace and records every frame. The agent isn't involved anymore, so the video is exactly what was approved.
 4. **Check.** Take checks the video for smoothness and a clean loop, compares each step with its rehearsal picture so a missing panel or blank map doesn't slip through, and makes a contact sheet. You get the MP4.
 

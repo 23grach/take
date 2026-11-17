@@ -1,6 +1,6 @@
 # Scenario format v1
 
-A scenario is what you write: a short plain-text description of the video you want. The agent reads it, tries it in the app, turns it into an exact `take.json` ([take-format.md](take-format.md)), shows you one screenshot per step to approve, then records the video.
+A scenario is what you write: a short plain-text description of the video you want. The agent reads it, tries it in the app, turns it into an exact `take.json` ([take-format.md](take-format.md)), shows you the video's timeline and one screenshot per step, and records the video once you press Record.
 
 Write it the way you'd brief a colleague. Any language is fine. Copy [templates/scenario.md](../templates/scenario.md) to `takes/<name>/scenario.md` to start, or just tell the agent in chat and it writes the file for you.
 
