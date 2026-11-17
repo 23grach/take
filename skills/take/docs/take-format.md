@@ -9,7 +9,7 @@ A take is the exact list of steps a recording replays. The agent writes it while
   "target": { "kind": "web", "url": "http://127.0.0.1:4300/", "viewport": [1440, 900], "scale": 1.5 },
   "theme": "default",
   "steps": [
-    { "do": "hold", "ms": 2000, "mark": "start" },
+    { "do": "hold", "ms": 1000, "mark": "start" },
     { "do": "click", "target": { "role": "button", "name": "New project" },
       "waitFor": { "visible": { "role": "dialog", "name": "New project" } } },
     { "do": "type", "target": { "label": "Name" }, "text": "Moodboard", "cps": 14 },
@@ -48,7 +48,7 @@ Every step has `do`. Any step may also have `mark` (a unique name for that momen
 |---|---|---|
 | `click` | `target`, `clicks`? | The cursor travels to the element and clicks it. No separate hover step is needed. `"clicks": 2` double-clicks (selects a word, opens an item), `3` triple-clicks (selects a line or paragraph). A radio or checkbox hidden under its own label is clicked through the label, as a person would. `target` may also be a point `[x, y]` (as in `drag`) for things no target names, like an icon that only shows on hover: hover the row first, read the point off that step's picture. |
 | `hover` | `target` | The cursor travels to the element (or a point `[x, y]`) and rests there (to show a tooltip or hover state). |
-| `drag` | `from`, `to` | The cursor travels to `from`, presses, moves to `to` with the button held, and lets go: draws a shape, moves a slider, drops a card in a column. Each end is a [target](#targets) (its middle) or a point `[x, y]` in CSS pixels from the page's top left, e.g. `[540, 330]`, for places no element names, like a spot on a drawing canvas. |
+| `drag` | `from`, `to` | The cursor travels to `from`, presses, moves to `to` with the button held, and lets go: draws a shape, moves a slider, drops a card in a column. Each end is a [target](#targets) (`from` just below and right of its middle, like a click; `to` its middle) or a point `[x, y]` in CSS pixels from the page's top left, e.g. `[540, 330]`, for places no element names, like a spot on a drawing canvas. |
 | `type` | `text`, `target`?, `cps`? = 14 | Clicks the field if `target` is given, then types character by character at `cps` characters per second. Without `target`, types into whatever has focus. Give `cps` or `ms`, not both: with `ms` the typing speed follows from the length (between 5 and 40 characters per second; any time left over is a pause after). |
 | `press` | `key` | A single key, e.g. `"Enter"`, `"Escape"`, `"Meta+A"`. The browser's key names: `Meta` (⌘), `Control`, `Alt` (⌥), `Shift`, `ArrowUp`…; join keys with `+`. `take validate` flags others (`Cmd`, `Esc`) and names the right one. With `Meta`, `Control` or `Alt` held a letter is sent lowercase, as a real keyboard does, so `"Meta+K"` opens a ⌘K search; add `Shift` for a capital. |
 | `scroll` | `target` or `by: [x, y]` | Scrolls an element into view, or by a distance in pixels. An element already on screen isn't scrolled to, and the probe says so (`⚠ nothing scrolled`); use `by` to move the page anyway. A `by` scroll goes to whatever is under the cursor, so it also zooms a map or scrolls a list there; the probe notes when the page itself didn't move. |

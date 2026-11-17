@@ -58,7 +58,7 @@ One numbered line per thing the viewer sees happen. Name what's on screen in quo
 | `"Saved" appears` / `Wait for the upload to finish` | The video waits until it happens, at the app's own speed. |
 | `Pause 1 s` / `Show the result for 4 s` | Nothing happens for that long, so the viewer can take it in. |
 
-Pacing is automatic: the cursor moves like a person's, with short pauses between steps. The video always opens with **2 s** on the first screen and closes with **2 s** on the result, so you don't need to write those; write a `Pause` only for a moment in the middle that needs time.
+Pacing is automatic: the cursor moves like a person's, with short pauses between steps. The video always opens with **1 s** on the first screen and closes with **2 s** on the result, so you don't need to write those; write a `Pause` only for a moment in the middle that needs time.
 
 Multi-finger gestures (pinch, two-finger swipe) aren't supported yet.
 

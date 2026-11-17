@@ -89,7 +89,9 @@ Read the report `take run` prints (it ends with the script as recorded: lengths 
 
 ### 7. Deliver
 
-Give the user the MP4 path, its length, and the contact sheet. Say that `scenario.md` and `take.json` stay in the folder, so the video can be changed or re-recorded later by asking.
+Give the user the MP4 path, its length, and the contact sheet. Say that `scenario.md` and `take.json` stay in the folder, so the video can be changed or re-recorded later by asking. When you record a video again, the one before it stays next to it as `out/<name>.previous.mp4` until the next recording, so the user can compare the two.
+
+Then offer one concrete cut and what it saves, picked from the timeline (for example "the dialog holds 3 s; 1.5 s would make the video 1.5 s shorter"), not a list of options. Skip it when the video has nothing to cut.
 
 ## Changing a video later
 
@@ -100,6 +102,7 @@ Give the user the MP4 path, its length, and the contact sheet. Say that `scenari
 | "no window", "just the page", "plain 1920×1080" | `theme` → `"plain"` and `target.viewport` → `[1920, 1080]`: the page fills a 1920×1080 video, no window or background. The viewport changes the layout, so probe again, then run. |
 | "change the address" | `target.address`, then `take compose takes/<name>/capture --address <new>` (no re-record), or `take run`. |
 | "show the result longer", "start slower", "pause after X" | Change or add `hold` steps, then probe and run. |
+| "shorter", "faster", "too slow" | Cut holds and step lengths as [Length](docs/pacing.md#length) says, then probe, show the new timeline and ask **Record?** again (step 4). |
 | "make step 3 last 4 s", "the dialog should stay longer", a new length in the script | `"ms"` on that step, then probe, show the new timeline and ask **Record?** again (step 4). |
 | The first frame shows loading placeholders, empty banners or skeletons | Add `ready` to take.json: what the loaded page shows, e.g. `{ "visible": { "role": "button", "name": "Deposit" } }` (a list if several things load separately), then run. |
 | "type slower" / "faster" | `cps` on the type step (8 slow, 14 normal, 22 fast). |

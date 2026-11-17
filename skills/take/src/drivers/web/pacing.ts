@@ -4,6 +4,7 @@ export const PACING = {
   start: [0.62, 0.72] as [number, number],
   travel: { base: 200, perDoubling: 150, unit: 50, min: 300, max: 1000 },
   arc: 0.06,
+  aim: { right: 0.22, down: 0.3, maxRight: 16, maxDown: 12 },
   stiffness: 7,
   settle: 140,
   press: 90,

@@ -300,9 +300,9 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
     const seconds = frames / info.fps;
     const loopFrom = log.loop === 'crossfade-to-start' && log.frames - first < frames ? (log.frames - first) / info.fps : undefined;
     if (sound && (await addSound(part, mixed, sound, capture, { seconds, offset: first / info.fps, fadeFrom: loopFrom }))) {
-      fs.renameSync(mixed, out);
+      replaceKeepingPrevious(mixed, out);
       fs.rmSync(part);
-    } else fs.renameSync(part, out);
+    } else replaceKeepingPrevious(part, out);
   } catch (e) {
     ffmpeg.stdin.destroy();
     ffmpeg.kill('SIGKILL');
@@ -344,4 +344,11 @@ function encoder(out: string, fps: number) {
     done: Promise<void>;
     failed: () => Error | undefined;
   };
+}
+
+const previousOf = (video: string) => video.replace(/(\.mp4)?$/i, '.previous.mp4');
+
+function replaceKeepingPrevious(fresh: string, video: string) {
+  if (fs.existsSync(video)) fs.renameSync(video, previousOf(video));
+  fs.renameSync(fresh, video);
 }

@@ -25,6 +25,11 @@ export function asPressed(key: string): string {
 
 type Point = [number, number];
 const center = (b: Box): Point => [b.x + b.width / 2, b.y + b.height / 2];
+const belowLabel = (b: Box): Point => {
+  const { right, down, maxRight, maxDown } = PACING.aim;
+  const [x, y] = center(b);
+  return [x + Math.min(b.width * right, maxRight), y + Math.min(b.height * down, maxDown)];
+};
 const round = (n: number) => Math.round(n * 10) / 10;
 
 export interface PerformOptions {
@@ -177,7 +182,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   async function travel(loc: Locator, t: Target): Promise<Box> {
     await bringIntoView(loc, t);
     let box = await boxOf(loc, t);
-    await moveTo(async () => center((box = await boxOf(loc, t))));
+    await moveTo(async () => belowLabel((box = await boxOf(loc, t))));
     return box;
   }
 

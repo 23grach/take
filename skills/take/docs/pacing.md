@@ -1,6 +1,6 @@
 # Pacing: from scenario to take.json
 
-Rules for writing `take.json` ([take-format.md](take-format.md)) from a scenario ([scenario-format.md](scenario-format.md)). The driver already moves the cursor like a person (eased travel, a slight arc, a pause on the target, 0.45 s between steps), so the take only says *what* happens and *what to wait for*.
+Rules for writing `take.json` ([take-format.md](take-format.md)) from a scenario ([scenario-format.md](scenario-format.md)). The driver already moves the cursor like a person (eased travel, a slight arc, a pause on the target, 0.45 s between steps, and a stop just below and right of a control's middle so the hand never covers its label), so the take only says *what* happens and *what to wait for*.
 
 ## Settings
 
@@ -17,13 +17,13 @@ Rules for writing `take.json` ([take-format.md](take-format.md)) from a scenario
 
 ```json
 "steps": [
-  { "do": "hold", "ms": 2000, "mark": "start" },
+  { "do": "hold", "ms": 1000, "mark": "start" },
   …the scenario's steps…,
   { "do": "hold", "ms": 2000, "mark": "result" }
 ]
 ```
 
-- **2 s opening hold** on the first screen, marked `start`, and a **2 s closing hold** on the result, marked `result`. Always, unless the user asks otherwise. The scenario never mentions them.
+- **1 s opening hold** on the first screen, marked `start`, and a **2 s closing hold** on the result, marked `result`. Always, unless the user asks otherwise. The scenario never mentions them. The opening is short on purpose: a video scrolling past in a feed has to show something happening within its first second.
 - No other holds, except a scenario `Pause`.
 
 ## Steps
@@ -63,3 +63,8 @@ Add `"exact": true` when the name is part of another name on the page (`Create` 
 ## Length
 
 Aim for 3–7 scenario steps and 8–20 s of video. If a scenario is much longer, suggest splitting it into two videos before rehearsing.
+
+When the user wants it shorter:
+- "Shorter" with no number: cut the holds and `"ms"` lengths that run past the action by 25–50%. Pauses almost always end up shorter than the first draft, never longer.
+- Cut pauses, never steps: a step the scenario asks for stays, however short the video gets.
+- Keep the 2 s closing hold for last: it's where the viewer reads the result.

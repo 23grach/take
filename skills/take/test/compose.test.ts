@@ -75,7 +75,7 @@ test('composes a capture into a 2560×1440, 60 fps H.264 MP4', async () => {
   }
 });
 
-test('the plain theme is just the page: a 1920×1080 page fills the 1920×1080 video to its edges', async () => {
+test('the plain theme is just the page: a 1920×1080 page fills the 1920×1080 video to its edges, and the video it replaces is kept as .previous', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
   try {
     fs.mkdirSync(path.join(dir, 'frames'));
@@ -84,7 +84,9 @@ test('the plain theme is just the page: a 1920×1080 page fills the 1920×1080 v
     fs.writeFileSync(path.join(dir, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [1920, 1080], frames, renderSeconds: 0, images: 10 }));
     fs.writeFileSync(path.join(dir, 'events.json'), JSON.stringify({ ...log(10), viewport: [1920, 1080], loop: 'none', events: [], pointer: Array(10).fill([960, 540]) }));
     const out = path.join(dir, 'out.mp4');
+    fs.writeFileSync(out, 'the video before');
     await compose({ capture: dir, out, theme: 'plain' });
+    assert.equal(fs.readFileSync(path.join(dir, 'out.previous.mp4'), 'utf8'), 'the video before');
     const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=width,height', '-of', 'json', out], { encoding: 'utf8' }));
     assert.deepEqual([probe.streams[0].width, probe.streams[0].height], [1920, 1080]);
     for (const crop of ['1920:8:0:0', '1920:8:0:1072', '8:1080:0:0', '8:1080:1912:0']) {
