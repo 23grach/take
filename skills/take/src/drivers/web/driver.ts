@@ -1,5 +1,3 @@
-// Performs a take in a real page at a human pace, one frame at a time, and logs what happened.
-// The real mouse follows the same path the cursor will be drawn on, so hover states show in the footage.
 import { ownError } from './page-errors.ts';
 import type { Locator, Page } from 'playwright';
 import { DEFAULTS, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
@@ -10,19 +8,14 @@ import { describe, describeCondition, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
 import { caretAt, type Caret } from './caret.ts';
 
-/** A take that can't be performed, with the step and the reason in plain words. */
 export class TakeError extends Error {
   readonly step: number;
-  /** step -1: before the first step, while opening the app. */
   constructor(step: number, message: string) {
     super(step < 0 ? `opening the app: ${message}` : `step ${step + 1}: ${message}`);
     this.step = step;
   }
 }
 
-/** The key as a keyboard sends it: with Cmd, Ctrl or Alt held, a letter key gives its lowercase letter ("Meta+K"
- *  → "Meta+k"), as on a real keyboard; Playwright would send a capital K, which shortcuts listening for "k" ignore.
- *  With Shift held the capital stays. */
 export function asPressed(key: string): string {
   const parts = key.split('+');
   const last = parts.at(-1)!;
@@ -35,17 +28,11 @@ const center = (b: Box): Point => [b.x + b.width / 2, b.y + b.height / 2];
 const round = (n: number) => Math.round(n * 10) / 10;
 
 export interface PerformOptions {
-  /** Called after each step finishes (before the pause to the next), with where the pointer is. `take probe` screenshots here. */
   onStep?: (log: StepLog, pointer: [number, number]) => Promise<void>;
-  /** Called after every frame with the log so far (`frames`: how many frames there are so far). The log is the
-   *  one perform returns, growing: `take run` composes from it while recording. */
   onFrame?: (log: EventLog) => void;
-  /** Read the cursor and caret every frame for the event log (default). A rehearsal, which films nothing, skips it. */
   watch?: boolean;
 }
 
-/** The take's setup steps (closing a cookie banner, a welcome pop-up), done on `clock` without recording anything:
- *  the caller's clock moves page time on without filming. A failure says "setup step N". */
 export async function performSetup(page: Page, take: Take, clock: Clock): Promise<boolean> {
   if (!take.setup?.length) return false;
   try {
@@ -57,7 +44,6 @@ export async function performSetup(page: Page, take: Take, clock: Clock): Promis
   return true;
 }
 
-/** Opens nothing and closes nothing: the page must already show take.target.url. */
 export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true }: PerformOptions = {}): Promise<EventLog> {
   const [vw, vh] = take.target.viewport;
   let pointer: Point = [Math.round(vw * PACING.start[0]), Math.round(vh * PACING.start[1])];
@@ -88,16 +74,13 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     marks,
     loop: take.loop,
   };
-  let current = 0; // index of the step being performed, for messages
-  let waited = 0; // frames of the current step spent waiting for the app
+  let current = 0;
+  let waited = 0;
   const speed = clock.speed ?? 1;
   await page.mouse.move(...pointer);
 
-  /** Records where the pointer is in this frame, then moves one frame on. */
   async function tick() {
     path[clock.frame] = [round(pointer[0]), round(pointer[1])];
-    // The page under a still pointer can change too (a dialog opens), so look every frame.
-    // While a link opens the next page there is no page to ask: keep the cursor it had.
     if (watch) {
       const shape = await cursorAt(pointer).catch((): Cursor => cursors.at(-1)?.[1] ?? 'default');
       if (!sameCursor(cursors.at(-1)?.[1], shape)) cursors.push([clock.frame, shape]);
@@ -110,15 +93,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     if (pageErrors.length)
       throw new TakeError(current, `the app threw an error: "${pageErrors[0]}". Take stops rather than film a broken app; fix the app, or the step that sets it off`);
   }
-  /** One frame spent waiting for the app rather than acting (see StepLog.waited). */
   async function idle() {
     await tick();
     waited++;
   }
-  /** A time limit in frames: limits are wall time, so a fast-forwarding clock gets as many seconds as a normal one. */
   const limit = (ms: number) => frames(ms * speed);
-  /** Frames since `start`, as the video will have them: waiting for the app, fast-forwarded in a rehearsal, counts
-   *  at the video's pace. */
   const since = (start: number) => clock.frame - start - waited * (1 - 1 / speed);
 
   async function wait(ms: number) {
@@ -126,8 +105,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     while (clock.frame < end) await tick();
   }
 
-  /** Waits for exactly one visible element to match, and returns it. Several matches can be a moment in a
-   *  transition (an old and a new copy of a list), so they too get until the deadline to settle to one. */
   async function find(t: Target): Promise<Locator> {
     const loc = locate(page, t).filter({ visible: true });
     const give = clock.frame + limit(PACING.find);
@@ -143,23 +120,18 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
   }
 
-  /** Where the element is now. If it went away for a moment (re-rendered, replaced), find it again. */
   async function boxOf(loc: Locator, t: Target): Promise<Box> {
     for (let attempt = 0; ; attempt++) {
       const b = await loc.boundingBox({ timeout: 500 }).catch(() => null);
       if (b && b.width > 0 && b.height > 0) return { x: round(b.x), y: round(b.y), width: round(b.width), height: round(b.height) };
       if (attempt > 0) throw new TakeError(current, `${describe(t)} has no size on screen`);
-      await find(t); // waits until exactly one is back; the locator then points at it
+      await find(t);
     }
   }
 
-  /** Is the element on screen along one axis? Fully, with a couple of pixels' grace for rounding at the window's
-   *  edge; or, for something bigger than the screen (a canvas, a long panel), its middle. */
   const fitsAxis = (start: number, size: number, screen: number) =>
     size <= screen ? start >= -2 && start + size <= screen + 2 : start + size / 2 >= 0 && start + size / 2 <= screen;
 
-  /** Like a person: if the element is off screen, scroll it to the middle first. A scroll the wheel can't do
-   *  (the pointer isn't over the part that scrolls, or it's off to the side) falls back to jumping there. */
   async function bringIntoView(loc: Locator, t: Target) {
     let box = await boxOf(loc, t);
     const ok = (b: Box) => fitsAxis(b.x, b.width, vw) && fitsAxis(b.y, b.height, vh);
@@ -173,7 +145,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     await tick();
   }
 
-  /** What's at a point, in words, for "covered by …" messages. */
   const whatIsAt = ([x, y]: Point) =>
     page.evaluate(([x, y]) => {
       const el = document.elementFromPoint(x, y);
@@ -183,8 +154,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       return name ? `${role} "${name}"` : `a ${role}${el.classList.length ? ` (.${[...el.classList].slice(0, 2).join('.')})` : ''}`;
     }, [x, y] as Point);
 
-  /** Moves the pointer along a gently curved, eased path to a place that may itself be moving (a dialog scaling
-   *  in): `to` is read again every frame. A drag moves slower and straighter than a free hand. */
   async function moveTo(to: () => Promise<Point>, { drag = false } = {}): Promise<void> {
     const from = pointer;
     let dest = await to();
@@ -196,7 +165,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       const k = Math.min(n, clock.frame - f0 + 1);
       const p = ease(k / n);
       const [dx, dy] = [dest[0] - from[0], dest[1] - from[1]];
-      const bend = Math.sin(Math.PI * p) * arc; // bends to the right of the direction of travel
+      const bend = Math.sin(Math.PI * p) * arc;
       pointer = [from[0] + dx * p - dy * bend, from[1] + dy * p + dx * bend];
       await page.mouse.move(...pointer);
       if (k === n) return;
@@ -205,7 +174,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
   }
 
-  /** Moves the pointer onto the element, following it if it moves. */
   async function travel(loc: Locator, t: Target): Promise<Box> {
     await bringIntoView(loc, t);
     let box = await boxOf(loc, t);
@@ -213,9 +181,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     return box;
   }
 
-  /** Brings the pointer onto the element and waits until a press there would land on it. Something passing over
-   *  it (a toast, a closing overlay) or a button that enables a moment later gets time to clear; if the element
-   *  moved meanwhile, follow it. Only then give up, saying what's in the way. */
   async function reach(loc: Locator, t: Target): Promise<Box> {
     await travel(loc, t);
     await wait(PACING.settle);
@@ -230,7 +195,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       }
       const onTarget = await loc.evaluate((el, [x, y]) => {
         const hit = document.elementFromPoint(x, y);
-        // A radio or checkbox hidden under its own label is clicked through the label, as a person would.
         const labels = [...((el as HTMLInputElement).labels ?? [])];
         return !!hit && (el === hit || el.contains(hit) || labels.some((l) => l === hit || l.contains(hit)));
       }, pointer);
@@ -253,7 +217,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     await page.mouse.up({ clickCount });
   }
 
-  /** `clicks` 2 or 3: a double- or triple-click, quick as a person's (each press shorter, a short gap between). */
   async function click(loc: Locator, t: Target, clicks = 1): Promise<Box> {
     const box = await reach(loc, t);
     for (let n = 1; n <= clicks; n++) {
@@ -266,7 +229,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     return box;
   }
 
-  /** A click at a point on the page, for things no target names (an icon that only shows on hover). */
   async function clickAt(point: Point, clicks = 1): Promise<undefined> {
     await moveTo(async () => point);
     await wait(PACING.settle);
@@ -280,7 +242,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     return undefined;
   }
 
-  /** Press at `from`, move to `to` with the button held, let go: draws a shape, moves a slider, reorders a list. */
   async function drag(from: Spot, to: Spot): Promise<Box | undefined> {
     let box: Box | undefined;
     if (Array.isArray(from)) {
@@ -310,8 +271,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       if (step[0] || step[1]) {
         const before = waitForMove ? await scrolledAt(pointer) : undefined;
         await page.mouse.wheel(...step);
-        // Sites with their own wheel handlers (x.com) apply a wheel nudge a moment later; capturing before
-        // it lands shows a stalled frame, then a double step. Wait until the page has moved.
         if (before !== undefined) waitForMove = await movedFrom(before, pointer);
         events.push({ frame: clock.frame, type: 'scroll', dx: step[0], dy: step[1] });
         done = [done[0] + step[0], done[1] + step[1]];
@@ -320,7 +279,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
   }
 
-  /** How far everything that scrolls under the pointer, and the page itself, is scrolled. */
   function scrolledAt(at: Point): Promise<number> {
     return page
       .evaluate(([x, y]) => {
@@ -331,7 +289,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       .catch(() => 0);
   }
 
-  /** Waits (wall time, up to 200 ms) for a scroll to show. False if nothing moved: the page can't scroll there. */
   async function movedFrom(before: number, at: Point): Promise<boolean> {
     const until = performance.now() + 200;
     while (performance.now() < until) {
@@ -371,8 +328,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       case 'type': {
         if (s.target) log.target = await click(await find(s.target), s.target);
         if (s.target) await wait(PACING.settle);
-        // Characters land on whole frames, at a person's uneven rhythm that averages the typing speed. Given a
-        // length, the typing fills what's left of it after the usual pause, within a believable speed.
         const f0 = clock.frame;
         const chars = [...s.text].length;
         let cps = s.cps;
@@ -393,7 +348,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       case 'press':
         events.push({ frame: clock.frame, type: 'key', key: s.key });
         await page.keyboard.press(asPressed(s.key)).catch((e: Error) => {
-          // validate catches most; the browser may still refuse one, so say which step and which key.
           const unknown = /Unknown key: "([^"]*)"/.exec(e.message)?.[1];
           throw unknown === undefined ? e : new TakeError(current, `unknown key "${unknown}" in "${s.key}"; use the browser's key names, e.g. Meta, Control, Alt, Shift, Enter, Escape`);
         });
@@ -411,7 +365,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
           const loc = await find(s.target);
           const box = await boxOf(loc, s.target);
           const inView = fitsAxis(box.x, box.width, vw) && fitsAxis(box.y, box.height, vh);
-          // Bring it to the middle of the screen, which reads better than the edge.
           if (!inView) await scroll(0, Math.round(center(box)[1] - vh / 2));
           else log.note = `nothing scrolled: ${describe(s.target)} is already on screen; scroll "by" a distance to move the page`;
           log.target = await boxOf(loc, s.target);
@@ -437,7 +390,6 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
     await run(s, log);
     log.end = Math.max(log.start, clock.frame - 1);
-    // A step given a length: the pause after it fills the rest. One whose action alone takes longer runs over.
     const length = s.do === 'hold' || s.ms === undefined ? undefined : frames(s.ms);
     if (length !== undefined && since(log.start) > length + 1) {
       const over = `takes ${(since(log.start) / clock.fps).toFixed(2)} s, longer than the ${+(s.ms! / 1000).toFixed(2)} s its "ms" gives: the action itself${s.waitFor || s.do === 'wait' ? ', with waiting for the app,' : ''} takes that long`;
@@ -447,19 +399,15 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps.push(log);
     await onStep?.(log, pointer);
     if (length !== undefined) while (since(log.start) < length) await tick();
-    // No gap after a hold: a hold already is a pause, and the last one ends the take.
     else if (s.do !== 'hold' && i < take.steps.length - 1) await wait(PACING.gap);
   }
   page.off('pageerror', onError);
   fillSkipped(path);
-  // In live mode the last frame can skip too: hold the pointer where it was up to the end.
   while (path.length < clock.frame) path.push(path.at(-1)!);
   eventLog.frames = clock.frame;
   return eventLog;
 }
 
-/** In live mode a slow frame makes the clock skip ahead. Fill those frames in between their neighbours,
- *  so the cursor drawn later moves smoothly even where the footage hitched. */
 function fillSkipped(path: Point[]) {
   for (let f = 1; f < path.length; f++) {
     if (path[f]) continue;

@@ -1,22 +1,17 @@
 name: test
 
 on:
-  # Branches are tested through their pull request; pushes are tested on main only.
   push:
     branches: [main]
   pull_request:
 
-# A newer push to the same branch or pull request replaces a run still going.
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   test:
-    # Take records with Google Chrome when it's installed, as it is on both of GitHub's machines: Linux with both
-    # supported Node versions, and a Mac with the newest.
     runs-on: ${{ matrix.os }}
-    # The suite takes a few minutes; a hang shouldn't hold the runner for GitHub's default 6 hours.
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -36,22 +31,17 @@ jobs:
           cache: npm
           cache-dependency-path: skills/take/package-lock.json
       - run: npm ci
-      # One package-list update: Playwright's step runs it, ffmpeg installs right after.
       - if: runner.os == 'Linux'
         run: npx playwright install-deps chromium && sudo apt-get install -y ffmpeg
-      # ffmpeg, and GNU timeout (as gtimeout) for the per-file time limit below.
       - if: runner.os == 'macOS'
         run: brew install ffmpeg coreutils
       - run: node bin/take doctor
-      # The point of these runs is recording with Google Chrome: fail if Take would fall back to Chromium.
       - name: Take uses Google Chrome
         run: node bin/take doctor | grep -q "Browser *Google Chrome" || { echo "::error::Take isn't using Google Chrome here"; exit 1; }
       - run: npm run typecheck
-      # One test file at a time, each with its own time limit, so a file that hangs is named in the log and the
-      # rest still run, instead of the whole job waiting silently until the job's time limit.
       - name: tests
         run: |
-          set +e  # keep going after a failing file
+          set +e
           if [ "$RUNNER_OS" = "Linux" ]; then limit="timeout"; screen="xvfb-run -a"; else limit="gtimeout"; screen=""; fi
           failed=0
           for f in test/*.test.ts; do

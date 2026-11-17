@@ -1,4 +1,3 @@
-// Turns a take's target or condition into a Playwright locator.
 import type { Locator, Page } from 'playwright';
 import type { Condition, Target } from '../../take/format.ts';
 
@@ -10,7 +9,6 @@ export function locate(page: Page, t: Target): Locator {
   return page.locator(t.css);
 }
 
-/** Plain-words name for messages: button "New project", field labelled "Name". */
 export function describe(t: Target): string {
   if ('role' in t) return t.name ? `${t.role} "${t.name}"` : `a ${t.role}`;
   if ('label' in t) return `field labelled "${t.label}"`;
@@ -25,7 +23,6 @@ export function describeCondition(c: Condition): string {
   return `${describe(c.hidden)} to go away`;
 }
 
-/** Is the condition true right now? Instant: never waits. */
 export async function holds(page: Page, c: Condition): Promise<boolean> {
   if ('text' in c) return (await page.getByText(c.text).filter({ visible: true }).count()) > 0;
   if ('visible' in c) return (await locate(page, c.visible).filter({ visible: true }).count()) > 0;

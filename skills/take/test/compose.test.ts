@@ -46,12 +46,10 @@ test('the loop crossfades to the first frame and brings the cursor home, with no
   assert.equal(totalFrames(l, theme), 60 + C);
   assert.equal(totalFrames({ ...l, loop: 'none' }, theme), 60);
   assert.equal(footageAt(info, l, theme, 59).fade, null);
-  // Opacity rises every frame, starts above 0 and stops short of 1: the next frame is the video's first.
   const ps = Array.from({ length: C }, (_, k) => loopProgress(l, theme, 60 + k));
   assert.ok(ps[0] > 0 && ps.at(-1)! < 1 && ps.every((p, i) => i === 0 || p > ps[i - 1]));
   const last = footageAt(info, l, theme, 60 + C - 1);
   assert.deepEqual([last.src, last.fade?.src], ['f59', 'f0']);
-  // The cursor leaves from where the take ended and closes in on where it began.
   const [end, start] = [l.pointer[59], l.pointer[0]];
   const first = overlayAt(l, theme, 60), final = overlayAt(l, theme, 60 + C - 1);
   assert.ok(Math.hypot(first.x - end[0], first.y - end[1]) < 5);
@@ -89,7 +87,6 @@ test('the plain theme is just the page: a 1920×1080 page fills the 1920×1080 v
     await compose({ capture: dir, out, theme: 'plain' });
     const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=width,height', '-of', 'json', out], { encoding: 'utf8' }));
     assert.deepEqual([probe.streams[0].width, probe.streams[0].height], [1920, 1080]);
-    // Each edge of the frame is the page's dark grey: no title bar, no backdrop, no rounded corners.
     for (const crop of ['1920:8:0:0', '1920:8:0:1072', '8:1080:0:0', '8:1080:1912:0']) {
       const stats = execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-frames:v', '1', '-vf', `crop=${crop},signalstats,metadata=print:key=lavfi.signalstats.YMAX:file=-`, '-f', 'null', '-'], { encoding: 'utf8' });
       const max = Number(/YMAX=([\d.]+)/.exec(stats)![1]);
@@ -101,7 +98,6 @@ test('the plain theme is just the page: a 1920×1080 page fills the 1920×1080 v
 });
 
 test('several browsers share the frames, and the video keeps them in order', async () => {
-  // Each captured frame is a shade lighter than the one before, so the middle of the video brightens frame by frame.
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
   try {
     fs.mkdirSync(path.join(dir, 'frames'));
@@ -126,7 +122,6 @@ test('compose follows a recording as it happens: same frames, in order, and noth
     fs.mkdirSync(path.join(dir, 'frames'));
     execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', "color=c=black:size=1440x900:rate=60,format=gray,geq=lum='16+N*6'", '-frames:v', '30', '-start_number', '0', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
     const done: EventLog = { ...log(30), loop: 'none', pointer: Array(30).fill([20, 20]) };
-    // The recording: the log grows a frame at a time, as perform fills it in.
     const live: EventLog = { ...done, frames: 0, pointer: [], events: [] };
     const out = path.join(dir, 'out.mp4');
     const recording = following();
@@ -146,7 +141,6 @@ test('compose follows a recording as it happens: same frames, in order, and noth
     assert.equal(shades.length, 30);
     for (let i = 1; i < shades.length; i++) assert.ok(shades[i] > shades[i - 1], `frame ${i} is out of order: ${shades.join(', ')}`);
 
-    // A recording that fails stops the video, and leaves no half-made file.
     const failed = path.join(dir, 'failed.mp4');
     const broken = following();
     const stopped = compose({ capture: dir, out: failed, follow: broken.follow });
@@ -170,7 +164,6 @@ test('up to 4 browsers compose at once, fewer on small machines and short videos
   assert.equal(composeWorkers(70, 10, 16 * GB), 1);
 });
 
-/** A 30-frame capture of a test pattern, in a fresh folder. */
 function testCapture(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
   fs.mkdirSync(path.join(dir, 'frames'));
@@ -181,7 +174,6 @@ function testCapture(): string {
   return dir;
 }
 
-/** Runs `fn` with only `bin` on the PATH. */
 async function withPath<T>(bin: string, fn: () => Promise<T>): Promise<T> {
   const saved = process.env.PATH;
   process.env.PATH = bin;
@@ -207,7 +199,6 @@ test('compose stops with ffmpeg\'s reason when ffmpeg dies mid-video, instead of
   try {
     const bin = path.join(dir, 'bin');
     fs.mkdirSync(bin);
-    // Reads a little of the video, then gives up.
     fs.writeFileSync(path.join(bin, 'ffmpeg'), '#!/bin/sh\nhead -c 100000 > /dev/null\necho "disk full" >&2\nexit 1\n', { mode: 0o755 });
     await assert.rejects(withPath(`${bin}:/usr/bin:/bin`, () => compose({ capture: dir, out: path.join(dir, 'out.mp4') })), /ffmpeg failed \(1\): disk full/);
   } finally {

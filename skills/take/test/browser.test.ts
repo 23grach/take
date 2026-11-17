@@ -9,7 +9,6 @@ test('Chromium opens a page and takes a 2x screenshot', async () => {
     await page.setContent('<button>New project</button>');
     await page.getByRole('button', { name: 'New project' }).click();
     const png = await page.screenshot();
-    // PNG header stores width and height at bytes 16–23.
     assert.equal(png.readUInt32BE(16), 640);
     assert.equal(png.readUInt32BE(20), 400);
   } finally {

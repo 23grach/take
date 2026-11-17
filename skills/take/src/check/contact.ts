@@ -1,6 +1,3 @@
-// Contact sheet: evenly spaced frames of a video on one image, each labelled with its time,
-// plus the loop seam (the last frames running into the first) and any hitches, so a reviewer
-// (a person or the agent) can judge the whole video at a glance.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -22,7 +19,6 @@ export async function contactSheet(report: Report, out: string, { loop = true, r
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'take-contact-'));
   try {
-    // One ffmpeg pass pulls every wanted frame as a small JPEG, in frame order.
     execFileSync('ffmpeg', ['-v', 'error', '-i', report.file, '-vf', `select='${wanted.map((f) => `eq(n\\,${f})`).join('+')}',scale=${TILE * 2}:-2`,
       '-fps_mode', 'passthrough', '-q:v', '3', path.join(tmp, 'p%04d.jpg')]);
     const img = new Map(wanted.map((f, i) => [f, `data:image/jpeg;base64,${fs.readFileSync(path.join(tmp, `p${String(i + 1).padStart(4, '0')}.jpg`)).toString('base64')}`]));

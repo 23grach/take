@@ -1,5 +1,3 @@
-// Runs after `npm install`. With Google Chrome installed, Take records with it and downloads nothing.
-// Without it, Playwright's Chromium is downloaded once, without Playwright's separate headless-only build.
 import { spawnSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 import path from 'node:path';

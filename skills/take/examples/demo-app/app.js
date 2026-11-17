@@ -1,5 +1,3 @@
-// Boards: a tiny demo app for Take. Deterministic on purpose: no dates, no randomness, no network.
-// Timers drive the "saving" delay and the toast, so studio mode's frozen clock controls them too.
 const $ = (id) => document.getElementById(id);
 const newProject = $('new-project'), dialog = $('dialog'), backdrop = $('backdrop');
 const form = $('form'), input = $('name'), create = $('create'), cancel = $('cancel');
@@ -9,7 +7,6 @@ let added = 0;
 
 function show(...els) {
   els.forEach((el) => (el.hidden = false));
-  // Next frame, so the transition starts from the hidden state.
   requestAnimationFrame(() => requestAnimationFrame(() => els.forEach((el) => el.classList.add('open'))));
 }
 
@@ -58,7 +55,6 @@ form.addEventListener('submit', (e) => {
   e.preventDefault();
   const name = input.value.trim();
   if (!name) return;
-  // Pretend to save, so takes have something to wait for.
   create.classList.add('busy');
   create.textContent = 'Creating…';
   setTimeout(() => {

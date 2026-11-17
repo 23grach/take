@@ -11,7 +11,6 @@ let dir: string;
 before(() => (dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-check-'))));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
 
-/** A 2 s moving test pattern, encoded the way Take encodes unless told otherwise. */
 function video(name: string, { filter = '', rate = 60, extra = [] as string[], faststart = true } = {}): string {
   const out = path.join(dir, `${name}.mp4`);
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-f', 'lavfi', '-i', `testsrc2=size=640x360:rate=${rate}:duration=2`,
@@ -29,10 +28,8 @@ test('a clean video passes', () => {
 });
 
 test('a loop that jumps back is caught; one that returns smoothly passes', () => {
-  // A slow pan: small steps between frames, but the end is far from the start.
   const pan = video('pan', { filter: 'scroll=horizontal=0.002' });
   assert.equal(status(check(pan), 'loop seam'), 'fail');
-  // The same pan forwards then backwards ends where it began.
   const back = path.join(dir, 'back.mp4');
   execFileSync('ffmpeg', ['-v', 'error', '-y', '-i', pan, '-filter_complex', '[0]split[a][b];[b]reverse[r];[a][r]concat=n=2:v=1', '-pix_fmt', 'yuv420p', '-c:v', 'libx264', '-crf', '18', back]);
   assert.equal(status(check(back), 'loop seam'), 'pass');
@@ -67,14 +64,13 @@ test('a step that looks different from its rehearsal is caught; one that matches
     const capture = path.join(dir, 'capture');
     fs.mkdirSync(probe);
     fs.mkdirSync(path.join(capture, 'frames'), { recursive: true });
-    // A white page; with a dark panel open (half the page) after step 2.
     const img = (file: string, panel: boolean) =>
       execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=white:s=320x200', ...(panel ? ['-vf', 'drawbox=x=0:y=0:w=320:h=100:color=black:t=fill'] : []), '-frames:v', '1', '-y', file]);
     img(path.join(probe, 'step-00.png'), false);
     img(path.join(probe, 'step-01.png'), false);
     img(path.join(probe, 'step-02.png'), true);
     const frames = Array.from({ length: 30 }, (_, i) => `frames/f${String(i).padStart(5, '0')}.jpg`);
-    for (const f of frames) img(path.join(capture, f), false); // the recording never shows the panel
+    for (const f of frames) img(path.join(capture, f), false);
     fs.writeFileSync(path.join(capture, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [320, 200], frames, renderSeconds: 1, images: 30 }));
     fs.writeFileSync(path.join(probe, 'probe.json'), JSON.stringify({ ok: true, title: 't', viewport: [320, 200], seconds: 1,
       shots: [0, 1, 2].map((step) => ({ step, label: '', at: 0, file: `step-0${step}.png`, outline: '', pointer: [0, 0], cursor: 'default' })) }));

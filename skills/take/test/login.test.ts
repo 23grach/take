@@ -1,4 +1,3 @@
-// Saved logins: sign in once in a browser window, and takes that name the login start signed in.
 import { test, before, after } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
@@ -9,7 +8,6 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { spawnSync } from 'node:child_process';
 
-// Logins go to a scratch folder, never to the real ~/.take.
 const home = fs.mkdtempSync(path.join(os.tmpdir(), 'take-login-'));
 process.env.TAKE_HOME = home;
 
@@ -18,7 +16,6 @@ const { openTake } = await import('../src/drivers/web/browser.ts');
 const { TakeError } = await import('../src/drivers/web/driver.ts');
 const { validateTake } = await import('../src/take/format.ts');
 
-// A site that remembers who signed in: a cookie for the server, a name in local storage for the page.
 const SITE = `<!doctype html><meta charset="utf-8"><main id="who"></main><button id="in">Sign in</button><script>
   const signedIn = document.cookie.includes('session=s3cret');
   who.textContent = signedIn ? 'Signed in as ' + localStorage.getItem('name') : 'Signed out';
@@ -68,16 +65,14 @@ test('signing in saves the login, privately, when the window closes', async () =
 });
 
 test('the sign-in window never opens extra tabs while the person is signing in', async () => {
-  // Sign in on one site, then move on to another, so the first has no tab open while saves keep running.
   let extraTabs = 0;
   const r = await signIn(base, 'two-sites', {
     headless: true,
     act: async (page) => {
-      // Watch the browser itself: Playwright's own helper tabs never show up as context 'page' events.
       const cdp = await page.context().browser()!.newBrowserCDPSession();
       cdp.on('Target.targetCreated', ({ targetInfo }) => void (targetInfo.type === 'page' && extraTabs++));
       await cdp.send('Target.setDiscoverTargets', { discover: true });
-      extraTabs = 0; // the window's own tab, reported when discovery starts
+      extraTabs = 0;
       await page.click('#in');
       await page.getByText('Signed in as Sam').waitFor();
       await page.waitForTimeout(2500);

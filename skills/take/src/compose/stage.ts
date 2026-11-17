@@ -1,23 +1,15 @@
-// The stage: one HTML page the compositor screenshots once per video frame.
-// Everything it looks like comes from the theme's tokens.json, so a theme can restyle a video without
-// touching the engine.
-
 import type { CursorArt } from './cursor-art.ts';
 
 export interface Theme {
-  /** size: the stage every length is laid out on. output: the video, the same stage at a higher pixel density. */
   stage: { size: [number, number]; output: [number, number]; background: string; padding: number };
   window: {
     radius: number;
     shadow: string;
     border: string;
     bar: { height: number; background: string; divider: string };
-    /** The close, minimize and zoom buttons: a fill and a thin ring inside it, outlineWidth wide. */
     dots: { size: number; gap: number; outlineWidth: number } & Record<WindowButton, { fill: string; outline: string }>;
     address: { show: boolean; width: number; height: number; background: string; color: string; font: string };
   };
-  /** art "system": macOS's own cursors when Take runs on a Mac; otherwise, and without it, the shapes below.
-   *  size is in CSS pixels of the recorded page; hotspots on the SVGs' 30-unit grid. */
   cursor: { art?: 'system'; size: number; pressScale: number; hideFade: number; shapes: Record<'arrow' | 'hand' | 'text', { file: string; hotspot: [number, number] }> };
   caret: { width: number; solidFrames: number; blinkFrames: number };
   loop: { frames: number };
@@ -27,19 +19,15 @@ export type WindowButton = 'close' | 'minimize' | 'zoom';
 const BUTTONS: WindowButton[] = ['close', 'minimize', 'zoom'];
 
 export interface Layout {
-  /** Window position and size on the stage, in output pixels. */
   left: number;
   top: number;
   width: number;
   height: number;
-  /** The page area inside the window. */
   contentLeft: number;
   contentTop: number;
-  /** Output pixels per CSS pixel of the recorded page. */
   k: number;
 }
 
-/** Fits the window (bar + page) inside the stage padding, centred. */
 export function layout(theme: Theme, viewport: [number, number]): Layout {
   const [W, H] = theme.stage.size;
   const P = theme.stage.padding;
@@ -54,11 +42,8 @@ export function layout(theme: Theme, viewport: [number, number]): Layout {
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
-/** A cursor drawing on the stage: `size` missing means the image's own size (a site's cursor image). */
 export type StageCursor = Omit<CursorArt, 'size'> & { size?: [number, number] };
 
-/** `address` is the text in the address bar; empty leaves the bar blank. `cursors` are the drawings the video
- *  uses, by the key overlayAt's cursor maps to. */
 export function stageHtml(theme: Theme, address: string, box: Layout, cursors: Record<string, StageCursor>): string {
   const { window: win, cursor } = theme;
   const [W, H] = theme.stage.size;
@@ -92,9 +77,7 @@ ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${
   const box = ${JSON.stringify(box)};
   const art = ${JSON.stringify(Object.fromEntries(keys.map((key) => [key, { size: cursors[key].size, hotspot: cursors[key].hotspot, shadow: cursors[key].shadow }])))};
   const pressScale = ${cursor.pressScale};
-  // Everything in CSS pixels of the page times box.k, so a cursor is as big next to the page as on a real screen.
   const byKey = {};
-  // Sizes a cursor drawing once its image has loaded: a site's own image is drawn at its own size.
   const fit = (img) => {
     const a = art[img.dataset.key], k = box.k;
     const [w, h] = a.size ?? [img.naturalWidth, img.naturalHeight];
@@ -102,9 +85,7 @@ ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${
       filter: a.shadow ? 'drop-shadow(0 ' + a.shadow.y * k + 'px ' + a.shadow.blur * k + 'px rgb(0 0 0 / ' + a.shadow.alpha + '))' : 'none' });
     byKey[img.dataset.key] = img;
   };
-  // Called once the cursor images have loaded.
   window.setup = () => { for (const img of document.querySelectorAll('.cursor')) fit(img); };
-  // A site's own cursor image joins when the video first shows it.
   window.addCursor = async ({ key, src, hotspot }) => {
     art[key] = { hotspot };
     const img = Object.assign(document.createElement('img'), { className: 'cursor', alt: '', src });
@@ -123,7 +104,6 @@ ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${
     const caret = document.getElementById('caret'), c = o.caret;
     caret.style.display = c && c.opacity > 0 ? 'block' : 'none';
     if (c) {
-      // Snapped to whole pixels, like a real caret: never a soft grey smear between two columns.
       const w = Math.max(1, Math.round(${theme.caret.width} * box.k));
       Object.assign(caret.style, { left: Math.round(c.x * box.k) + 'px', top: Math.round(c.y * box.k) + 'px', width: w + 'px', height: Math.round(c.height * box.k) + 'px', background: c.color, opacity: c.opacity });
     }

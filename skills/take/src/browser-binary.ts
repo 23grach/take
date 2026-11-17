@@ -1,11 +1,7 @@
-// Which browser Take runs: the person's own Google Chrome when it's installed, so there is nothing to download;
-// otherwise Playwright's Chromium, downloaded once. Always the full browser (channel "chromium" when hidden too),
-// so Playwright's separate headless-only build is never needed.
 import fs from 'node:fs';
 import path from 'node:path';
 import { chromium, type Browser, type LaunchOptions } from 'playwright';
 
-/** Where Playwright looks for Google Chrome when launching channel "chrome". */
 export function chromePaths(platform: NodeJS.Platform = process.platform, env = process.env): string[] {
   if (platform === 'darwin') return ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'];
   if (platform === 'linux') return ['/opt/google/chrome/chrome'];
@@ -21,9 +17,6 @@ export function hasChrome(): boolean {
   return chromePaths().some((p) => fs.existsSync(p));
 }
 
-/** For studio recording, where pictures are taken one at a time: without these each picture waits for the next
- *  two screen refreshes at 60 Hz (33 ms), with them about half that; the pictures are byte-identical. Compose
- *  gains nothing (its browsers overlap the wait). Not for live drafts or windows people use. */
 export const UNTHROTTLED = ['--disable-gpu-vsync', '--disable-frame-rate-limit'];
 
 export const DOWNLOAD_CHROMIUM = 'npx playwright install chromium --no-shell';
@@ -31,11 +24,9 @@ export const NO_BROWSER = `no browser to record with: install Google Chrome, or 
 
 const isMissing = (e: unknown) => /Executable doesn.t exist/i.test(String((e as Error)?.message ?? e));
 
-/** Browsers that are Google Chrome, and whether Chrome was installed but failed to start. */
 const chromes = new WeakSet<Browser>();
 let chromeFailed = false;
 
-/** Starts Google Chrome when it's installed (fresh profile), else Playwright's Chromium. `chrome: false` skips Chrome. */
 export async function launchBrowser(options: LaunchOptions = {}, { chrome = true } = {}): Promise<Browser> {
   let chromeError: unknown;
   if (chrome && hasChrome()) {
@@ -57,8 +48,6 @@ export async function launchBrowser(options: LaunchOptions = {}, { chrome = true
   }
 }
 
-/** The browser `launchBrowser` starts, as people know it: "Google Chrome 147.0…" or "Chromium 156.0… (Playwright)",
- *  and says so when Chrome is installed but wouldn't start, so Chromium stood in. */
 export async function browserLabel(): Promise<string> {
   const browser = await launchBrowser();
   try {

@@ -23,7 +23,6 @@ const take = (() => {
 const log = (index: number, start: number, waited?: number): StepLog => ({ index, do: take.steps[index].do, start, end: start, ...(waited ? { waited } : {}) });
 
 test('the script times each step from its start to the next, and adds the loop', () => {
-  // As recorded: holds at full length, the click 90 frames, the press 30 (its ms), then the closing hold.
   const s = timeline(take, [log(0, 0), log(1, 120), log(2, 210), log(3, 240)], 360, { fps: 60, loopFrames: 40 });
   assert.deepEqual(s.lines.map((l) => [l.step, l.start, l.length, l.fixed]), [[1, 0, 2, true], [2, 2, 1.5, false], [3, 3.5, 0.5, true], [4, 4, 2, true]]);
   assert.equal(s.total, 6 + 40 / 60);
@@ -37,8 +36,6 @@ test('the script times each step from its start to the next, and adds the loop',
 });
 
 test('a rehearsal scales waits for the app back to the video pace, and shows holds at their real length', () => {
-  // Played twice as fast: the opening hold was cut to 30 frames, and the click spent 40 of its 90 frames
-  // waiting for the app, which takes 20 in the video.
   const s = timeline(take, [log(0, 0), log(1, 30, 40), log(2, 120), log(3, 150)], 180, { fps: 60, speed: 2 });
   assert.deepEqual(s.lines.map((l) => +(l.length * 60).toFixed(3)), [120, 70, 30, 120]);
   assert.equal(s.estimated, true);

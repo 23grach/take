@@ -23,7 +23,6 @@ async function open(take: Take): Promise<Page> {
 }
 after(async () => browser?.close());
 
-/** Doesn't wait: for tests that only check what goes wrong. */
 function fastClock(): Clock {
   let frame = 0;
   return { fps: 60, get frame() { return frame; }, async tick() { frame++; await new Promise((r) => setImmediate(r)); } };
@@ -45,27 +44,21 @@ test('performs the example take in real time and logs it', async () => {
   const log = await perform(page, r.take, realtimeClock());
   const wall = (performance.now() - t0) / 1000;
 
-  // The app ended up where the take says.
   assert.equal(await page.getByRole('list', { name: 'Projects' }).getByRole('listitem').count(), 4);
-  // Video time matches the wall clock, and every frame has a pointer position.
   assert.ok(Math.abs(log.frames / 60 - wall) < 0.2, `${log.frames} frames vs ${wall} s`);
   assert.equal(log.pointer.length, log.frames);
   assert.ok(log.pointer.every((p) => Array.isArray(p) && p.length === 2));
-  // Two clicks, each a press then a release; then the typed name.
   const kinds = log.events.map((e) => e.type).join(' ');
   assert.equal(kinds, 'down up down up ' + 'key '.repeat(9) + 'down up');
   assert.equal(log.events.filter((e) => e.type === 'key').map((e) => ('key' in e ? e.key : '')).join(''), 'Moodboard');
-  // Marks and steps line up.
   assert.deepEqual(Object.keys(log.marks), ['start', 'result']);
   assert.equal(log.marks.result, log.steps[4].start);
   assert.equal(log.steps[4].end, log.frames - 1);
-  // Clicks land inside the element they were aimed at.
   for (const s of log.steps.filter((s) => s.do === 'click')) {
     const down = log.events.find((e) => e.type === 'down' && e.frame >= s.start && e.frame <= s.end);
     assert.ok(down && 'x' in down && s.target);
     assert.ok(down.x >= s.target.x && down.x <= s.target.x + s.target.width && down.y >= s.target.y && down.y <= s.target.y + s.target.height);
   }
-  // The new card was waited for, and its place logged for the camera.
   assert.ok(log.steps[3].waitedFor);
 });
 
@@ -80,7 +73,6 @@ test('a step given a length lasts exactly that long, and typing fits into it', a
   const [click, type, press] = log.steps;
   assert.equal(type.start - click.start, 180);
   assert.equal(press.start - type.start, 150);
-  // Typing slowed down to fill the step, leaving the usual pause after it.
   const keys = log.events.filter((e) => e.type === 'key' && e.frame < press.start);
   assert.equal(keys.length, 9);
   assert.ok(keys.at(-1)!.frame - keys[0].frame > 50, `typing took ${keys.at(-1)!.frame - keys[0].frame} frames`);
@@ -155,7 +147,6 @@ test('page errors: other sites\' scripts are ignored, the app\'s own still stop 
   assert.equal(ownError(at('https://challenges.cloudflare.com/turnstile/v0/api.js'), 'https://coolors.co/generate'), false);
   assert.equal(ownError(at('https://static.example.com/app.js'), 'https://www.example.com/'), true);
   assert.equal(ownError(new Error('no stack lines'), 'https://example.com/'), true);
-  // As seen on a real site: the bot check's error passes through Cloudflare's loader on the site's own address.
   const turnstile = Object.assign(new Error('[Cloudflare Turnstile] Error: 600010.'), {
     stack: 'TurnstileError: x\n    at x (https://challenges.cloudflare.com/turnstile/v0/api.js:1:17327)\n    at c (https://coolors.co/cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js:0:9404)',
   });
@@ -163,11 +154,10 @@ test('page errors: other sites\' scripts are ignored, the app\'s own still stop 
 
   const http = await import('node:http');
   const { validateTake } = await import('../src/take/format.ts');
-  // The widget comes from "another site" (localhost vs 127.0.0.1) and throws; the app's own error is opt-in.
   const widget = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/javascript' }).end('setTimeout(() => { throw new Error("widget broke"); }, 10);'));
   await new Promise<void>((r) => widget.listen(0, '127.0.0.1', r));
   const wport = (widget.address() as { port: number }).port;
-  const app = http.createServer((req, res) =>
+  const app = http.createServer((_req, res) =>
     res.writeHead(200, { 'content-type': 'text/html' }).end(`<!doctype html><button onclick="setTimeout(() => { throw new Error('app broke'); })">Break</button><script src="http://localhost:${wport}/w.js"></script>`),
   );
   await new Promise<void>((r) => app.listen(0, '127.0.0.1', r));

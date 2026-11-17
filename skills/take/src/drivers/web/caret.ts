@@ -1,12 +1,6 @@
-// Where the text caret is, so the compositor can draw it. The browser's own caret can't be filmed: its blink
-// runs on the browser's clock, which studio mode can't freeze. So a style hides it while recording, the driver
-// measures the caret every frame, and the compositor draws one that blinks on video time.
-// Measuring never touches the page's DOM (no mirror elements an app could notice): text width comes from a
-// canvas with the field's own font, and editable areas use the selection's own rectangle.
 import type { Page } from 'playwright';
 
 export interface Caret {
-  /** Top of the caret, in CSS pixels of the viewport. */
   x: number;
   y: number;
   height: number;
@@ -15,8 +9,6 @@ export interface Caret {
 
 const HIDE_ID = 'take-hidden-caret';
 
-/** Hides the browser's own caret in every page and frame the take opens, for the whole recording. One style,
- *  added once per page: cheaper than hiding it for each picture, which restyles the whole page twice a frame. */
 export async function hideCaret(page: Page): Promise<void> {
   const install = (id: string) => {
     const add = () => {
@@ -26,7 +18,6 @@ export async function hideCaret(page: Page): Promise<void> {
       s.textContent = `*:not(#${id}) { caret-color: transparent !important; }`;
       (document.head ?? document.documentElement).append(s);
     };
-    // A page that is still opening has no <html> yet: add the style as soon as it does.
     if (document.documentElement) add();
     else new MutationObserver((_, o) => document.documentElement && (o.disconnect(), add())).observe(document, { childList: true });
   };
@@ -39,7 +30,6 @@ export async function caretAt(page: Page): Promise<Caret | null> {
     const el = document.activeElement as HTMLElement | null;
     if (!el) return null;
     const style = getComputedStyle(el);
-    // The page's own caret colour, looking past the style that hides the browser's caret while recording.
     const colorOf = (s: CSSStyleDeclaration) => {
       const hide = document.getElementById(hideId) as HTMLStyleElement | null;
       if (hide) hide.disabled = true;
@@ -56,7 +46,7 @@ export async function caretAt(page: Page): Promise<Caret | null> {
     const isInput = el instanceof HTMLInputElement && textual.includes(el.type);
     if (isInput || el instanceof HTMLTextAreaElement) {
       const field = el as HTMLInputElement | HTMLTextAreaElement;
-      if (field.selectionStart !== field.selectionEnd || field.selectionEnd === null) return null; // a selection, not a caret
+      if (field.selectionStart !== field.selectionEnd || field.selectionEnd === null) return null;
       const r = field.getBoundingClientRect();
       const px = (v: string) => parseFloat(v) || 0;
       const fontSize = px(style.fontSize);
@@ -75,7 +65,6 @@ export async function caretAt(page: Page): Promise<Caret | null> {
       const height = Math.min(lineHeight, fontSize * 1.25);
       let y: number;
       if (field instanceof HTMLInputElement) {
-        // Single line: the text sits in the middle of the box.
         const top = r.top + px(style.borderTopWidth) + px(style.paddingTop);
         const inner = r.height - px(style.borderTopWidth) - px(style.borderBottomWidth) - px(style.paddingTop) - px(style.paddingBottom);
         y = top + (inner - height) / 2;
@@ -95,7 +84,6 @@ export async function caretAt(page: Page): Promise<Caret | null> {
       const hs = getComputedStyle(host);
       const fontSize = parseFloat(hs.fontSize) || 16;
       if (!rect || (rect.width === 0 && rect.height === 0 && rect.x === 0 && rect.y === 0)) {
-        // An empty line has no text to measure: put the caret at the start of its element.
         const b = host.getBoundingClientRect();
         rect = new DOMRect(b.left + (parseFloat(hs.paddingLeft) || 0), b.top + (parseFloat(hs.paddingTop) || 0), 0, fontSize * 1.2);
       }

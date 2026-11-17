@@ -1,6 +1,3 @@
-// Recovery: a take should get through the ordinary messiness of real apps (slow loading, things off screen,
-// a toast passing over a button, a button that enables a moment late, elements that re-render), and stop with
-// a plain message when the app really is in the way.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -20,7 +17,6 @@ const page = (body: string, script = '') => `<!doctype html><meta charset="utf-8
 </script>`;
 
 const PAGES: Record<string, string> = {
-  // The button only appears once slow data arrives (1.5 s after the page loads).
   '/slow': page('<main id="m">Loading…</main>', `
     fetch('/data').then((r) => r.text()).then((t) => { m.innerHTML = '<button onclick="log(\\'go\\')">' + t + '</button>'; });`),
   '/below': page('<div style="height: 1800px">Top</div><button onclick="log(\'far\')">Far down</button><div style="height: 600px"></div>'),
@@ -30,7 +26,6 @@ const PAGES: Record<string, string> = {
     setTimeout(() => (b.disabled = false), 2500);`),
   '/rerender': page('<div id="w"></div>', `
     const draw = () => (w.innerHTML = '<button onclick="log(\\'ok\\')">Again</button>');
-    // Re-render several times while the cursor travels towards it (as a list does when data streams in), then settle.
     draw();
     addEventListener('mousemove', () => { const t = setInterval(draw, 120); setTimeout(() => clearInterval(t), 500); }, { once: true });`),
   '/blocked': page('<div style="padding-top: 80px"><button>Save</button></div><div id="toast" aria-label="Cookie banner">We use cookies</div>'),
@@ -41,15 +36,12 @@ const PAGES: Record<string, string> = {
 
 let server: http.Server;
 let base: string;
-/** Hits to `/no-hidden`: first (hidden) → 403, second (visible retry) → 200. */
 let noHiddenHits = 0;
 before(async () => {
   server = http.createServer((req, res) => {
     if (req.url === '/data') return void setTimeout(() => res.end('Ready'), 1500);
     if (req.url === '/broken') return void res.writeHead(500).end('Internal error');
     if (req.url === '/forbidden') return void res.writeHead(403).end('Forbidden');
-    // Like sites that refuse a first (hidden) visit but serve a visible retry.
-    // Count hits: openTake's hidden attempt is first; the headed retry is second.
     if (req.url === '/no-hidden') {
       noHiddenHits += 1;
       if (noHiddenHits === 1) return void res.writeHead(403).end('Forbidden');
@@ -70,7 +62,6 @@ function take(path: string, steps: unknown[]): Take {
   return r.take;
 }
 
-/** Plays a take at real pace (the app's timers run on real time) and returns what the page logged. */
 async function play(path: string, steps: unknown[]) {
   const { browser, page } = await openTake(take(path, steps));
   try {

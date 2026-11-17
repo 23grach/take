@@ -8,9 +8,6 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { run } from '../src/run.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
 
-// A page that makes sound three ways, each on a click: a sound file played with new Audio(), a Web Audio tone
-// scheduled a quarter second ahead, and a stream fed to an <audio> through MediaSource (its times start at 10 s,
-// mid-media, as YouTube's do).
 const page = `<!doctype html><body style="font:24px sans-serif">
 <button id="chime">Chime</button> <button id="tone">Tone</button> <button id="stream">Stream</button>
 <p id="state">loading</p><audio id="player"></audio>
@@ -78,7 +75,6 @@ function streams(video: string): { codec_type: string; codec_name: string; durat
   return JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_streams', '-of', 'json', video], { encoding: 'utf8' })).streams;
 }
 
-/** Where sound starts in the video, in seconds (silence that lasts to the end is not followed by sound). */
 function soundStarts(video: string, length: number): number[] {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-i', video, '-af', 'silencedetect=n=-40dB:d=0.05', '-f', 'null', '-'], { encoding: 'utf8' });
   return [...r.stderr.matchAll(/silence_end: ([\d.]+)/g)].map((m) => +m[1]).filter((t) => t < length - 0.01);

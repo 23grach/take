@@ -1,6 +1,3 @@
-// take probe: performs a take in a real browser at real pace, without recording a video, and screenshots the
-// page after every step. The screenshots become a storyboard: the one approval before recording (SKILL.md),
-// and the agent's check that every target resolves and every step does what the scenario says.
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Page } from 'playwright';
@@ -15,19 +12,12 @@ import { PACING } from '../drivers/web/pacing.ts';
 import { loadTheme } from '../compose/compose.ts';
 import { timeline, type Script } from './script.ts';
 
-/** The page outline without link addresses (`- /url: …` under every link): targets never use them, and on a
- *  big site they're a good share of what the agent reads after each step. A link left with nothing under it
- *  loses its trailing colon. */
 export function withoutAddresses(outline: string): string {
   const lines = outline.split('\n').filter((l) => !/^\s*- \/url: /.test(l));
   const indent = (l: string) => l.length - l.trimStart().length;
   return lines.map((l, i) => (l.endsWith(':') && !(indent(lines[i + 1] ?? '') > indent(l)) ? l.slice(0, -1) : l)).join('\n');
 }
 
-/** Ready-made CSS targets the outline can't give by role and name: buttons and links with no name (an icon-only
- *  close "×", listed only as `- button`), and elements that share a role and name with others (a "Sign up" button
- *  in the header and the footer, a "Jupiter" link used five times). One pass over the page, so big pages stay quick;
- *  each with where it is, so the right one can be picked. */
 export async function targetHandles(page: Page, outline: string): Promise<string> {
   const vp = page.viewportSize();
   if (!vp) return '';
@@ -49,7 +39,6 @@ export async function targetHandles(page: Page, outline: string): Promise<string
 
 const CONTROLS = 'a[href], button, input, select, textarea, summary, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=radio], [role=switch], [role=combobox], [role=searchbox], [role=textbox]';
 
-/** Runs in the page: see targetHandles. Names are matched the simple way (aria-label, else the visible text). */
 function handlesInPage(els: Element[], { shared, vw, vh }: { shared: string[]; vw: number; vh: number }) {
   function uniqueSelector(el: Element): string | null {
     const one = (sel: string) => {
@@ -71,13 +60,11 @@ function handlesInPage(els: Element[], { shared, vw, vh }: { shared: string[]; v
       return out;
     };
     for (const sel of own(el)) if (one(sel)) return sel;
-    // Inside a nearby ancestor that has a unique selector of its own.
     let path = el.tagName.toLowerCase() + (el.classList[0] ? `.${CSS.escape(el.classList[0])}` : '');
     for (let p = el.parentElement, depth = 0; p && p !== document.body && depth < 4; p = p.parentElement, depth++) {
       for (const sel of own(p)) if (one(sel) && one(`${sel} ${path}`)) return `${sel} ${path}`;
       path = `${p.tagName.toLowerCase()}${p.classList[0] ? `.${CSS.escape(p.classList[0])}` : ''} > ${path}`;
     }
-    // Last resort: its place among its siblings, up to an ancestor that can be named (or the body).
     const nth = (e: Element) => `${e.tagName.toLowerCase()}:nth-of-type(${[...(e.parentElement?.children ?? [])].filter((x) => x.tagName === e.tagName).indexOf(e) + 1})`;
     let chain = nth(el);
     for (let p = el.parentElement, depth = 0; p && depth < 6; p = p.parentElement, depth++) {
@@ -145,22 +132,16 @@ function handlesInPage(els: Element[], { shared, vw, vh }: { shared: string[]; v
 }
 
 export interface ProbeShot {
-  /** 0 is the first screen, before any step; then one per step, numbered from 1. */
   step: number;
-  /** What the step does, in plain words. */
   label: string;
-  /** Seconds into the take when the step ended (about where it lands in the video). */
   at: number;
   file: string;
-  /** The page's accessibility outline after the step (roles and names, as targets use them), for writing and fixing targets. */
   outline: string;
   pointer: [number, number];
   cursor: Cursor;
   target?: Box;
   waitedFor?: Box;
-  /** Set on the step that failed. */
   error?: string;
-  /** Something worth knowing about how the step went (see StepLog.note). */
   note?: string;
 }
 
@@ -171,13 +152,10 @@ export interface ProbeResult {
   shots: ProbeShot[];
   error?: string;
   seconds: number;
-  /** When each step starts in the video and how long it lasts, estimated from this rehearsal. Only when every step passed. */
   script?: Script;
-  /** The site refused the hidden browser, so it ran in a visible window. */
   visibleWindow?: true;
 }
 
-/** "Click button "New project"", "Type "Moodboard" into field labelled "Name"", … */
 export function describeStep(s: Step): string {
   let text: string;
   switch (s.do) {
@@ -195,7 +173,6 @@ export function describeStep(s: Step): string {
 
 const describeSpot = (s: Spot) => (Array.isArray(s) ? `${s[0]}, ${s[1]}` : describe(s));
 
-/** Lets the page's own transitions finish (a dialog fading in), so each screenshot shows where the step lands. */
 async function settle(page: Page) {
   await page
     .waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running' || a.effect?.getTiming().iterations === Infinity), undefined, { timeout: 1500 })
@@ -203,26 +180,17 @@ async function settle(page: Page) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
-/** How much faster than the video a rehearsal plays: the storyboard shows where each step ends, not how it moves.
- *  Time limits (finding a target, waiting for something) stay as long in real seconds. */
 export const REHEARSAL_SPEED = 2;
-/** How long a rehearsal waits for the network to go quiet after loading (a recording waits up to 10 s). Sites
- *  that stream a video or poll never go quiet; the driver waits for each step's target anyway. */
 const REHEARSAL_QUIET_MS = 3000;
 
-/** The longest an opening or closing hold lasts in a rehearsal. */
 export const REHEARSAL_HOLD_MS = 500;
 
-/** The take as rehearsed: the opening and closing holds (2 s each in a video) are cut short, since the storyboard
- *  shows only where each step ends. Holds between steps are played in full, and labels keep the real lengths. */
 export function rehearsal(take: Take): Take {
   const last = take.steps.length - 1;
   const steps = take.steps.map((s, i) => (s.do === 'hold' && (i === 0 || i === last) && s.ms > REHEARSAL_HOLD_MS ? { ...s, ms: REHEARSAL_HOLD_MS } : s));
   return { ...take, steps };
 }
 
-/** Removes an earlier probe's files from `out`, and nothing else: `--out` may point at a folder that holds
- *  other things, the take itself included. */
 export function clearProbe(out: string) {
   if (!fs.existsSync(out)) return;
   for (const f of fs.readdirSync(out))
@@ -233,7 +201,6 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   clearProbe(out);
   fs.mkdirSync(out, { recursive: true });
   const t0 = performance.now();
-  // Scale 1: the layout is the same as at 2×, and the storyboard shows small pictures.
   let opened;
   try {
     opened = await openTake({ ...take, target: { ...take.target, scale: 1 } }, { headed, quietMs: REHEARSAL_QUIET_MS });
@@ -268,7 +235,6 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
       error = e.message;
     }
     await settle(page);
-    // Where the driver puts the pointer before the first step.
     const [vw, vh] = take.target.viewport;
     let pointer: [number, number] = [Math.round(vw * PACING.start[0]), Math.round(vh * PACING.start[1])];
     await page.mouse.move(...pointer);
@@ -279,8 +245,6 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
         onStep: async (log, p) => {
           pointer = p;
           await settle(page);
-          // Outline the element where it is now, in the picture; if the step made it go away (Create closes its
-          // dialog), outlining where it was would point at nothing.
           const s = take.steps[log.index];
           let target: Box | undefined;
           if ('target' in s && s.target && !Array.isArray(s.target)) {
@@ -288,7 +252,6 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
             if ((await loc.count()) === 1) target = (await loc.boundingBox()) ?? undefined;
           }
           await shoot(log.index + 1, describeStep(s), p, { target, waitedFor: log.waitedFor, ...(log.note ? { note: log.note } : {}) });
-          // Screenshots and outlines aren't part of the take: times on the storyboard stay video time.
           clock.resume();
         },
       });

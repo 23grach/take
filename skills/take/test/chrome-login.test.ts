@@ -1,5 +1,3 @@
-// Copying a login from the person's own Chrome. A Chromium started with a debugging port stands in for it: it
-// writes the same DevToolsActivePort file Chrome writes when remote debugging is turned on.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -28,7 +26,6 @@ test('no connection file: says how to turn remote debugging on', async () => {
 
 test('copies only the site\'s cookies and Chrome\'s user agent from a running Chrome', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-chrome-'));
-  // The browser Take would use: Chrome when installed (then Chromium isn't downloaded), else Chromium.
   const binary = chromePaths().find((p) => fs.existsSync(p)) ?? chromium.executablePath();
   const proc = spawn(binary, ['--headless', '--remote-debugging-port=0', `--user-data-dir=${dir}`, '--no-first-run', 'about:blank'], { stdio: 'ignore' });
   try {

@@ -1,4 +1,3 @@
-// `take doctor`: checks that this machine has what Take needs and says how to fix what's missing.
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { browserLabel, DOWNLOAD_CHROMIUM } from './browser-binary.ts';
@@ -12,12 +11,10 @@ export interface CheckResult {
   fix?: string;
 }
 
-/** Things doctor looks at, swappable in tests. */
 export interface Probe {
   platform: NodeJS.Platform;
   nodeVersion: string;
   run(cmd: string, args: string[]): Promise<string | null>;
-  /** The browser Take records with, e.g. "Google Chrome 147.0…"; throws when there is none. */
   browser(): Promise<string>;
 }
 
@@ -76,7 +73,6 @@ export async function runChecks(probe: Probe = realProbe): Promise<CheckResult[]
     const version = /ffmpeg version (\S+)/.exec(ffmpeg)?.[1] ?? 'unknown version';
     results.push({ name: 'ffmpeg', ok: true, detail: version });
 
-    // Final videos are H.264 MP4, encoded with libx264.
     const encoders = (await probe.run('ffmpeg', ['-hide_banner', '-encoders'])) ?? '';
     results.push(
       /\blibx264\b/.test(encoders)
@@ -90,7 +86,6 @@ export async function runChecks(probe: Probe = realProbe): Promise<CheckResult[]
     );
   }
 
-  // ffprobe measures finished videos (take check).
   const ffprobe = await probe.run('ffprobe', ['-hide_banner', '-version']);
   results.push(
     ffprobe === null

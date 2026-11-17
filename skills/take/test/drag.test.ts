@@ -1,4 +1,3 @@
-// Drag: press, move with the button held, let go. Drawing on a canvas, moving a slider, reordering a list.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
@@ -9,7 +8,6 @@ import { perform, TakeError } from '../src/drivers/web/driver.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
 import { withShortFind } from './short-find.ts';
 
-// A canvas that reports each stroke as "down x,y > up x,y (n moves)", and a handle that reports where it was dropped.
 const PAGE = `<!doctype html><meta charset="utf-8"><style>
   body { margin: 0; font: 16px system-ui; } #pad { position: absolute; left: 0; top: 0; width: 800px; height: 600px; background: #eee; }
   #handle { position: absolute; left: 900px; top: 100px; padding: 8px; background: #36f; color: #fff; cursor: grab; }

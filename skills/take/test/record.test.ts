@@ -43,7 +43,6 @@ test('studio mode captures every frame, on page time', async () => {
   assert.deepEqual(capture.size, [800, 600]);
   for (const f of capture.frames) assert.ok(fs.existsSync(path.join(out, f)), f);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(out, 'capture.json'), 'utf8')), capture);
-  // The app's 700 ms "saving" delay takes exactly 42 frames of video, however long rendering took.
   const release = events.events.filter((e) => e.type === 'up').at(-1)!.frame;
   const shown = events.steps[2].end + 1;
   assert.ok(Math.abs(shown - release - 42) <= 1, `card appeared ${shown - release} frames after the click`);
@@ -67,7 +66,7 @@ test('"ready" lets the page load before filming, unfilmed', async () => {
   assert.ok(r.ok);
   assert.deepEqual(r.take.ready, [{ text: '3 projects' }]);
   const { capture } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'ready') });
-  assert.equal(capture.frames.length, 6); // only the hold is filmed
+  assert.equal(capture.frames.length, 6);
   const bad = validateTake({ version: 0, title: 't', target: { kind: 'web', url: app.url }, ready: [], steps: [{ do: 'hold', ms: 100 }] });
   assert.ok(!bad.ok && bad.errors.some((e) => /^ready: give a condition/.test(e)));
   const typo = validateTake({ version: 0, title: 't', target: { kind: 'web', url: app.url }, ready: [{ txt: 'x' }], steps: [{ do: 'hold', ms: 100 }] });
@@ -75,7 +74,6 @@ test('"ready" lets the page load before filming, unfilmed', async () => {
 });
 
 test('the browser\'s own caret is never filmed, and the drawn one keeps the page\'s caret colour', async () => {
-  // A red caret on white: any red pixel in a frame would be the browser's caret.
   const html = '<!doctype html><body style="margin:40px;background:#fff"><input aria-label="Name" style="font:40px sans-serif;caret-color:rgb(255,0,0);border:1px solid #000">';
   const server = http.createServer((_, res) => res.end(html));
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -145,7 +143,6 @@ test('the frozen clock runs a chain of page timers without the 4 ms clamp', asyn
     const ms = performance.now() - t;
     assert.equal(await page.evaluate(() => (window as unknown as { n: number }).n), 200);
     assert.ok(ms < 400, `200 chained timers took ${Math.round(ms)} ms (clamped they take 800+)`);
-    // If a Playwright update renames the clock's insides, this fails here instead of recordings quietly slowing.
     assert.equal(await page.evaluate(quickTimerYield), true);
   } finally {
     await browser.close();
@@ -153,11 +150,8 @@ test('the frozen clock runs a chain of page timers without the 4 ms clamp', asyn
 });
 
 test('a video in the page plays at its true speed in studio mode, and the log says where it was', async () => {
-  // A 30 fps test video, 4 s, served with a page that autoplays it.
   const dir = fs.mkdtempSync(path.join(tmp, 'video-'));
   execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=30:duration=4', '-c:v', 'libvpx', '-b:v', '200k', path.join(dir, 'v.webm')]);
-  // The page counts what its player hears: Take's own seeks, one a frame, must not reach it (a player would think it
-  // keeps buffering).
   const page = '<!doctype html><body style="margin:0"><video src="v.webm" autoplay muted loop style="width:320px;height:240px"></video>'
     + '<script>window.heard = []; for (const t of ["seeking", "seeked", "waiting", "ratechange"]) document.querySelector("video").addEventListener(t, () => heard.push(t));</script>';
   const server = http.createServer((req, res) => {
@@ -182,7 +176,6 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
       let boxes;
       for (let f = 0; f < 60; f++) ({ boxes } = await stepMedia(p, Math.round((f + 1) * (1000 / 60)) - Math.round(f * (1000 / 60))));
       const now = await p.evaluate(() => document.querySelector('video')!.currentTime);
-      // Within two of the video's own frames (30 fps): seeks are skipped while the same picture still shows.
       assert.ok(Math.abs(now - start - 1) < 0.07, `60 frames moved the video on ${(now - start).toFixed(3)} s, not 1 s`);
       assert.deepEqual(boxes, [{ x: 0, y: 0, width: 320, height: 240 }]);
       assert.deepEqual(await p.evaluate(() => (window as unknown as { heard: string[] }).heard), []);
@@ -190,7 +183,6 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
       await opened.browser.close();
     }
     const { events } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'video-capture') });
-    // Logged from the frame it started playing (frame 0, or a little later on a busy machine).
     assert.deepEqual(events.videos?.find(([, boxes]) => boxes.length)?.[1], [{ x: 0, y: 0, width: 320, height: 240 }]);
   } finally {
     server.close();
@@ -218,11 +210,9 @@ test('a scroll-driven animation records (it follows the scroll, not page time)',
 
 test('studio mode: idle work gets done, and an animation timed by the page clock starts at once', async () => {
   const page = `<!doctype html><div id="box" style="width:50px;height:50px;background:#36f"></div><script>
-    // Work done only "while there is time", as some script loaders do.
     let left = 20;
     const work = (d) => { while (left > 0 && d.timeRemaining() > 0) left--; if (left > 0) requestIdleCallback(work); else document.title = 'idle done'; };
     requestIdleCallback(work);
-    // An animation whose start is set from the page clock, which the frozen clock puts seconds ahead.
     window.fade = () => { const a = box.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 200, fill: 'forwards' }); a.startTime = document.timeline.currentTime + 5000; };
   </script>`;
   const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(page));
@@ -250,7 +240,7 @@ test('studio mode: idle work gets done, and an animation timed by the page clock
 test('a picture that never finishes downloading holds page time once, not on every frame', async () => {
   const held: http.ServerResponse[] = [];
   const server = http.createServer((req, res) => {
-    if (req.url === '/never.png') return void held.push(res.writeHead(200, { 'content-type': 'image/png' })); // never ends
+    if (req.url === '/never.png') return void held.push(res.writeHead(200, { 'content-type': 'image/png' }));
     res.writeHead(200, { 'content-type': 'text/html' }).end('<!doctype html><h1>Page</h1><script>addEventListener("load", () => document.body.insertAdjacentHTML("beforeend", \'<img src="/never.png" width="80" height="80">\'))</script>');
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
@@ -292,7 +282,6 @@ test('setup steps close a banner before filming, and are not filmed', async () =
   }
 });
 
-/** Where the blue box (#36f) starts on the last frame, in page pixels from the left: -1 if it isn't there. */
 function boxLeft(out: string, capture: { size: [number, number]; frames: string[] }): number {
   const [w, h] = capture.size;
   const rgb = execFileSync('ffmpeg', ['-v', 'error', '-i', path.join(out, capture.frames.at(-1)!), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 2 ** 30 });
@@ -305,8 +294,6 @@ function boxLeft(out: string, capture: { size: [number, number]; frames: string[
 }
 
 test('a view transition records: the page replaced document.timeline, and the transition still finishes', async () => {
-  // A cookie banner the setup step closes, behind a view transition that starts as the page loads. The page swaps
-  // document.timeline for a stand-in, as some sites' animation libraries do.
   const page = `<!doctype html><style>::view-transition-group(*) { animation-duration: .4s }</style>
     <button style="margin:200px">Go</button><div id="box" style="width:60px;height:60px;background:#36f;view-transition-name:box"></div>
     <div id="banner" style="position:fixed;inset:0;background:#fffe;display:grid;place-items:center"><button onclick="banner.remove()">Reject all</button></div>
@@ -327,7 +314,6 @@ test('a view transition records: the page replaced document.timeline, and the tr
     const out = path.join(tmp, 'transition');
     const { capture } = await record(r.take, { mode: 'studio', out });
     assert.ok(capture.frames.length > 10);
-    // It moved 300 px from the body's 8 px margin: the transition finished, rather than covering the page.
     assert.ok(Math.abs(boxLeft(out, capture) - 308) <= 2, `the box ends at ${boxLeft(out, capture)} px, not 308`);
   } finally {
     server.close();
@@ -343,12 +329,10 @@ test('a view transition mid-take: recorded again at 60 Hz, or handed back once f
     const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
     const r = validateTake({ version: 0, title: 'Move', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none', steps: [{ do: 'click', target: { role: 'button', name: 'Move' } }, { do: 'hold', ms: 500 }] });
     assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
-    // Nothing passed on yet: record does it again itself.
     const out = path.join(tmp, 'mid-take');
     const { capture, events } = await record(r.take, { mode: 'studio', out });
     assert.equal(capture.frames.length, events.frames);
     assert.ok(Math.abs(boxLeft(out, capture) - 308) <= 2, `the box ends at ${boxLeft(out, capture)} px, not 308`);
-    // take run composes frames as they come: it's told, and starts over (run.ts).
     const { NeedsFrameLimit } = await import('../src/drivers/web/capture.ts');
     await assert.rejects(record(r.take, { mode: 'studio', out: path.join(tmp, 'mid-take-2'), onFrame: () => {} }), NeedsFrameLimit);
   } finally {

@@ -1,6 +1,3 @@
-// The storyboard: every probe screenshot on one sheet, in order, each with what the step did, the element it
-// acted on outlined, what it waited for dashed, and the cursor where it ended. A failed step is shown in red
-// with the reason. This is the sheet a person approves before the video is recorded.
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from '../browser-binary.ts';
@@ -22,10 +19,8 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
   const box = (b: { x: number; y: number; width: number; height: number }, cls: string) =>
     `<div class="${cls}" style="left:${b.x * k - 3}px;top:${b.y * k - 3}px;width:${b.width * k + 6}px;height:${b.height * k + 6}px"></div>`;
 
-  // When the take opens with a hold, its picture is the first screen: don't show it twice.
   const shots = result.shots[1] && !result.shots[1].error && /^Hold /.test(result.shots[1].label) ? result.shots.slice(1) : result.shots;
   const cards = shots.map((s) => {
-    // Drawn at the page's scale, from the hotspot; a site's own cursor image at its own size.
     const c = typeof s.cursor === 'object' ? { src: s.cursor.image, hotspot: s.cursor.hotspot ?? [0, 0] } : s.cursor === 'none' ? null : art[s.cursor] ?? art.default;
     const cursor = c ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px;transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
     return `<figure class="${s.error ? 'failed' : ''}">

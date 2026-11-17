@@ -1,69 +1,41 @@
-// The sound the page itself makes, caught while studio mode records and laid on the video's timeline. Sound in the
-// browser runs on its own real-time clock, which studio mode's frozen page time leaves behind, so it is caught on
-// page time instead, three ways:
-// - Web Audio: every AudioContext the page makes is an offline renderer that renders only as far as page time has
-//   got. Oscillators, filters and decoded files end up in a buffer exactly as they would have sounded.
-// - Media elements (<audio>, <video>, new Audio()): studio mode already moves their time on frame by frame
-//   (media.ts); each stretch one plays becomes a clip cut from its file.
-// - Streamed media (MediaSource, as YouTube plays): there is no file to fetch, so the bytes the player feeds an
-//   audio buffer are kept; together they are a playable file.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { Frame, Page } from 'playwright';
 import type { Played } from './media.ts';
 
-/** sound.json in the capture folder: everything the take made audible, as clips on the video's timeline. */
 export interface SoundLog {
   version: 0;
   clips: Clip[];
 }
 
 export interface Clip {
-  /** In sound/, relative to the capture folder. */
   file: string;
-  /** Where it starts in the video, seconds from frame 0 (negative: began before frame 0, only its tail is heard). */
   at: number;
-  /** Seconds into the file (file timestamps). */
   from: number;
-  /** Seconds of the file. */
   duration: number;
-  /** Playback speed, 1 = normal (pitch kept, as browsers do). */
   rate: number;
-  /** 0..1. */
   volume: number;
 }
 
-/** How long each AudioContext can sound for, from when the page makes it: an offline renderer needs its length up
- *  front. Its memory fills as it renders, and at the end the rest is rendered (silence, well under a second) so
- *  the buffer can be read: about 80 MB per context then, for 3 minutes. */
 export const WEB_AUDIO_SECONDS = 180;
 
-/** Sound still playing on the last frame carries on this long, so it fades out over the loop instead of stopping
- *  dead at its seam. Compose cuts every clip to the video's length. */
 const TAIL_SECONDS = 3;
 
 export interface SoundCatcher {
-  /** Page time moved on, and these media elements played during it. `filmed`: it was a frame of the video. */
   moved(played: Played[], filmed: boolean): Promise<void>;
-  /** Filming starts now: this page time is frame 0. */
   start(): Promise<void>;
-  /** Writes sound/ and sound.json into `dir` when the take made any sound. Returns what to tell the person. */
   finish(dir: string): Promise<string[]>;
 }
 
-/** What a page hands over at the end (see webAudio). */
 interface Rendered {
-  /** Page time it was made at, ms. */
   start: number;
   wav: string;
-  /** It outlived WEB_AUDIO_SECONDS. */
   cut: boolean;
 }
 
 interface Source {
   mime: string;
-  /** Bytes fed to a MediaSource: their times are the media's own, mid-file. */
   stream: boolean;
   base64: string;
 }
@@ -74,7 +46,6 @@ interface PageSound {
   source(url: string): Promise<Source | null>;
 }
 
-/** In every page and frame before its own scripts (studio, sound on). */
 function webAudio([seconds, tail]: [number, number]): void {
   const w = globalThis as unknown as { __takeSound?: PageSound; __takeWebAudio: () => void; AudioContext: unknown; webkitAudioContext?: unknown };
   if (w.__takeSound) return;
@@ -88,7 +59,6 @@ function webAudio([seconds, tail]: [number, number]): void {
     for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
     return btoa(s);
   };
-  /** 16-bit WAV of its first n samples; empty when they're all silent. */
   const wav = (buffer: AudioBuffer, n: number) => {
     const ch = buffer.numberOfChannels;
     const data = new DataView(new ArrayBuffer(44 + n * ch * 2));
@@ -127,7 +97,6 @@ function webAudio([seconds, tail]: [number, number]): void {
       contexts.push(this);
       w.__takeWebAudio();
     }
-    /** Page time, not how far rendering has got: a page timer that fires mid-frame schedules sound on its exact time. */
     override get currentTime() {
       return (Date.now() - this.#start) / 1000;
     }
@@ -152,7 +121,6 @@ function webAudio([seconds, tail]: [number, number]): void {
     getOutputTimestamp() {
       return { contextTime: this.currentTime, performanceTime: performance.now() };
     }
-    // The element's own sound is caught as a media element; this keeps pages that route it through effects working.
     createMediaElementSource() {
       return this.createGain();
     }
@@ -186,8 +154,6 @@ function webAudio([seconds, tail]: [number, number]): void {
   }
   w.AudioContext = TakeAudioContext;
   w.webkitAudioContext = TakeAudioContext;
-  // "Now" (no time, or a time already past) means now on page time, not where rendering has got to. Sources that
-  // play a decoded file have their own start.
   for (const [proto, name] of [[AudioScheduledSourceNode.prototype, 'start'], [AudioBufferSourceNode.prototype, 'start'], [AudioScheduledSourceNode.prototype, 'stop']] as const) {
     if (!Object.hasOwn(proto, name)) continue;
     const native = proto[name] as (when?: number, ...rest: number[]) => void;
@@ -197,7 +163,6 @@ function webAudio([seconds, tail]: [number, number]): void {
     };
   }
 
-  // Streamed media: keep what the player feeds each audio buffer, and which MediaSource each blob: address is.
   const sources = new Map<string, MediaSource>();
   const buffers = new WeakMap<MediaSource, SourceBuffer[]>();
   const kept = new WeakMap<SourceBuffer, { mime: string; chunks: Uint8Array[] }>();
@@ -246,10 +211,8 @@ function webAudio([seconds, tail]: [number, number]): void {
   };
 }
 
-/** A stretch one media element played at a steady rate and volume, on page time. */
 interface Run {
   src: string;
-  /** Page time, ms. */
   at: number;
   from: number;
   to: number;
@@ -257,7 +220,6 @@ interface Run {
   volume: number;
 }
 
-/** Studio, before the page opens: catches its sound from then on. */
 export async function catchSound(page: Page): Promise<SoundCatcher> {
   const audible = new Set<Frame>();
   await page.context().exposeBinding('__takeWebAudio', ({ frame }) => void audible.add(frame));
@@ -276,7 +238,6 @@ export async function catchSound(page: Page): Promise<SoundCatcher> {
           playing.add(p.id);
           const src = srcOf.get(p.id) ?? '';
           const run = open.get(p.id);
-          // A seek, a pause, a new rate or volume ends the stretch.
           if (run && run.src === src && run.rate === p.rate && run.volume === p.volume && Math.abs(p.from - run.to) < 1e-3) {
             run.to = p.to;
             continue;
@@ -331,8 +292,6 @@ export async function catchSound(page: Page): Promise<SoundCatcher> {
 
       fs.mkdirSync(path.join(dir, 'sound'), { recursive: true });
       for (const [file, bytes] of files) fs.writeFileSync(path.join(dir, file), bytes);
-      // A file's own times may not start at 0 (an MP3's encoder delay), but the browser counts from its first
-      // sound. Streamed bytes carry the media's own times.
       const offsets = new Map([...fileOf.values()].map(({ file, stream }) => [file, stream ? 0 : startTime(path.join(dir, file))]));
       for (const r of heard) {
         const where = fileOf.get(r.src);
@@ -345,8 +304,6 @@ export async function catchSound(page: Page): Promise<SoundCatcher> {
     },
   };
 
-  /** A media element's file: from the page itself for blob: addresses (streamed bytes, or a file the page made),
-   *  otherwise fetched with the browser's own cookies, so files behind a login come too. */
   async function fetchSource(page: Page, src: string): Promise<{ mime: string; bytes: Buffer; stream: boolean } | null> {
     if (src.startsWith('blob:')) {
       for (const f of page.frames()) {
@@ -370,10 +327,8 @@ export async function catchSound(page: Page): Promise<SoundCatcher> {
   }
 }
 
-/** Length of a 16-bit WAV written by webAudio. */
 const wavSeconds = (wav: Buffer) => wav.readUInt32LE(40) / wav.readUInt32LE(28);
 
-/** Where a file's own times start, in seconds. */
 function startTime(file: string): number {
   const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=start_time', '-of', 'csv=p=0', file], { encoding: 'utf8' });
   const t = parseFloat(r.stdout);

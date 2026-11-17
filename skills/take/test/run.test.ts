@@ -18,7 +18,6 @@ after(async () => {
   fs.rmSync(tmp, { recursive: true, force: true });
 });
 
-/** Writes a take into its own folder, the way takes/<name>/take.json is laid out. */
 function writeTake(name: string, steps: unknown[], url = app.url): string {
   const dir = path.join(tmp, name);
   fs.mkdirSync(dir, { recursive: true });

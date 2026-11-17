@@ -1,10 +1,6 @@
 import type { Cursor } from './cursor.ts';
 import type { Caret } from './caret.ts';
 
-// The event log a performance leaves behind (events.json). Everything the compositor draws
-// afterwards (cursor, zoom, the loop) comes from here. Positions and boxes are in CSS pixels
-// of the page viewport; times are frame numbers at the log's fps.
-
 export interface Box {
   x: number;
   y: number;
@@ -20,19 +16,12 @@ export type Event =
 export interface StepLog {
   index: number;
   do: string;
-  /** First and last frame of the step, including any waitFor, excluding the gap after it. */
   start: number;
   end: number;
   mark?: string;
-  /** Something worth knowing about how the step went, e.g. a scroll that had nothing to move. */
   note?: string;
-  /** Frames of the step spent waiting for the app (a target to show, a waitFor), rather than acting at the
-   *  driver's pace. A rehearsal that fast-forwards counts these at its own speed, so its estimate of the video's
-   *  timing scales them back. */
   waited?: number;
-  /** The element acted on, where it was when the action happened. */
   target?: Box;
-  /** The element waitFor was waiting for, where it was when it showed. */
   waitedFor?: Box;
 }
 
@@ -40,26 +29,17 @@ export interface EventLog {
   version: 0;
   title: string;
   url: string;
-  /** What the address bar shows (see shownAddress). */
   address: string;
   fps: number;
   viewport: [number, number];
   scale: number;
-  /** Total length in frames. */
   frames: number;
-  /** Pointer position in every frame from 0 to frames - 1: [x, y]. */
   pointer: [number, number][];
-  /** Which cursor the page shows under the pointer, as changes: [frame, cursor], starting at frame 0. */
   cursors: [number, Cursor][];
-  /** Where the text caret is (null: no caret), as changes: [frame, caret]. The compositor draws it and its blink. */
   carets: [number, Caret | null][];
   events: Event[];
   steps: StepLog[];
-  /** Named moments: mark → frame. */
   marks: Record<string, number>;
-  /** How the video should end, from the take. */
   loop: 'crossfade-to-start' | 'none';
-  /** Studio: where videos playing in the page were on screen (page pixels), from each frame where that changed.
-   *  They show at their own frame rate (often 30 fps), which the check mustn't take for stalls. */
   videos?: [number, Box[]][];
 }

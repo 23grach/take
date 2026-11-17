@@ -14,7 +14,6 @@
 body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.45 system-ui, -apple-system, sans-serif; -webkit-font-smoothing: antialiased; }
 h1, h2, p { margin: 0; }
 
-/* Top bar */
 .topbar { height: 64px; display: flex; align-items: center; gap: 40px; padding: 0 40px; background: var(--surface); border-bottom: 1px solid var(--line); }
 .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; font-size: 17px; }
 .logo { width: 22px; height: 22px; border-radius: 7px; background: linear-gradient(135deg, #6366f1, #ec4899); }
@@ -23,13 +22,11 @@ h1, h2, p { margin: 0; }
 .nav a[aria-current] { color: var(--text); }
 .avatar { margin-left: auto; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #ffe2c6; font-weight: 600; font-size: 14px; }
 
-/* Page */
 .main { max-width: 1120px; margin: 0 auto; padding: 48px 40px; }
 .heading { display: flex; align-items: flex-end; justify-content: space-between; margin-bottom: 28px; }
 h1 { font-size: 32px; font-weight: 700; letter-spacing: -.02em; }
 .count { color: var(--muted); margin-top: 4px; }
 
-/* Buttons */
 .btn { font: inherit; font-weight: 600; height: 42px; padding: 0 18px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; transition: background .15s, transform .15s var(--ease), box-shadow .15s; }
 .btn:hover { background: #f1f0ec; }
 .btn:active { transform: scale(.97); }
@@ -40,7 +37,6 @@ h1 { font-size: 32px; font-weight: 700; letter-spacing: -.02em; }
 .btn.busy::before { content: ""; display: inline-block; width: 14px; height: 14px; margin-right: 8px; vertical-align: -2px; border: 2px solid rgb(255 255 255 / .4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* Project grid */
 .grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; transition: transform .2s var(--ease), box-shadow .2s; }
 .card:hover { transform: translateY(-2px); box-shadow: 0 8px 24px rgb(0 0 0 / .06); }
@@ -51,7 +47,6 @@ h1 { font-size: 32px; font-weight: 700; letter-spacing: -.02em; }
 @keyframes card-in { from { opacity: 0; transform: translateY(12px) scale(.97); } }
 @keyframes glow { from { box-shadow: 0 0 0 3px rgb(79 70 229 / .45); } to { box-shadow: 0 0 0 3px rgb(79 70 229 / 0); } }
 
-/* Dialog */
 .backdrop { position: fixed; inset: 0; background: rgb(20 20 30 / .32); opacity: 0; transition: opacity .2s; }
 .dialog { position: fixed; left: 50%; top: 50%; width: 440px; padding: 28px; background: var(--surface); border-radius: 18px; box-shadow: 0 24px 60px rgb(0 0 0 / .18); opacity: 0; transform: translate(-50%, -46%) scale(.96); transition: opacity .2s, transform .25s var(--ease); }
 .backdrop.open { opacity: 1; }
@@ -63,6 +58,5 @@ h1 { font-size: 32px; font-weight: 700; letter-spacing: -.02em; }
 .hint { color: var(--muted); font-size: 13px; margin-top: 6px; }
 .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 24px; }
 
-/* Toast */
 .toast { position: fixed; left: 50%; bottom: 32px; padding: 12px 18px; border-radius: 12px; background: #1d1d22; color: #fff; font-weight: 500; box-shadow: 0 10px 30px rgb(0 0 0 / .2); opacity: 0; transform: translate(-50%, 12px); transition: opacity .25s, transform .3s var(--ease); }
 .toast.open { opacity: 1; transform: translate(-50%, 0); }

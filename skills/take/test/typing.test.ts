@@ -16,7 +16,6 @@ test('typing is uneven like a person, the same every retake, and as long as cps 
   const gaps = a.slice(1).map((v, i) => v - a[i]);
   assert.ok(gaps.every((g) => g >= 1), 'one character per frame at most');
   assert.ok(new Set(gaps).size > 2, 'not evenly spaced');
-  // The first letter of a word comes after a longer gap than the space before it.
   const space = 'Hello from Take'.indexOf(' ');
   assert.ok(gaps[space] > gaps[space - 1], 'pause before a new word');
   assert.deepEqual(typingSchedule('A', 14), [0]);
@@ -42,7 +41,6 @@ test('the caret is measured where the browser draws it', async () => {
   await page.getByRole('button', { name: 'New project' }).click();
   const field = page.getByRole('dialog').getByLabel('Name');
   await field.click();
-  // The dialog slides in: measure once it has stopped moving.
   await page.waitForFunction(() => document.getAnimations().every((a) => a.playState !== 'running'));
   const box = (await field.boundingBox())!;
   const empty = (await measureCaret(page))!;

@@ -1,26 +1,16 @@
-// Hardens Take's Chromium so ordinary bot checks see less of an automation fingerprint.
-// Still Playwright-driven; still a fresh Take profile (never the person's everyday Chrome).
-// Honest limit: x.com-grade walls can still challenge; hand-clear in `take login` is the fallback.
 import type { BrowserContext, LaunchOptions as PwLaunchOptions } from 'playwright';
 
-/** Chromium flags that make the browser look less like a test harness. */
 export function hardenLaunchArgs(extra: string[] = []): string[] {
   return [
     '--disable-blink-features=AutomationControlled',
-    // Keep Take's usual look for captures.
     '--hide-scrollbars',
     '--force-color-profile=srgb',
     ...extra,
   ];
 }
 
-/**
- * Playwright's default args include `--enable-automation`, which sets `navigator.webdriver`
- * and shows the "controlled by automated test software" affordance. Drop that one.
- */
 export const HARDEN_IGNORE_DEFAULT_ARGS = ['--enable-automation'] as const;
 
-/** Init script applied to every new document in the context. */
 export const HARDEN_INIT_SCRIPT = `(() => {
   try {
     Object.defineProperty(Navigator.prototype, 'webdriver', {
@@ -28,7 +18,6 @@ export const HARDEN_INIT_SCRIPT = `(() => {
       configurable: true,
     });
   } catch {}
-  // Headless Chromium often lacks window.chrome; many checks treat that as a bot.
   try {
     if (!window.chrome) {
       Object.defineProperty(window, 'chrome', {
@@ -64,10 +53,8 @@ export const HARDEN_INIT_SCRIPT = `(() => {
   } catch {}
 })();`;
 
-/** Launch options shared by record/probe and `take login`. */
 export function hardenLaunchOptions(opts: {
   headed?: boolean;
-  /** Extra Chromium args (e.g. device scale). */
   args?: string[];
 }): PwLaunchOptions {
   const headed = opts.headed ?? false;
@@ -79,15 +66,10 @@ export function hardenLaunchOptions(opts: {
   return options;
 }
 
-/** Apply harden init scripts to a context. Call once after `newContext`. */
 export async function applyHarden(context: BrowserContext): Promise<void> {
   await context.addInitScript(HARDEN_INIT_SCRIPT);
 }
 
-/**
- * Playwright's headless Chromium puts `HeadlessChrome` in the UA — an easy bot check.
- * When the take doesn't already pin a saved-login UA, use a normal Chrome UA for this binary.
- */
 export function chromeUserAgent(browserVersion: string, platform: NodeJS.Platform = process.platform): string {
   const ver = browserVersion.replace(/^HeadlessChrome\//i, '').replace(/^Chrome\//i, '') || browserVersion;
   const os =
@@ -99,10 +81,6 @@ export function chromeUserAgent(browserVersion: string, platform: NodeJS.Platfor
   return `Mozilla/5.0 (${os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${ver} Safari/537.36`;
 }
 
-/**
- * Client hints (`sec-ch-ua`) still say HeadlessChrome even after a UA override.
- * Fix them via CDP before the first navigation. Call after `newPage`, before `goto`.
- */
 export async function hardenClientHints(
   context: BrowserContext,
   page: { url: () => string },
@@ -140,11 +118,9 @@ export async function hardenClientHints(
       },
     });
   } catch {
-    // Older Chromium builds may reject metadata fields; UA + init script still apply.
   }
 }
 
-/** Read a few signals the page sees — for spikes and tests. */
 export async function automationSignals(page: {
   evaluate: (fn: () => unknown) => Promise<unknown>;
 }): Promise<{

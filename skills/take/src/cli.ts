@@ -1,4 +1,3 @@
-// Entry point for the `take` command.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { parseArgs } from 'node:util';
@@ -76,8 +75,6 @@ const { values: opts, positionals } = parsed;
 const [command, file] = positionals;
 const { headed, slow, out: outFlag, theme: themeFlag } = opts;
 
-/** The options each command uses, so one given to a command that ignores it (a typo, a wrong guess) stops with
- *  an error instead of silently doing nothing. */
 const accepts: Record<string, string[]> = {
   doctor: [],
   login: ['name', 'from-chrome'],
@@ -90,7 +87,6 @@ const accepts: Record<string, string[]> = {
   run: ['mode', 'theme', 'out', 'headed'],
 };
 
-/** Why this command line can't run as typed, or undefined. */
 function misuse(): string | undefined {
   const allowed = accepts[command];
   if (!allowed) return undefined;
@@ -125,7 +121,6 @@ else {
   process.exitCode = 1;
 }
 
-/** Anything a command didn't handle itself: one plain line instead of a stack trace, plus where it came from. */
 function unexpected(e: unknown): number {
   const err = e instanceof Error ? e : new Error(String(e));
   const tool = (err as NodeJS.ErrnoException).code === 'ENOENT' && /\b(ffmpeg|ffprobe)\b/.exec(err.message)?.[1];
@@ -296,7 +291,6 @@ async function probeCommand(): Promise<number> {
   const r = await probe(take, out, { headed, speed: slow ? 1 : undefined });
   if (r.visibleWindow) process.stdout.write(`⚠ ${VISIBLE_NOTE}\n`);
   if (!r.shots.length) return fail(`✗ ${r.error}`);
-  // A failure before the first step (loading, "ready", setup) shows on the first screen.
   if (r.shots[0].error) process.stdout.write(`✗ before step 1: ${r.shots[0].error}\n      what the page had: ${path.relative(process.cwd(), path.join(out, r.shots[0].outline))}\n`);
   for (const s of r.shots.slice(1))
     process.stdout.write(`${s.error ? '✗' : '✓'} ${String(s.step).padStart(2)}  ${s.label}${s.note ? `\n      ⚠ ${s.note}` : ''}${s.error ? `\n      ${s.error}\n      what the page had at that point: ${path.relative(process.cwd(), path.join(out, s.outline))}` : ''}\n`);

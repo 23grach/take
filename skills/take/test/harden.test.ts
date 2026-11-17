@@ -54,7 +54,6 @@ test('client hints no longer advertise HeadlessChrome', async () => {
   });
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const { port } = server.address() as import('node:net').AddressInfo;
-  // The server is closed whatever happens: left open, it keeps this test file running forever.
   try {
     const { browser, context, userAgent } = await launch();
     try {

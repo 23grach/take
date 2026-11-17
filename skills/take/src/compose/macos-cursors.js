@@ -1,6 +1,3 @@
-// Run by osascript (JavaScript for Automation) from cursor-art.ts: draws macOS's own cursors to PNG files.
-// argv: output folder, then a JSON list of jobs, each { name, ns: "arrowCursor" } or { name, pdf: "/path/cursor.pdf" }.
-// Prints a JSON list of { name, file, size: [w, h] in points, hotspot?: [x, y] }.
 ObjC.import('AppKit');
 
 function run(argv) {

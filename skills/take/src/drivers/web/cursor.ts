@@ -1,11 +1,5 @@
-// Which cursor a real browser would show under the pointer, so the drawn cursor changes the same way.
-// The page decides through its CSS `cursor`: every standard cursor (crosshair while drawing, a grabbing hand on a
-// card, resize arrows), `none` to hide it, or its own image, which Take keeps and draws as is.
-// `auto` becomes the text cursor over text fields and editable areas only, not over plain text: as the cursor
-// travels, an I-beam flickering over every heading reads as noise.
 import type { Page } from 'playwright';
 
-/** The standard CSS cursors, after folding synonyms (`all-scroll` is `move`, `e-resize` is `ew-resize`, …). */
 export const CURSOR_KEYWORDS = [
   'default', 'pointer', 'text', 'vertical-text', 'crosshair', 'grab', 'grabbing', 'move', 'not-allowed', 'copy', 'alias',
   'context-menu', 'help', 'cell', 'zoom-in', 'zoom-out', 'progress', 'wait', 'none',
@@ -14,7 +8,6 @@ export const CURSOR_KEYWORDS = [
 ] as const;
 export type CursorKeyword = (typeof CURSOR_KEYWORDS)[number];
 
-/** A site's own cursor image (a data URL), its hotspot if the CSS gave one, and the standard cursor it falls back to. */
 export interface CursorImage {
   image: string;
   hotspot?: [number, number];
@@ -31,7 +24,6 @@ export function keyword(css: string): CursorKeyword {
 
 type Raw = { css: string; field: boolean };
 
-/** What the page's CSS asks for under a point: the computed `cursor` value, and whether `auto` would mean a text field. */
 async function rawAt(page: Page, [x, y]: [number, number]): Promise<Raw> {
   return page.evaluate(([x, y]) => {
     let el = document.elementFromPoint(x, y);
@@ -49,7 +41,6 @@ async function rawAt(page: Page, [x, y]: [number, number]): Promise<Raw> {
   }, [x, y] as [number, number]);
 }
 
-/** Splits `url("a.svg") 4 4, url(b.png), pointer` into its images and the keyword at the end. */
 export function parseCursor(css: string): { images: { url: string; hotspot?: [number, number] }[]; keyword: string } {
   const images: { url: string; hotspot?: [number, number] }[] = [];
   const re = /url\(\s*(?:"((?:[^"\\]|\\.)*)"|'((?:[^'\\]|\\.)*)'|([^)\s]*))\s*\)\s*(?:(-?[\d.]+)\s+(-?[\d.]+))?\s*,\s*/gy;
@@ -63,7 +54,6 @@ export function parseCursor(css: string): { images: { url: string; hotspot?: [nu
   return { images, keyword: css.slice(end).trim() || 'auto' };
 }
 
-/** Reads cursors under the pointer for a whole performance, fetching each site image once. */
 export function cursorReader(page: Page) {
   const images = new Map<string, string | null>();
 
@@ -72,7 +62,6 @@ export function cursorReader(page: Page) {
       let data: string | null = null;
       if (url.startsWith('data:')) data = url;
       else {
-        // Fetched from Node, not the page: the page's clock may be frozen, and no CORS rules apply.
         const res = await page.context().request.get(url, { timeout: 5000 }).catch(() => null);
         const type = res?.headers()['content-type']?.split(';')[0];
         if (res?.ok() && type?.startsWith('image/')) data = `data:${type};base64,${(await res.body()).toString('base64')}`;

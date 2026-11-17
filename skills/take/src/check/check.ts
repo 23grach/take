@@ -1,5 +1,3 @@
-// take check: looks at a finished video the way a careful viewer would, and reports in plain words.
-// Format (codec, frame rate, size, colour, fast start), motion (hitches, long still stretches) and the loop seam.
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
@@ -17,30 +15,19 @@ export interface Report {
   frames: number;
   seconds: number;
   findings: Finding[];
-  /** Frames where motion stalls for one frame (a doubled frame). */
   hitches: number[];
   ok: boolean;
 }
 
 export interface CheckOptions {
-  /** The video is meant to loop (default true): check that the end runs smoothly into the start. */
   loop?: boolean;
   fps?: number;
-  /** Areas (x, y, width, height in video pixels) where a video inside the page shows in frame f. It runs at its
-   *  own frame rate (30 fps repeats every other frame), so a still frame there isn't a stall. */
   pageVideos?: (f: number) => [number, number, number, number][];
 }
 
-/** Motion is measured on a small greyscale copy split into tiles, so the cursor moving in one corner
- *  can't hide footage stalling everywhere else. Calibrated on the Boards video: studio 0 hitches,
- *  live 4–6 (the dialog fades arriving at 30 fps). */
 const GRID = { w: 320, h: 180, cols: 8, rows: 5 };
-/** A tile counts as still below this mean change in grey levels (0–255)… */
 const STILL = 0.15;
-/** …and as moving above this. Slow fades on flat colour step in whole grey levels: Chromium blends in 8 bits, so a fade
- *  moving ~1 level a frame can show 2, 0, 2. That is invisible and must not count as a stall. */
 const MOVING = 2.5;
-/** Nothing moving for longer than this reads as frozen. */
 const LONGEST_STILL_S = 4;
 
 export function check(file: string, { loop = true, fps: expectedFps = 60, pageVideos }: CheckOptions = {}): Report {
@@ -60,14 +47,12 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
   };
   const fps = rate(s.r_frame_rate);
 
-  // Format
   add('codec', s.codec_name === 'h264' ? 'pass' : 'fail', `${s.codec_name}${s.profile ? ` (${s.profile})` : ''}${s.codec_name === 'h264' ? '' : '; expected H.264, which plays everywhere'}`);
   const evenSize = s.width % 2 === 0 && s.height % 2 === 0;
   add('size', evenSize ? 'pass' : 'fail', `${s.width}×${s.height}${evenSize ? '' : '; width and height must be even for H.264 players'}`);
   add('colour', s.pix_fmt === 'yuv420p' && s.color_range === 'tv' ? 'pass' : 'warn',
     `${s.pix_fmt}, ${s.color_range === 'tv' ? 'limited' : s.color_range ?? 'unknown'} range${s.pix_fmt === 'yuv420p' && s.color_range === 'tv' ? '' : '; expected yuv420p limited range, or some players shift the contrast'}`);
 
-  // Frame rate: every frame must last exactly as long as the others.
   const durations = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts', '-of', 'csv=p=0', file], { encoding: 'utf8' })
     .trim().split('\n').map(Number).sort((a, b) => a - b);
   const steps = new Set(durations.slice(1).map((p, i) => p - durations[i]));
@@ -78,13 +63,11 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
   const fast = fastStart(file);
   add('fast start', fast ? 'pass' : 'warn', fast ? 'plays before it has fully downloaded' : 'the index is at the end, so browsers must download the whole file before playing; re-encode with +faststart');
 
-  // Motion
   const change = tileChanges(file);
   const n = change.length + 1;
   const seconds = n / fps;
   add('length', 'pass', `${n} frames, ${seconds.toFixed(2)} s, ${Math.round(Number(probe.format.bit_rate) / 1000)} kbit/s`);
 
-  // A hitch: a tile moving, then still for exactly one frame, then moving again. Around the loop too.
   const pairs = loop ? [...change, tileDiff(file, n - 1, 0)] : change;
   const hitches: number[] = [];
   let videoRepeats = 0;
@@ -96,7 +79,6 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
     if (!stalled.some(Boolean)) continue;
     const areas = pageVideos?.(f) ?? [];
     const inVideo = (t: number) => {
-      // Any overlap: a tile's motion may come from the video alone, even if it only covers part of the tile.
       const [tw, th] = [s.width / GRID.cols, s.height / GRID.rows];
       const [tx, ty] = [(t % GRID.cols) * tw, Math.floor(t / GRID.cols) * th];
       return areas.some(([x, y, w, h]) => x < tx + tw && x + w > tx && y < ty + th && y + h > ty);
@@ -108,7 +90,6 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
   add('smoothness', hitches.length ? 'fail' : 'pass',
     hitches.length ? `${hitches.length} doubled frame${hitches.length > 1 ? 's' : ''}: motion stalls for one frame at ${hitches.slice(0, 5).map(at).join(', ')}${hitches.length > 5 ? '…' : ''}` : `motion never stalls mid-move${videoRepeats ? ' (a video in the page shows at its own frame rate)' : ''}`);
 
-  // Long stretches where nothing moves at all.
   let longest = { start: 0, length: 0 };
   for (let i = 0, run = 0; i < change.length; i++) {
     run = Math.max(...change[i]) < STILL ? run + 1 : 0;
@@ -118,7 +99,6 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
   add('stillness', stillS > LONGEST_STILL_S ? 'warn' : 'pass',
     longest.length ? `longest still stretch ${stillS.toFixed(2)} s from ${(longest.start / fps).toFixed(2)} s${stillS > LONGEST_STILL_S ? '; viewers may think it froze' : ''}` : 'something moves in every frame');
 
-  // The loop seam: the step from the last frame to the first should be no bigger than the steps around it.
   if (loop) {
     const size = (c: Float32Array) => Math.max(...c);
     const seam = size(pairs[pairs.length - 1]);
@@ -142,7 +122,6 @@ export function formatReport(r: Report): string {
   return `${r.file}\n${lines.join('\n')}\n`;
 }
 
-/** Is the MP4 index (moov) before the media (mdat)? */
 function fastStart(file: string): boolean {
   const fd = fs.openSync(file, 'r');
   try {
@@ -173,7 +152,6 @@ function greyFrames(file: string): Buffer {
 let cache: { file: string; grey: Buffer } | undefined;
 const grey = (file: string) => (cache?.file === file ? cache.grey : (cache = { file, grey: greyFrames(file) }).grey);
 
-/** Mean change per tile between two frames, in grey levels. */
 function tileDiff(file: string, a: number, b: number): Float32Array {
   const g = grey(file);
   const S = GRID.w * GRID.h;
@@ -185,7 +163,6 @@ function tileDiff(file: string, a: number, b: number): Float32Array {
   return out;
 }
 
-/** Tile changes between each frame and the next. */
 function tileChanges(file: string): Float32Array[] {
   const n = grey(file).length / (GRID.w * GRID.h);
   return Array.from({ length: n - 1 }, (_, i) => tileDiff(file, i, i + 1));

@@ -1,6 +1,3 @@
-// Records a take: opens the app, performs the take while capturing frames, and writes
-// <out>/frames/, <out>/capture.json and <out>/events.json, and in studio mode the page's own sound: <out>/sound/
-// and <out>/sound.json.
 import fs from 'node:fs';
 import path from 'node:path';
 import type { CDPSession, Page } from 'playwright';
@@ -14,34 +11,23 @@ import { hideCaret } from './caret.ts';
 import type { EventLog } from './events.ts';
 import { catchSound, type SoundCatcher } from './sound.ts';
 
-/** Time the page gets to settle (fonts, first renders, intro animations) before frame 0. */
 const WARMUP_MS = 1000;
-/** What the page gets after setup steps (a banner fading away) before frame 0. */
 const SETTLE_AFTER_SETUP_MS = 600;
 
 export interface RecordOptions {
   mode?: Mode;
   out: string;
   headed?: boolean;
-  /** Studio mode: called after every frame with the log so far (it keeps growing) and how many frames are
-   *  recorded with their pictures on disk. */
   onFrame?: (log: EventLog, frames: number) => void;
-  /** Move the finished recording into `out` (default). False: it stays in stagingDir(out) for the caller. */
   commit?: boolean;
-  /** Aborting it stops the recording: the browser closes and record throws. */
   signal?: AbortSignal;
-  /** Studio: record in a browser that draws as fast as it can (the default; see NeedsFrameLimit). */
   unthrottled?: boolean;
 }
 
-/** What a recording writes into its folder; nothing else there is touched. */
 const CAPTURE_FILES = ['frames', 'capture.json', 'events.json', 'sound', 'sound.json'];
 
-/** Where a recording goes while it's being made, next to its folder: an earlier capture stays whole until the
- *  new one has finished, so a failed re-record loses nothing. */
 export const stagingDir = (out: string) => path.join(path.dirname(path.resolve(out)), `.${path.basename(path.resolve(out))}.recording`);
 
-/** Puts a finished recording in place of the earlier one. */
 export function commitCapture(out: string) {
   const staging = stagingDir(out);
   fs.mkdirSync(out, { recursive: true });
@@ -57,12 +43,9 @@ export const discardRecording = (out: string) => fs.rmSync(stagingDir(out), { re
 export interface Recording {
   capture: CaptureInfo;
   events: EventLog;
-  /** Things worth telling the person, e.g. a sound that couldn't be caught. */
   warnings: string[];
 }
 
-/** Records into stagingDir(out); with `commit` (the default) moves it into `out` once it has finished. Without,
- *  the caller does that (take run, once the video composed from the staging folder is done). */
 export async function record(take: Take, { mode = 'studio', out: final, headed = false, onFrame, commit = true, signal, unthrottled = true }: RecordOptions): Promise<Recording> {
   const out = stagingDir(final);
   const fresh = () => {
@@ -71,8 +54,6 @@ export async function record(take: Take, { mode = 'studio', out: final, headed =
   };
   fresh();
   try {
-    // A page the fast browser can't draw: record again at 60 Hz, here if no frame has been passed on yet (it
-    // happens while the page loads, mostly), else the caller starts over (take run is composing those frames).
     let reported = false;
     const report = onFrame && ((log: EventLog, frames: number) => ((reported = true), onFrame(log, frames)));
     const result = await recordInto(take, { mode, out, headed, onFrame: report, signal, unthrottled }).catch((e) => {
@@ -104,24 +85,19 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
   signal?.addEventListener('abort', stop, { once: true });
   try {
     signal?.throwIfAborted();
-    // The compositor draws the caret, blinking on video time; the browser's own must never be filmed.
     await hideCaret(page);
     const recorder: Recorder = mode === 'studio' ? await studio(page, out, cdp!, take.target.viewport, take.target.scale, 60, sound) : await live(page, out, size);
     await recorder.warmup(WARMUP_MS);
-    // While waiting, a tiny screenshot after each step makes the browser draw a frame, as it does all the time on
-    // a real screen: sites that wait for an image to show (some banners) only move on when frames are drawn.
     await untilReady(page, take.ready, async (ms) => {
       await recorder.warmup(ms);
       const shot = page.screenshot({ clip: { x: 0, y: 0, width: 1, height: 1 } });
       await (studioMode ? picture(page, shot) : shot);
     });
-    // Setup steps (a cookie banner, a welcome pop-up) on a clock that moves page time on without filming.
     let unfilmed = 0;
     const setupClock = { fps: 60, get frame() { return unfilmed; }, async tick() { await recorder.warmup(1000 / 60); unfilmed++; } };
     if (await performSetup(page, take, studioMode ? setupClock : realtimeClock())) await recorder.warmup(SETTLE_AFTER_SETUP_MS);
     await sound?.start();
     const t0 = performance.now();
-    // Pictures are written in the background and can land out of order: report them in order.
     let reported = Promise.resolve();
     const saved = recorder.saved;
     const events = await perform(page, take, recorder.clock, {

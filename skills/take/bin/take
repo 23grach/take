@@ -1,7 +1,4 @@
 #!/usr/bin/env node
-// Node runs the TypeScript sources directly (type stripping), so there is no build step.
-// Two things that would otherwise fail with a Node error before Take can explain: an old Node, and a fresh copy
-// whose packages aren't installed yet. Kept in plain old JavaScript so even an old Node can run this far.
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 

@@ -1,13 +1,7 @@
-// The take format, version 0: the exact steps a recording replays. Reference: docs/take-format.md.
-// validateTake() checks a parsed take.json, fills in defaults, and explains every problem in plain words,
-// so the agent (or a person) can fix a take without guessing.
-
 export const TAKE_VERSION = 0;
 
-/** A saved login's name: it becomes a file name, so letters, digits, dots, dashes and underscores. */
 export const isLoginName = (name: string) => /^[a-z0-9][a-z0-9._-]*$/i.test(name) && !name.includes('..');
 
-/** How to find an element. Exactly one way per target, the most human one first. */
 export type Target =
   | { role: string; name?: string; exact?: boolean }
   | { label: string; exact?: boolean }
@@ -15,19 +9,13 @@ export type Target =
   | { placeholder: string; exact?: boolean }
   | { css: string };
 
-/** A place on the page: an element (its middle), or a point [x, y] in CSS pixels from the page's top left. */
 export type Spot = Target | [number, number];
 
-/** Something to wait for after a step, before the next one starts. */
 export type Condition = { text: string } | { visible: Target } | { hidden: Target };
 
 interface Common {
-  /** A named moment, e.g. "result". Logged with the step so compose and check can find it. */
   mark?: string;
-  /** Wait for this after the step, before the next one. */
   waitFor?: Condition;
-  /** How long the step lasts in the video, in ms, from its start to the next step's start (on the last step, to
-   *  the end of the take). Without it, the step takes as long as the action needs, plus the usual pause after it. */
   ms?: number;
 }
 
@@ -47,16 +35,12 @@ export type Step = Common &
 export interface WebTarget {
   kind: 'web';
   url: string;
-  /** What the window's address bar shows, e.g. "boards.app". The product's real domain, not where it runs while recording. */
   address?: string;
   viewport: [number, number];
-  /** Pixels per CSS pixel in the captured frames. */
   scale: 1 | 1.5 | 2;
-  /** A saved login to start signed in with (made by `take login`), by name, e.g. "boards.app". */
   login?: string;
 }
 
-/** Hosts that only exist on the recording machine: never shown in the address bar. */
 export function isLocalUrl(url: string): boolean {
   let host: string;
   try {
@@ -68,13 +52,11 @@ export function isLocalUrl(url: string): boolean {
     || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
 }
 
-/** A heads-up when the address bar would come out blank: the app runs locally and the take names no address. */
 export function addressWarning(target: WebTarget): string | undefined {
   if (target.address !== undefined || !isLocalUrl(target.url)) return undefined;
   return `no address: the app runs at ${new URL(target.url).host}, which isn't shown, so the address bar will be blank. Add the product's domain as target.address, e.g. "boards.app"`;
 }
 
-/** The text in the address bar: the take's address, else the URL's domain when it's a public one, else nothing. */
 export function shownAddress(target: WebTarget): string {
   if (target.address !== undefined) return target.address;
   if (isLocalUrl(target.url)) return '';
@@ -87,13 +69,10 @@ export interface Take {
   title: string;
   target: WebTarget;
   theme: string;
-  /** Wait for all of these after the page opens, before filming starts: the video opens on a loaded page. Not filmed. */
   ready?: Condition[];
-  /** Steps done after the page opens, before filming starts: closing a cookie banner or a welcome pop-up. Not filmed. */
   setup?: Step[];
   steps: Step[];
   loop: 'crossfade-to-start' | 'none';
-  /** The page's own sound (clicks, chimes, a video's soundtrack) in the final video. */
   sound: boolean;
 }
 
@@ -103,9 +82,7 @@ export const DEFAULTS = {
   theme: 'default',
   loop: 'crossfade-to-start' as const,
   sound: true,
-  /** Typing speed in characters per second. 14 reads as quick but human. */
   cps: 14,
-  /** How long a `wait` step waits before the take fails, in ms. */
   timeout: 10_000,
 };
 
@@ -120,12 +97,10 @@ const isObj = (v: unknown): v is Obj => typeof v === 'object' && v !== null && !
 const isText = (v: unknown): v is string => typeof v === 'string' && v.trim() !== '';
 const show = (v: unknown) => (typeof v === 'string' ? `"${v}"` : JSON.stringify(v));
 
-/** Checks a parsed take.json. On success returns the take with every default filled in. */
 export function validateTake(input: unknown): Result {
   const errors: string[] = [];
   const fail = (path: string, msg: string) => errors.push(`${path}: ${msg}`);
 
-  /** Flags keys the format doesn't know, so typos like "taget" don't silently do nothing. */
   function onlyKeys(o: Obj, path: string, allowed: readonly string[]) {
     for (const k of Object.keys(o)) {
       if (!allowed.includes(k)) {
@@ -270,7 +245,6 @@ export function validateTake(input: unknown): Result {
 
   if (!isObj(input)) return { ok: false, errors: ['the take must be a JSON object'] };
   onlyKeys(input, '', ['version', 'title', 'target', 'theme', 'ready', 'setup', 'steps', 'loop', 'sound']);
-  // One condition or a list; all must hold.
   const ready = 'ready' in input ? (Array.isArray(input.ready) ? input.ready : [input.ready]) : undefined;
   if (ready?.length === 0) fail('ready', 'give a condition, e.g. { "visible": { "role": "button", "name": "Deposit" } }, or a list of them');
   ready?.forEach((c, i) => condition(c, Array.isArray(input.ready) ? `ready[${i}]` : 'ready'));
@@ -355,9 +329,6 @@ export function validateTake(input: unknown): Result {
   };
 }
 
-/** The nearest allowed word to a typo, if it's close enough to be a likely slip. */
-/** Key names the browser knows (as Playwright names them): modifiers, named keys and key codes. Any single
- *  character works too. */
 const KEY_NAMES = new Set([
   'Shift', 'Control', 'Alt', 'Meta', 'ControlOrMeta', 'Escape', 'Enter', 'Tab', 'Backspace', 'Delete', 'Insert', 'Space',
   'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'CapsLock', 'ContextMenu',
@@ -370,7 +341,6 @@ const KEY_NAMES = new Set([
   ...Array.from({ length: 10 }, (_, i) => `Numpad${i}`),
   ...Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`),
 ]);
-/** What people often write, and the browser's name for it. */
 const KEY_ALIASES: Record<string, string> = {
   cmd: 'Meta', command: 'Meta', '⌘': 'Meta', super: 'Meta', win: 'Meta', ctrl: 'Control', control: 'Control', '⌃': 'Control',
   option: 'Alt', opt: 'Alt', alt: 'Alt', '⌥': 'Alt', shift: 'Shift', '⇧': 'Shift', esc: 'Escape', escape: 'Escape', return: 'Enter',
@@ -378,7 +348,6 @@ const KEY_ALIASES: Record<string, string> = {
   right: 'ArrowRight', space: 'Space', spacebar: 'Space', tab: 'Tab', pgup: 'PageUp', pgdn: 'PageDown', home: 'Home', end: 'End',
 };
 
-/** Why a press key won't work, e.g. "Cmd+K" → use Meta. Keys are joined with +, as in "Meta+K". */
 export function keyProblem(key: string): string | undefined {
   const parts = key === '+' ? ['+'] : key.split(/\+(?!$)/);
   for (const part of parts) {
