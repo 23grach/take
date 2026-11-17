@@ -172,11 +172,13 @@ export async function freezePage(page: Page, unthrottled = false): Promise<CDPSe
   return cdp;
 }
 
-/** onTime, written out in each page.evaluate (which can't see this file): animations Take moves on frame
- *  by frame. Scroll-driven ones (their timeline has an axis) follow the scroll, and refuse a time. Not "the
- *  timeline is document.timeline": a page can replace that global (YouTube sometimes installs a stand-in), and
- *  then none of its animations would ever move: a view transition would cover the page for good. */
+/** Moves media on only in pages where some has played (see freezePage). */
 const stepPlaying = (page: Page, ms: number) => (pageState.get(page)?.media ? stepMedia(page, ms) : { boxes: [], played: [] as Played[] });
+
+// "onTime", written out in each page.evaluate below (which can't see this file): the animations Take moves on frame
+// by frame. Scroll-driven ones (their timeline has an axis) follow the scroll, and refuse a time. Not "the timeline
+// is document.timeline": a page can replace that global (YouTube sometimes installs a stand-in), and then none of its
+// animations would ever move: a view transition would cover the page for good.
 
 /** Studio: each tick moves animations and page time on exactly one frame, then screenshots it.
  *  `cdp` is the session freezePage opened; `viewport` and `scale` are the take's. `sound` hears the page as page

@@ -292,6 +292,18 @@ test('setup steps close a banner before filming, and are not filmed', async () =
   }
 });
 
+/** Where the blue box (#36f) starts on the last frame, in page pixels from the left: -1 if it isn't there. */
+function boxLeft(out: string, capture: { size: [number, number]; frames: string[] }): number {
+  const [w, h] = capture.size;
+  const rgb = execFileSync('ffmpeg', ['-v', 'error', '-i', path.join(out, capture.frames.at(-1)!), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 2 ** 30 });
+  for (let x = 0; x < w; x++)
+    for (let y = 0; y < h; y++) {
+      const i = (y * w + x) * 3;
+      if (rgb[i] < 90 && rgb[i + 1] > 70 && rgb[i + 1] < 140 && rgb[i + 2] > 200) return x;
+    }
+  return -1;
+}
+
 test('a view transition records: the page replaced document.timeline, and the transition still finishes', async () => {
   // A cookie banner the setup step closes, behind a view transition that starts as the page loads. The page swaps
   // document.timeline for a stand-in, as some sites' animation libraries do.
@@ -312,8 +324,11 @@ test('a view transition records: the page replaced document.timeline, and the tr
       steps: [{ do: 'click', target: { role: 'button', name: 'Go' } }],
     });
     assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
-    const { capture } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'transition') });
+    const out = path.join(tmp, 'transition');
+    const { capture } = await record(r.take, { mode: 'studio', out });
     assert.ok(capture.frames.length > 10);
+    // It moved 300 px from the body's 8 px margin: the transition finished, rather than covering the page.
+    assert.ok(Math.abs(boxLeft(out, capture) - 308) <= 2, `the box ends at ${boxLeft(out, capture)} px, not 308`);
   } finally {
     server.close();
   }
@@ -329,8 +344,10 @@ test('a view transition mid-take: recorded again at 60 Hz, or handed back once f
     const r = validateTake({ version: 0, title: 'Move', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none', steps: [{ do: 'click', target: { role: 'button', name: 'Move' } }, { do: 'hold', ms: 500 }] });
     assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
     // Nothing passed on yet: record does it again itself.
-    const { capture, events } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'mid-take') });
+    const out = path.join(tmp, 'mid-take');
+    const { capture, events } = await record(r.take, { mode: 'studio', out });
     assert.equal(capture.frames.length, events.frames);
+    assert.ok(Math.abs(boxLeft(out, capture) - 308) <= 2, `the box ends at ${boxLeft(out, capture)} px, not 308`);
     // take run composes frames as they come: it's told, and starts over (run.ts).
     const { NeedsFrameLimit } = await import('../src/drivers/web/capture.ts');
     await assert.rejects(record(r.take, { mode: 'studio', out: path.join(tmp, 'mid-take-2'), onFrame: () => {} }), NeedsFrameLimit);
