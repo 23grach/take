@@ -7,7 +7,7 @@ import type { CDPSession, Page } from 'playwright';
 import type { Take } from '../../take/format.ts';
 import { openTake, untilReady } from './browser.ts';
 import { UNTHROTTLED } from '../../browser-binary.ts';
-import { freezePage, live, studio, type CaptureInfo, type Mode, type Recorder } from './capture.ts';
+import { freezePage, live, NeedsFrameLimit, picture, studio, type CaptureInfo, type Mode, type Recorder } from './capture.ts';
 import { perform, performSetup } from './driver.ts';
 import { realtimeClock } from './clock.ts';
 import { hideCaret } from './caret.ts';
@@ -30,6 +30,8 @@ export interface RecordOptions {
   commit?: boolean;
   /** Aborting it stops the recording: the browser closes and record throws. */
   signal?: AbortSignal;
+  /** Studio: record in a browser that draws as fast as it can (the default; see NeedsFrameLimit). */
+  unthrottled?: boolean;
 }
 
 /** What a recording writes into its folder; nothing else there is touched. */
@@ -61,12 +63,23 @@ export interface Recording {
 
 /** Records into stagingDir(out); with `commit` (the default) moves it into `out` once it has finished. Without,
  *  the caller does that (take run, once the video composed from the staging folder is done). */
-export async function record(take: Take, { mode = 'studio', out: final, headed = false, onFrame, commit = true, signal }: RecordOptions): Promise<Recording> {
-  discardRecording(final);
+export async function record(take: Take, { mode = 'studio', out: final, headed = false, onFrame, commit = true, signal, unthrottled = true }: RecordOptions): Promise<Recording> {
   const out = stagingDir(final);
-  fs.mkdirSync(out, { recursive: true });
+  const fresh = () => {
+    discardRecording(final);
+    fs.mkdirSync(out, { recursive: true });
+  };
+  fresh();
   try {
-    const result = await recordInto(take, { mode, out, headed, onFrame, signal });
+    // A page the fast browser can't draw: record again at 60 Hz, here if no frame has been passed on yet (it
+    // happens while the page loads, mostly), else the caller starts over (take run is composing those frames).
+    let reported = false;
+    const report = onFrame && ((log: EventLog, frames: number) => ((reported = true), onFrame(log, frames)));
+    const result = await recordInto(take, { mode, out, headed, onFrame: report, signal, unthrottled }).catch((e) => {
+      if (!(e instanceof NeedsFrameLimit) || reported) throw e;
+      fresh();
+      return recordInto(take, { mode, out, headed, onFrame: report, signal, unthrottled: false });
+    });
     if (commit) commitCapture(final);
     return result;
   } catch (e) {
@@ -75,17 +88,18 @@ export async function record(take: Take, { mode = 'studio', out: final, headed =
   }
 }
 
-async function recordInto(take: Take, { mode, out, headed, onFrame, signal }: Required<Pick<RecordOptions, 'mode' | 'out' | 'headed'>> & Pick<RecordOptions, 'onFrame' | 'signal'>): Promise<Recording> {
+async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unthrottled }: Required<Pick<RecordOptions, 'mode' | 'out' | 'headed' | 'unthrottled'>> & Pick<RecordOptions, 'onFrame' | 'signal'>): Promise<Recording> {
   const [w, h] = take.target.viewport;
   const size: [number, number] = [Math.round(w * take.target.scale), Math.round(h * take.target.scale)];
   let cdp: CDPSession | undefined;
   const studioMode = mode === 'studio';
+  const fast = studioMode && unthrottled;
   let sound: SoundCatcher | undefined;
   const prepare = async (p: Page) => {
-    cdp = await freezePage(p);
+    cdp = await freezePage(p, fast);
     if (take.sound) sound = await catchSound(p);
   };
-  const { browser, page, visible } = await openTake(take, { headed, args: studioMode ? UNTHROTTLED : [], prepare: studioMode ? prepare : undefined });
+  const { browser, page, visible } = await openTake(take, { headed, args: fast ? UNTHROTTLED : [], prepare: studioMode ? prepare : undefined });
   const stop = () => void browser.close().catch(() => {});
   signal?.addEventListener('abort', stop, { once: true });
   try {
@@ -98,7 +112,8 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal }: Re
     // a real screen: sites that wait for an image to show (some banners) only move on when frames are drawn.
     await untilReady(page, take.ready, async (ms) => {
       await recorder.warmup(ms);
-      await page.screenshot({ clip: { x: 0, y: 0, width: 1, height: 1 } });
+      const shot = page.screenshot({ clip: { x: 0, y: 0, width: 1, height: 1 } });
+      await (studioMode ? picture(page, shot) : shot);
     });
     // Setup steps (a cookie banner, a welcome pop-up) on a clock that moves page time on without filming.
     let unfilmed = 0;
