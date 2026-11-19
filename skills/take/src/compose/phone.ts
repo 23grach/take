@@ -264,7 +264,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   .scene { position: absolute; inset: 0; }
   .page { position: absolute; left: 0; top: ${strip}px; width: 100%; height: ${pageH}px; overflow: hidden; }
   .page img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .stretch { position: absolute; left: 0; top: 0; width: 100%; height: ${strip}px; overflow: hidden; }
+  .stretch { position: absolute; left: 0; top: 0; width: 100%; height: ${strip + 1}px; overflow: hidden; }
   .stretch img { position: absolute; left: 0; top: 0; width: 100%; height: ${(pageH * strip) / (phone.edge.top.band * box.k)}px; display: block; }
   .edge { position: absolute; left: 0; width: 100%; pointer-events: none; }
   #caret { position: absolute; left: 0; top: 0; display: none; }
