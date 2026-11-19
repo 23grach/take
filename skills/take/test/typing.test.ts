@@ -58,7 +58,7 @@ test('the drawn caret is solid while typing, then blinks, and fades out with the
   const { theme } = loadTheme();
   const c = { x: 10, y: 10, height: 18, color: 'rgb(0, 0, 0)' };
   const log: EventLog = {
-    version: 0, title: 't', url: 'http://x/', fps: 60, viewport: [1440, 900], scale: 1, frames: 200,
+    version: 0, title: 't', url: 'http://x/', fps: 60, device: 'desktop', viewport: [1440, 900], scale: 1, frames: 200,
     pointer: Array.from({ length: 200 }, () => [0, 0] as [number, number]),
     address: '', cursors: [[0, 'default']], carets: [[0, null], [10, c], [12, { ...c, x: 20 }]], loop: 'crossfade-to-start',
     events: [], steps: [], marks: {},

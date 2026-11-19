@@ -13,7 +13,7 @@ const { theme } = loadTheme();
 
 function log(frames: number): EventLog {
   return {
-    version: 0, title: 't', url: 'http://127.0.0.1:4300/', address: '', fps: 60, viewport: [1440, 900], scale: 1, frames,
+    version: 0, title: 't', url: 'http://127.0.0.1:4300/', address: '', fps: 60, device: 'desktop', viewport: [1440, 900], scale: 1, frames,
     cursors: [[0, 'default']], carets: [[0, null]], loop: 'crossfade-to-start',
     pointer: Array.from({ length: frames }, (_, f) => [100 + f * 10, 200] as [number, number]),
     events: [{ frame: 10, type: 'down', x: 200, y: 200 }, { frame: 15, type: 'up', x: 250, y: 200 }],

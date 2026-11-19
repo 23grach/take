@@ -1,5 +1,6 @@
 import type { Cursor } from './cursor.ts';
 import type { Caret } from './caret.ts';
+import type { Device } from '../../take/format.ts';
 
 export interface Box {
   x: number;
@@ -31,6 +32,7 @@ export interface EventLog {
   url: string;
   address: string;
   fps: number;
+  device: Device;
   viewport: [number, number];
   scale: number;
   frames: number;

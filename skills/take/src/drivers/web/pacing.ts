@@ -8,10 +8,12 @@ export const PACING = {
   stiffness: 7,
   settle: 140,
   press: 90,
+  tap: 120,
   multiClickPress: 60,
   multiClickGap: 70,
   drag: { slower: 1.6, arc: 0.02, grip: 160 },
   scroll: { base: 300, perPx: 0.6, min: 400, max: 1400 },
+  swipe: { lift: 0.35, reach: 0.45, slower: 1.3 },
   fittedTyping: { min: 5, max: 40 },
   find: 8000,
 };
@@ -29,6 +31,9 @@ export function scrollMs(distance: number): number {
   const s = PACING.scroll;
   return Math.min(s.max, Math.max(s.min, s.base + s.perPx * Math.abs(distance)));
 }
+
+export const swipeProgress = (t: number, lift = PACING.swipe.lift) =>
+  t < lift ? (t * t) / lift : 1 - (1 - lift) * (1 - (t - lift) / (1 - lift)) ** 2;
 
 export const ease = (t: number) => t * t * t * (10 - 15 * t + 6 * t * t);
 

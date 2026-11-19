@@ -237,7 +237,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
     await settle(page);
     const [vw, vh] = take.target.viewport;
     let pointer: [number, number] = [Math.round(vw * PACING.start[0]), Math.round(vh * PACING.start[1])];
-    await page.mouse.move(...pointer);
+    if (take.target.device !== 'phone') await page.mouse.move(...pointer);
     await shoot(0, 'First screen', pointer, error ? { error } : {});
     if (!error) try {
       const log = await perform(page, rehearsal(take), clock, {

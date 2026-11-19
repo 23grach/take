@@ -32,8 +32,15 @@ export type Step = Common &
     | { do: 'hold'; ms: number }
   );
 
+export const DEVICES = ['desktop', 'phone'] as const;
+export type Device = (typeof DEVICES)[number];
+
+export const PHONE = { screen: [402, 874] as [number, number], statusBar: 62 };
+export const phonePage = (): [number, number] => [PHONE.screen[0], PHONE.screen[1] - PHONE.statusBar];
+
 export interface WebTarget {
   kind: 'web';
+  device: Device;
   url: string;
   address?: string;
   viewport: [number, number];
@@ -53,7 +60,7 @@ export function isLocalUrl(url: string): boolean {
 }
 
 export function addressWarning(target: WebTarget): string | undefined {
-  if (target.address !== undefined || !isLocalUrl(target.url)) return undefined;
+  if (target.device === 'phone' || target.address !== undefined || !isLocalUrl(target.url)) return undefined;
   return `no address: the app runs at ${new URL(target.url).host}, which isn't shown, so the address bar will be blank. Add the product's domain as target.address, e.g. "boards.app"`;
 }
 
@@ -257,14 +264,21 @@ export function validateTake(input: unknown): Result {
   if (!isObj(input.target)) fail('target', `must be an object such as { "kind": "web", "url": "http://localhost:3000" }, got ${show(input.target)}`);
   else {
     const t = input.target;
-    onlyKeys(t, 'target', ['kind', 'url', 'address', 'viewport', 'scale', 'login']);
+    onlyKeys(t, 'target', ['kind', 'device', 'url', 'address', 'viewport', 'scale', 'login']);
+    const device = t.device ?? 'desktop';
+    if (!DEVICES.includes(device as Device)) {
+      const near = typeof device === 'string' ? closest(device, DEVICES) : undefined;
+      fail('target.device', `must be ${DEVICES.map((d) => `"${d}"`).join(' or ')}, got ${show(device)}${near ? ` (did you mean "${near}"?)` : ''}`);
+    }
+    const phone = device === 'phone';
+    if (phone && 'viewport' in t) fail('target.viewport', `a phone's page is always ${phonePage().join('×')} (an iPhone screen minus its status bar); leave "viewport" out`);
     if (t.kind !== 'web') fail('target.kind', `must be "web", got ${show(t.kind)}`);
     const url = text(t, 'url', 'target');
     if (url && !/^https?:\/\//.test(url)) fail('target.url', `must start with http:// or https://, got ${show(url)}`);
     const address = t.address;
     if (address !== undefined && (typeof address !== 'string' || /^[a-z]+:\/\//i.test(address) || /\s/.test(address.trim())))
       fail('target.address', `must be the address as it should appear in the address bar, e.g. "boards.app" or "boards.app/projects" (no http://), got ${show(address)}`);
-    const viewport = t.viewport ?? DEFAULTS.viewport;
+    const viewport = phone ? phonePage() : t.viewport ?? DEFAULTS.viewport;
     if (!Array.isArray(viewport) || viewport.length !== 2 || !viewport.every((n) => Number.isInteger(n) && n >= 320 && n <= 3840))
       fail('target.viewport', `must be [width, height] in whole pixels between 320 and 3840, e.g. [1440, 900], got ${show(t.viewport)}`);
     const scale = t.scale ?? DEFAULTS.scale;
@@ -274,6 +288,7 @@ export function validateTake(input: unknown): Result {
       fail('target.login', `must be the name of a saved login, e.g. "boards.app" (letters, digits, dots, dashes, underscores), got ${show(login)}`);
     web = {
       kind: 'web',
+      device: phone ? 'phone' : 'desktop',
       url: url ?? '',
       ...(typeof address === 'string' ? { address: address.trim() } : {}),
       viewport: viewport as [number, number],
@@ -297,6 +312,10 @@ export function validateTake(input: unknown): Result {
     const out = step(s, `steps[${i}]`);
     if (out) steps.push(out);
   });
+
+  if (web?.device === 'phone')
+    for (const [list, name] of [[setup, 'setup'], [steps, 'steps']] as const)
+      list.forEach((s, i) => s.do === 'hover' && fail(`${name}[${i}].do`, 'a phone has no hover: tap the element ("click") or leave the step out'));
 
   if (web && Array.isArray(web.viewport)) {
     const [w, h] = web.viewport;

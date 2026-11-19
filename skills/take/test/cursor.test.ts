@@ -66,7 +66,7 @@ const { theme } = loadTheme();
 function log(): EventLog {
   const pointer = Array.from({ length: 40 }, (_, f) => [f < 20 ? 100 : 100 + (f - 19) * 5, 200] as [number, number]);
   return {
-    version: 0, title: 't', url: 'http://127.0.0.1/', fps: 60, viewport: [1440, 900], scale: 1, frames: 40, pointer,
+    version: 0, title: 't', url: 'http://127.0.0.1/', fps: 60, device: 'desktop', viewport: [1440, 900], scale: 1, frames: 40, pointer,
     address: '', cursors: [[0, 'text'], [25, 'pointer']], carets: [[0, null]], loop: 'crossfade-to-start',
     events: [5, 8, 11].map((frame) => ({ frame, type: 'key' as const, key: 'a' })),
     steps: [], marks: {},

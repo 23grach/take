@@ -131,9 +131,16 @@ export async function freezePage(page: Page, unthrottled = false): Promise<CDPSe
 
 const stepPlaying = (page: Page, ms: number) => (pageState.get(page)?.media ? stepMedia(page, ms) : { boxes: [], played: [] as Played[] });
 
-export async function studio(page: Page, dir: string, cdp: CDPSession, [width, height]: [number, number], scale: number, fps = 60, sound?: SoundCatcher): Promise<Recorder> {
+export async function studio(
+  page: Page,
+  dir: string,
+  cdp: CDPSession,
+  [width, height]: [number, number],
+  scale: number,
+  { mobile = false, fps = 60, sound }: { mobile?: boolean; fps?: number; sound?: SoundCatcher } = {},
+): Promise<Recorder> {
   fs.mkdirSync(path.join(dir, 'frames'), { recursive: true });
-  await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile: false });
+  await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile });
   let frame = 0;
   const dt = 1000 / fps;
   const videos: [number, Box[]][] = [];

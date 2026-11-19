@@ -100,6 +100,7 @@ Then offer one concrete cut and what it saves, picked from the timeline (for exa
 | "no loop" / "loop it" | `loop` → `"none"` / `"crossfade-to-start"`, then `take run`. |
 | "no sound", "mute it" | `"sound": false`, then `take run`. |
 | "no window", "just the page", "plain 1920×1080" | `theme` → `"plain"` and `target.viewport` → `[1920, 1080]`: the page fills a 1920×1080 video, no window or background. The viewport changes the layout, so probe again, then run. |
+| "on a phone", "mobile version" | `target.device` → `"phone"` and no `viewport`: the iPhone layout in an iPhone on the same 2560×1440 video. Phones have no hover, so tap instead or drop `hover` steps; probe again (the layout changes), then run. |
 | "change the address" | `target.address`, then `take compose takes/<name>/capture --address <new>` (no re-record), or `take run`. |
 | "show the result longer", "start slower", "pause after X" | Change or add `hold` steps, then probe and run. |
 | "shorter", "faster", "too slow" | Cut holds and step lengths as [Length](docs/pacing.md#length) says, then probe, show the new timeline and ask **Record?** again (step 4). |
@@ -112,6 +113,6 @@ Then offer one concrete cut and what it saves, picked from the timeline (for exa
 
 ## Not supported yet
 
-Multi-finger gestures; setup before the video starts other than signing in and closing things in `setup` (no filling in forms or choosing settings off camera); video sizes other than 2560×1440 (window) and 1920×1080 (`plain`, just the page); phone frames. Animations inside pages embedded from other sites (players, maps, widgets in an iframe from another address) run on real time while a final video records, so they play several times too fast in it; a `--mode live` draft shows them at the right speed. Videos in the page itself (`<video>`) play at their true speed; recording takes longer while one is on screen. Say so plainly when a scenario needs them, and offer the closest version that works.
+Multi-finger gestures; setup before the video starts other than signing in and closing things in `setup` (no filling in forms or choosing settings off camera); video sizes other than 2560×1440 (window or phone) and 1920×1080 (`plain`, just the page); tablets, and phones in the `plain` theme. Animations inside pages embedded from other sites (players, maps, widgets in an iframe from another address) run on real time while a final video records, so they play several times too fast in it; a `--mode live` draft shows them at the right speed. Videos in the page itself (`<video>`) play at their true speed; recording takes longer while one is on screen. Say so plainly when a scenario needs them, and offer the closest version that works.
 
 Never change Take itself (anything in `<base>`: its code, docs, plan or themes) to get a video done, even when a fix looks small. Work only in the user's project. When Take can't do something, say what is missing; the user decides whether Take should learn it.

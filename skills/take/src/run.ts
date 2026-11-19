@@ -5,7 +5,8 @@ import { readyTake } from './take/load.ts';
 import { commitCapture, discardRecording, record, stagingDir } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/driver.ts';
 import { NeedsFrameLimit, type Mode } from './drivers/web/capture.ts';
-import { compose, ffmpegProblem, following, loadTheme, themeProblem, type ComposeResult } from './compose/compose.ts';
+import { compose, ffmpegProblem, following, loadTheme, phoneLook, themeProblem, type ComposeResult } from './compose/compose.ts';
+import { phoneLayout } from './compose/phone.ts';
 import { layout } from './compose/stage.ts';
 import type { EventLog } from './drivers/web/events.ts';
 import { check, type Report } from './check/check.ts';
@@ -40,7 +41,7 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
 
   const { take, error } = await readyTake(file);
   if (!take) return stop(error);
-  const problem = themeProblem(theme ?? take.theme) ?? ffmpegProblem();
+  const problem = themeProblem(theme ?? take.theme, take.target.device) ?? ffmpegProblem();
   if (problem) return stop(`take run: ${problem}`);
 
   const dir = path.dirname(path.resolve(file));
@@ -132,7 +133,7 @@ export function pageVideoAreas(log: EventLog, theme?: string): ((f: number) => [
   const list = log.videos;
   if (!list?.length) return undefined;
   const look = loadTheme(theme).theme;
-  const box = layout(look, log.viewport);
+  const box = log.device === 'phone' ? phoneLayout(look, phoneLook(look, theme ?? 'default'), log.viewport) : layout(look, log.viewport);
   const z = look.stage.output[0] / look.stage.size[0];
   return (f) => {
     let i = list.length - 1;

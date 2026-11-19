@@ -4,7 +4,7 @@ import { addressWarning, isLocalUrl, shownAddress, validateTake, type WebTarget 
 import { stageHtml, layout } from '../src/compose/stage.ts';
 import { loadTheme } from '../src/compose/compose.ts';
 
-const web = (url: string, address?: string): WebTarget => ({ kind: 'web', url, viewport: [1440, 900], scale: 2, ...(address !== undefined ? { address } : {}) });
+const web = (url: string, address?: string): WebTarget => ({ kind: 'web', device: 'desktop', url, viewport: [1440, 900], scale: 2, ...(address !== undefined ? { address } : {}) });
 
 test('the address bar never shows where the app runs locally', () => {
   for (const url of ['http://localhost:3000/', 'http://127.0.0.1:4300/', 'http://app.test/', 'http://boards.local/x', 'http://192.168.1.20/', 'http://10.0.0.5:8080/'])

@@ -1,11 +1,11 @@
 import type { Browser, BrowserContext, Page } from 'playwright';
 import { launchBrowser } from '../../browser-binary.ts';
-import type { Take } from '../../take/format.ts';
+import type { Device, Take } from '../../take/format.ts';
 import { ownError } from './page-errors.ts';
 import { TakeError } from './driver.ts';
 import { describeCondition, holds } from './targets.ts';
 import type { Condition } from '../../take/format.ts';
-import { applyHarden, chromeUserAgent, hardenClientHints, hardenLaunchOptions } from './harden.ts';
+import { applyHarden, actLikeIPhone, chromeUserAgent, hardenClientHints, hardenLaunchOptions, IPHONE_USER_AGENT } from './harden.ts';
 import { defaultLoginName, readLogin, type SavedLogin } from './login.ts';
 
 const LOAD_MS = 30_000;
@@ -14,6 +14,7 @@ const QUIET_MS = 10_000;
 export interface LaunchOptions {
   viewport?: { width: number; height: number };
   scale?: number;
+  device?: Device;
   headed?: boolean;
   login?: SavedLogin;
   args?: string[];
@@ -22,6 +23,7 @@ export interface LaunchOptions {
 export async function launch({
   viewport = { width: 1440, height: 900 },
   scale = 1,
+  device = 'desktop',
   headed = false,
   login,
   args = [],
@@ -32,15 +34,18 @@ export async function launch({
 }> {
   const extra = [...(scale > 1 ? [`--force-device-scale-factor=${scale}`] : []), ...args];
   const browser = await launchHardened({ headed, extra });
-  const userAgent = login?.userAgent ?? chromeUserAgent(browser.version());
+  const phone = device === 'phone';
+  const userAgent = phone ? IPHONE_USER_AGENT : login?.userAgent ?? chromeUserAgent(browser.version());
   const context = await browser.newContext({
     viewport,
     deviceScaleFactor: scale,
+    ...(phone ? { isMobile: true, hasTouch: true } : {}),
     locale: 'en-US',
     userAgent,
     ...(login ? { storageState: login.state } : {}),
   });
   await applyHarden(context);
+  if (phone) await actLikeIPhone(context);
   return { browser, context, userAgent };
 }
 
@@ -67,7 +72,7 @@ export const VISIBLE_NOTE = "the site refused Take's hidden browser (error 403),
 async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promise<unknown>) | undefined, args: string[], quietMs: number): Promise<{ browser: Browser; page: Page }> {
   const [width, height] = take.target.viewport;
   const login = savedLogin(take);
-  const { browser, context, userAgent } = await launch({ viewport: { width, height }, scale: take.target.scale, headed, login, args });
+  const { browser, context, userAgent } = await launch({ viewport: { width, height }, scale: take.target.scale, device: take.target.device, headed, login, args });
   const page = await context.newPage();
   await hardenClientHints(context, page, userAgent);
   const errors: string[] = [];

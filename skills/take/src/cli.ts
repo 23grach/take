@@ -147,9 +147,9 @@ function validateCommand(): number {
   const result = loadTake(file);
   if (!result.ok) return fail(`✗ ${problems(file, result.errors)}`);
   const { take } = result;
-  const badTheme = themeProblem(take.theme);
+  const badTheme = themeProblem(take.theme, take.target.device);
   if (badTheme) return fail(`✗ ${file}: theme: ${badTheme}`);
-  process.stdout.write(`✓ ${file}: "${take.title}", ${take.steps.length} steps, ${take.target.viewport.join('×')} at ${take.target.scale}×\n`);
+  process.stdout.write(`✓ ${file}: "${take.title}", ${take.steps.length} steps, ${take.target.device === 'phone' ? 'phone, ' : ''}${take.target.viewport.join('×')} at ${take.target.scale}×\n`);
   const warning = addressWarning(take.target);
   if (warning) process.stdout.write(`⚠ ${warning}\n`);
   const name = take.target.login;
@@ -284,7 +284,7 @@ async function probeCommand(): Promise<number> {
   if (!file) return fail('take probe: give a take.json, e.g. take probe takes/create-project/take.json');
   const { take, error } = await readyTake(file);
   if (!take) return fail(`✗ take probe: ${error}`);
-  const badTheme = themeProblem(themeFlag ?? take.theme);
+  const badTheme = themeProblem(themeFlag ?? take.theme, take.target.device);
   if (badTheme) return fail(`✗ take probe: ${badTheme}`);
   const out = outFlag ?? path.join(path.dirname(file), 'probe');
   process.stdout.write(`Probing "${take.title}"…\n`);

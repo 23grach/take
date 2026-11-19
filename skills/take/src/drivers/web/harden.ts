@@ -81,12 +81,33 @@ export function chromeUserAgent(browserVersion: string, platform: NodeJS.Platfor
   return `Mozilla/5.0 (${os}) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${ver} Safari/537.36`;
 }
 
+export const IPHONE_USER_AGENT = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/26.0 Mobile/15E148 Safari/604.1';
+
+const SAFARI_INIT_SCRIPT = `(() => {
+  try { delete Navigator.prototype.userAgentData; } catch {}
+  try { delete window.chrome; } catch {}
+  addEventListener('DOMContentLoaded', () => {
+    const style = document.createElement('style');
+    style.textContent = '* { -webkit-tap-highlight-color: transparent !important; }';
+    document.head.append(style);
+  });
+})();`;
+
+export async function actLikeIPhone(context: BrowserContext): Promise<void> {
+  await context.addInitScript(SAFARI_INIT_SCRIPT);
+}
+
 export async function hardenClientHints(
   context: BrowserContext,
   page: { url: () => string },
   userAgent: string,
   platform: NodeJS.Platform = process.platform,
 ): Promise<void> {
+  if (userAgent === IPHONE_USER_AGENT) {
+    const session = await context.newCDPSession(page as never).catch(() => null);
+    await session?.send('Network.setUserAgentOverride', { userAgent, acceptLanguage: 'en-US,en', platform: 'iPhone' }).catch(() => {});
+    return;
+  }
   const ver = /Chrome\/([\d.]+)/.exec(userAgent)?.[1] ?? '156.0.0.0';
   const major = ver.split('.')[0] ?? '156';
   const metaPlatform = platform === 'darwin' ? 'macOS' : platform === 'win32' ? 'Windows' : 'Linux';

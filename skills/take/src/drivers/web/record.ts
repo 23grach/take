@@ -86,7 +86,7 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
   try {
     signal?.throwIfAborted();
     await hideCaret(page);
-    const recorder: Recorder = mode === 'studio' ? await studio(page, out, cdp!, take.target.viewport, take.target.scale, 60, sound) : await live(page, out, size);
+    const recorder: Recorder = mode === 'studio' ? await studio(page, out, cdp!, take.target.viewport, take.target.scale, { mobile: take.target.device === 'phone', sound }) : await live(page, out, size);
     await recorder.warmup(WARMUP_MS);
     await untilReady(page, take.ready, async (ms) => {
       await recorder.warmup(ms);

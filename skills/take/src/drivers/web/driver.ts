@@ -3,7 +3,7 @@ import type { Locator, Page } from 'playwright';
 import { DEFAULTS, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
 import type { Box, Event, EventLog, StepLog } from './events.ts';
-import { PACING, dragMs, ease, frames, scrollMs, spring, travelMs, typingSchedule } from './pacing.ts';
+import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
 import { caretAt, type Caret } from './caret.ts';
@@ -51,6 +51,9 @@ export async function performSetup(page: Page, take: Take, clock: Clock): Promis
 
 export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true }: PerformOptions = {}): Promise<EventLog> {
   const [vw, vh] = take.target.viewport;
+  const phone = take.target.device === 'phone';
+  const glass = phone ? await page.context().newCDPSession(page) : undefined;
+  let touching = false;
   let pointer: Point = [Math.round(vw * PACING.start[0]), Math.round(vh * PACING.start[1])];
   const path: Point[] = [];
   const events: Event[] = [];
@@ -68,6 +71,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     url: take.target.url,
     address: shownAddress(take.target),
     fps: clock.fps,
+    device: take.target.device,
     viewport: take.target.viewport,
     scale: take.target.scale,
     frames: clock.frame,
@@ -82,12 +86,12 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   let current = 0;
   let waited = 0;
   const speed = clock.speed ?? 1;
-  await page.mouse.move(...pointer);
+  if (!phone) await page.mouse.move(...pointer);
 
   async function tick() {
     path[clock.frame] = [round(pointer[0]), round(pointer[1])];
     if (watch) {
-      const shape = await cursorAt(pointer).catch((): Cursor => cursors.at(-1)?.[1] ?? 'default');
+      const shape = phone ? 'default' : await cursorAt(pointer).catch((): Cursor => cursors.at(-1)?.[1] ?? 'default');
       if (!sameCursor(cursors.at(-1)?.[1], shape)) cursors.push([clock.frame, shape]);
       const caret = await caretAt(page).catch(() => null);
       if (!carets.length || JSON.stringify(carets.at(-1)![1]) !== JSON.stringify(caret)) carets.push([clock.frame, caret]);
@@ -172,7 +176,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       const [dx, dy] = [dest[0] - from[0], dest[1] - from[1]];
       const bend = Math.sin(Math.PI * p) * arc;
       pointer = [from[0] + dx * p - dy * bend, from[1] + dy * p + dx * bend];
-      await page.mouse.move(...pointer);
+      if (!phone) await page.mouse.move(...pointer);
+      else if (touching) await touch('touchMove');
       if (k === n) return;
       await tick();
       dest = await to();
@@ -213,21 +218,33 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
   }
 
+  const contact = (type: 'down' | 'up') => events.push({ frame: clock.frame, type, x: round(pointer[0]), y: round(pointer[1]) });
+
+  async function touch(type: 'touchStart' | 'touchMove' | 'touchEnd') {
+    await glass!.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : [{ x: pointer[0], y: pointer[1] }] });
+  }
+
   async function press(clickCount = 1) {
-    events.push({ frame: clock.frame, type: 'down', x: round(pointer[0]), y: round(pointer[1]) });
-    await page.mouse.down({ clickCount });
+    contact('down');
+    if (!phone) return page.mouse.down({ clickCount });
+    await touch('touchStart');
+    touching = true;
   }
   async function release(clickCount = 1) {
-    events.push({ frame: clock.frame, type: 'up', x: round(pointer[0]), y: round(pointer[1]) });
-    await page.mouse.up({ clickCount });
+    contact('up');
+    if (!phone) return page.mouse.up({ clickCount });
+    touching = false;
+    await touch('touchEnd');
   }
+
+  const pressFor = (clicks: number) => (phone ? PACING.tap : clicks > 1 ? PACING.multiClickPress : PACING.press);
 
   async function click(loc: Locator, t: Target, clicks = 1): Promise<Box> {
     const box = await reach(loc, t);
     for (let n = 1; n <= clicks; n++) {
       if (n > 1) await wait(PACING.multiClickGap);
       await press(n);
-      await wait(clicks > 1 ? PACING.multiClickPress : PACING.press);
+      await wait(pressFor(clicks));
       await release(n);
     }
     await tick();
@@ -240,7 +257,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     for (let n = 1; n <= clicks; n++) {
       if (n > 1) await wait(PACING.multiClickGap);
       await press(n);
-      await wait(clicks > 1 ? PACING.multiClickPress : PACING.press);
+      await wait(pressFor(clicks));
       await release(n);
     }
     await tick();
@@ -267,16 +284,44 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   }
 
   async function scroll(dx: number, dy: number) {
-    const n = frames(scrollMs(Math.hypot(dx, dy)));
+    if (!phone) return wheel([dx, dy], frames(scrollMs(Math.hypot(dx, dy))), ease, pointer);
+    const { lift, reach } = PACING.swipe;
+    let left: Point = [dx, dy];
+    for (let i = Math.max(1, Math.ceil((lift * Math.max(Math.abs(dx) / vw, Math.abs(dy) / vh)) / reach)); i > 0; i--) {
+      const part: Point = [Math.round(left[0] / i), Math.round(left[1] / i)];
+      left = [left[0] - part[0], left[1] - part[1]];
+      await swipe(part);
+    }
+  }
+
+  async function swipe([dx, dy]: Point) {
+    const { lift, slower } = PACING.swipe;
+    const across = (along: number, size: number, now: number) => (along ? size / 2 + (lift * along) / 2 : Math.min(size * 0.65, Math.max(size * 0.35, now)));
+    const start: Point = [across(dx, vw, pointer[0]), across(dy, vh, pointer[1])];
+    await moveTo(async () => start);
+    await wait(PACING.settle);
+    const n = frames(scrollMs(Math.hypot(dx, dy)) * slower);
+    const held = Math.max(1, Math.round(n * lift));
+    contact('down');
+    await wheel([dx, dy], n, swipeProgress, start, (k, p) => {
+      if (k > held) return;
+      pointer = [start[0] - dx * p, start[1] - dy * p];
+      if (k === held) contact('up');
+    });
+  }
+
+  async function wheel([dx, dy]: Point, n: number, progress: (t: number) => number, at: Point, each?: (k: number, p: number) => void) {
     let done: Point = [0, 0];
     let waitForMove = true;
     for (let k = 1; k <= n; k++) {
-      const p = ease(k / n);
+      const p = progress(k / n);
+      each?.(k, p);
       const step: Point = [Math.round(dx * p - done[0]), Math.round(dy * p - done[1])];
       if (step[0] || step[1]) {
-        const before = waitForMove ? await scrolledAt(pointer) : undefined;
-        await page.mouse.wheel(...step);
-        if (before !== undefined) waitForMove = await movedFrom(before, pointer);
+        const before = waitForMove ? await scrolledAt(at) : undefined;
+        if (phone) await glass!.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: at[0], y: at[1], deltaX: step[0], deltaY: step[1] });
+        else await page.mouse.wheel(...step);
+        if (before !== undefined) waitForMove = await movedFrom(before, at);
         events.push({ frame: clock.frame, type: 'scroll', dx: step[0], dy: step[1] });
         done = [done[0] + step[0], done[1] + step[1]];
       }

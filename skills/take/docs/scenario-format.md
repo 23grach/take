@@ -8,7 +8,7 @@ Write it the way you'd brief a colleague. Any language is fine. Copy [templates/
 Title: Create a project
 App: http://localhost:3000 (start with: npm run dev)
 Address: boards.app
-Size: desktop
+Size: desktop or phone
 Loop: yes
 
 Before:
@@ -33,7 +33,7 @@ Only **Title**, **App** and **Steps** are needed. For anything else left out, th
 | `Title:` | — | What the video shows. Names the folder and the file (`create-project.mp4`). |
 | `App:` | — | Where the app runs, and how to start it if it isn't running. The page the video starts on. |
 | `Address:` | the app's domain, or empty for a local app | What the window's address bar shows, e.g. `boards.app`. Write the product's real domain; the local address the app runs on is never shown. |
-| `Size:` | `desktop` | `desktop` is a 1440×900 browser window on a 2560×1440 video. Other sizes and phone frames aren't supported. |
+| `Size:` | `desktop` | `desktop` is a 1440×900 browser window on a 2560×1440 video. `phone` is the site's mobile layout on an iPhone in the middle of the same video, tapped and swiped by a finger. Other sizes aren't supported. |
 | `Loop:` | `yes` | `yes`: the end dissolves back into the start so the video loops seamlessly. `no`: it ends on the last step, for videos that play once. |
 | `Theme:` | `default` | The look: background, window, cursor. |
 

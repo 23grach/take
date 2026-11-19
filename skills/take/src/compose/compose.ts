@@ -7,7 +7,9 @@ import type { Browser, Page } from 'playwright';
 import { launchBrowser } from '../browser-binary.ts';
 import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog } from '../drivers/web/events.ts';
+import type { Device } from '../take/format.ts';
 import { stageHtml, layout, type Theme } from './stage.ts';
+import { fingerAt, phoneLayout, phoneStageHtml, type PhoneTheme } from './phone.ts';
 import { ease } from '../drivers/web/pacing.ts';
 import type { Cursor } from '../drivers/web/cursor.ts';
 import { cursorArt, type ArtSet } from './cursor-art.ts';
@@ -85,10 +87,13 @@ export function composeWorkers(frames: number, cpus = os.availableParallelism(),
 
 export const themeNames = () => fs.readdirSync(THEMES).filter((d) => fs.existsSync(path.join(THEMES, d, 'tokens.json'))).sort();
 
-export function themeProblem(name: string): string | undefined {
-  if (themeNames().includes(name)) return undefined;
-  return `there's no theme "${name}". Themes: ${themeNames().join(', ')}`;
+export function themeProblem(name: string, device: Device = 'desktop'): string | undefined {
+  if (!themeNames().includes(name)) return `there's no theme "${name}". Themes: ${themeNames().join(', ')}`;
+  if (device === 'phone' && !loadTheme(name).theme.phone) return phoneLessTheme(name);
+  return undefined;
 }
+
+const phoneLessTheme = (name: string) => `the "${name}" theme has no phone look; use the default theme for phone takes`;
 
 export function ffmpegProblem(): string | undefined {
   const r = spawnSync('ffmpeg', ['-hide_banner', '-version'], { stdio: 'ignore' });
@@ -100,6 +105,11 @@ export function loadTheme(name = 'default'): { theme: Theme; dir: string } {
   const problem = themeProblem(name);
   if (problem) throw new Error(problem);
   return { theme: JSON.parse(fs.readFileSync(path.join(dir, 'tokens.json'), 'utf8')), dir };
+}
+
+export function phoneLook(theme: Theme, name: string): PhoneTheme {
+  if (!theme.phone) throw new Error(phoneLessTheme(name));
+  return theme.phone;
 }
 
 export function totalFrames(log: EventLog, theme: Theme): number {
@@ -214,18 +224,23 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
       log = JSON.parse(fs.readFileSync(path.join(capture, 'events.json'), 'utf8'));
       if (!log.cursors || !log.carets || log.address === undefined || !log.loop)
         throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
+      log.device ??= 'desktop';
     }
   } catch (e) {
     await Promise.allSettled(launches.map((b) => b.then((b) => b.close())));
     throw e;
   }
+  const phone = log.device === 'phone' ? phoneLook(theme, themeName) : undefined;
   const art = cursorArt(theme, themeDir);
   const { cursors, keyOf } = stageCursors(log, art);
-  const html = stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art);
+  const html = phone
+    ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport)
+    : stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art);
   const staged = new Set(Object.keys(art));
   const first = range?.[0] ?? 0;
+  const ahead = phone?.finger.lead ?? 0;
   const ready = async (f: number): Promise<boolean> => {
-    while (!ended && recorded <= f) ({ frames: recorded, ended } = await follow!.wait(f + 1));
+    while (!ended && recorded <= f + ahead) ({ frames: recorded, ended } = await follow!.wait(f + ahead + 1));
     while (info.frames.length < recorded) info.frames.push(frameFile(info.frames.length));
     return f <= (range ? range[1] : totalFrames(log, theme) - 1);
   };
@@ -263,7 +278,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
 
     const queues: Promise<unknown>[] = pages.map(() => Promise.resolve());
     const onEvery = (fn: (page: Page) => Promise<unknown>) => pages.forEach((page, i) => (queues[i] = queues[i].then(() => fn(page))));
-    const draw = (f: number): Promise<Buffer> => {
+    const desktopState = (f: number) => {
       const overlay = overlayAt(log, theme, f);
       const cursor = keyOf(overlay.shape);
       if (cursor && !staged.has(cursor)) {
@@ -271,7 +286,10 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
         const { src, hotspot } = cursors[cursor];
         onEvery((page) => page.evaluate((c) => (window as unknown as { addCursor: (c: unknown) => Promise<void> }).addCursor(c), { key: cursor, src, hotspot }));
       }
-      const state = { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor } };
+      return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor } };
+    };
+    const draw = (f: number): Promise<Buffer> => {
+      const state = phone ? { footage: footageAt(info as CaptureInfo, log, theme, f), caret: caretAt(log, theme, f), finger: fingerAt(log, phone.finger, f) } : desktopState(f);
       const i = (f - first) % pages.length;
       const jpeg = queues[i].then(async () => {
         await pages[i].evaluate((s) => (window as unknown as { render: (s: unknown) => Promise<void> }).render(s), state);

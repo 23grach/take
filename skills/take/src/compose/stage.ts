@@ -1,4 +1,5 @@
 import type { CursorArt } from './cursor-art.ts';
+import type { PhoneTheme } from './phone.ts';
 
 export interface Theme {
   stage: { size: [number, number]; output: [number, number]; background: string; padding: number };
@@ -13,6 +14,7 @@ export interface Theme {
   cursor: { art?: 'system'; size: number; pressScale: number; hideFade: number; shapes: Record<'arrow' | 'hand' | 'text', { file: string; hotspot: [number, number] }> };
   caret: { width: number; solidFrames: number; blinkFrames: number };
   loop: { frames: number };
+  phone?: PhoneTheme;
 }
 
 export type WindowButton = 'close' | 'minimize' | 'zoom';
