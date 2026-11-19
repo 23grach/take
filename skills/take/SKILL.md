@@ -109,7 +109,7 @@ Then offer one concrete cut and what it saves, picked from the timeline (for exa
 | "shorter", "faster", "too slow" | Cut holds and step lengths as [Length](docs/pacing.md#length) says, then probe, show the new timeline and ask **Record?** again (step 4). |
 | "make step 3 last 4 s", "the dialog should stay longer", a new length in the script | `"ms"` on that step, then probe, show the new timeline and ask **Record?** again (step 4). |
 | The first frame shows loading placeholders, empty banners or skeletons | Add `ready` to take.json: what the loaded page shows, e.g. `{ "visible": { "role": "button", "name": "Deposit" } }` (a list if several things load separately), then run. |
-| "type slower" / "faster" | `cps` on the type step (8 slow, 14 normal, 22 fast). |
+| "type slower" / "faster" | `cps` on the type step (8 slow, 14 normal, 22 fast). On a phone: 5 slow, 7 normal (the default), 11 fast. |
 | "the app changed" / "re-record" | Probe; fix any step that fails; run. |
 | The first screen is signed out, or "sign in again" | `take login <url>` (the user signs in), then probe and run. |
 | A new step or a different flow | Edit the scenario, then rehearse from step 3. |

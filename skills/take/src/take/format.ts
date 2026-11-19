@@ -94,7 +94,7 @@ export const DEFAULTS = {
   theme: 'default',
   loop: 'crossfade-to-start' as const,
   sound: true,
-  cps: 14,
+  cps: { desktop: 14, phone: 7 } satisfies Record<Device, number>,
   timeout: 10_000,
 };
 
@@ -225,7 +225,7 @@ export function validateTake(input: unknown): Result {
         if (!('text' in v)) fail(path, 'missing "text" (what to type)');
         else if (typeof v.text !== 'string' || v.text === '') fail(`${path}.text`, `must be non-empty text, got ${show(v.text)}`);
         if ('cps' in v && 'ms' in v) fail(path, 'give "cps" (typing speed) or "ms" (how long the step lasts: the typing speed follows), not both');
-        out.cps = positive(v, 'cps', path, DEFAULTS.cps);
+        out.cps = positive(v, 'cps', path, DEFAULTS.cps[web?.device ?? 'desktop']);
         break;
       case 'press': {
         onlyKeys(v, path, [...common, 'key']);

@@ -39,6 +39,13 @@ test('defaults are filled in', () => {
   assert.deepEqual(r.take.steps.map((s) => ('cps' in s ? s.cps : 'timeout' in s ? s.timeout : null)), [14, 10_000]);
 });
 
+test('a phone types with thumbs: slower unless the step says otherwise', () => {
+  const phone = (steps: unknown[]) => validateTake({ ...minimal(), target: { kind: 'web', device: 'phone', url: 'http://localhost:3000' }, steps });
+  const cpsOf = (r: ReturnType<typeof validateTake>) => (r.ok ? r.take.steps.map((s) => ('cps' in s ? s.cps : null)) : r.errors);
+  assert.deepEqual(cpsOf(phone([{ do: 'type', text: 'hi' }, { do: 'type', text: 'hi', cps: 20 }])), [7, 20]);
+  assert.deepEqual(cpsOf(validateTake({ ...minimal(), steps: [{ do: 'type', text: 'hi' }] })), [14]);
+});
+
 test('"sound" turns the page\'s own sound off, and is true or false', () => {
   const r = validateTake({ ...minimal(), sound: false });
   assert.ok(r.ok && r.take.sound === false);

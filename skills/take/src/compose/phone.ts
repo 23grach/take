@@ -15,7 +15,7 @@ export interface PhoneTheme {
   shadow: string;
   statusBar: { time: string; font: string; wifi: string; battery: string };
   ink: InkRule & { band: number };
-  edge: { blur: number; steps: number; top: { band: number; full: number; into: number }; bottom: { from: number; full: number } };
+  strip: { band: number; blur: number; steps: number; full: number; into: number };
   safari: { morph: number; collapseAfter: number; blur: number; font: string; pillFont: string; pillPadding: number; pillWidth: number };
   keyboard: { pressFrames: number; lead: number; blur: number; letterFont: string; labelFont: string; suggestionFont: string; calloutFont: string };
   icons: Record<string, string>;
@@ -219,19 +219,16 @@ function keyboardHtml(icon: (name: string) => string, layout: Layout): string {
     </div>`;
 }
 
-function edgeLayers(phone: PhoneTheme, box: PhoneLayout): string {
-  const { blur, steps, top, bottom } = phone.edge;
+function stripBlur(phone: PhoneTheme, box: PhoneLayout): string {
+  const { blur, steps, full, into } = phone.strip;
   const k = box.k;
-  const each = (blur * k) / Math.sqrt(steps);
-  const stack = (side: 'top' | 'bottom', full: number, clear: number) => {
-    const r = (clear - full) / steps;
-    return Array.from({ length: steps }, (_, i) => {
-      const [solid, gone] = [clear - (i + 1) * r, clear - i * r];
-      const mask = `linear-gradient(to ${side === 'top' ? 'bottom' : 'top'}, #000 ${solid * k}px, transparent ${gone * k}px)`;
-      return `<div class="edge" style="${side}: 0; height: ${clear * k}px; backdrop-filter: blur(${each}px); -webkit-mask-image: ${mask}; mask-image: ${mask};"></div>`;
-    }).join('');
-  };
-  return stack('top', top.full, box.statusBar + top.into) + stack('bottom', bottom.full, bottom.from);
+  const sharp = box.statusBar + into;
+  const ramp = (sharp - full) / steps;
+  return Array.from({ length: steps }, (_, i) => {
+    const mask = `linear-gradient(to bottom, #000 ${(sharp - (i + 1) * ramp) * k}px, transparent ${(sharp - i * ramp) * k}px)`;
+    const each = (blur / steps) * Math.sqrt(2 * i + 1) * k;
+    return `<div class="strip-blur" style="height: ${(sharp + blur) * k}px; backdrop-filter: blur(${each}px); -webkit-mask-image: ${mask}; mask-image: ${mask};"></div>`;
+  }).join('');
 }
 
 export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string, box: PhoneLayout, page: [number, number], address: string): string {
@@ -265,8 +262,9 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   .page { position: absolute; left: 0; top: ${strip}px; width: 100%; height: ${pageH}px; overflow: hidden; }
   .page img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .stretch { position: absolute; left: 0; top: 0; width: 100%; height: ${strip + 1}px; overflow: hidden; }
-  .stretch img { position: absolute; left: 0; top: 0; width: 100%; height: ${(pageH * strip) / (phone.edge.top.band * box.k)}px; display: block; }
-  .edge { position: absolute; left: 0; width: 100%; pointer-events: none; }
+  .stretch img { position: absolute; left: 0; top: 0; width: 100%; height: ${(pageH * (strip + 1)) / (phone.strip.band * box.k)}px; display: block;
+    transform: scaleY(-1); transform-origin: 0 ${(strip + 1) / 2}px; }
+  .strip-blur { position: absolute; left: 0; top: 0; width: 100%; pointer-events: none; }
   #caret { position: absolute; left: 0; top: 0; display: none; }
   .points { position: absolute; transform: scale(${box.k}); transform-origin: 0 0; pointer-events: none; }
   .ui { left: 0; top: 0; width: ${sw}px; height: ${sh}px; }
@@ -286,15 +284,16 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     box-shadow: inset 0 0 0 0.5px var(--glass-border), inset 0 0.5px 0 var(--glass-inset-dark), inset 0 1.5px 1px var(--glass-inset-light); }
   .button { width: 48px; height: 48px; top: 792px; color: var(--glyph); }
   #back { left: 34px; } #tabs { left: 320px; }
-  #back .icon { left: 16.8px; top: 15.3px; } #tabs .icon { left: 11.9px; top: 13.1px; }
+  .glass > .icon { top: 50%; translate: 0 -50%; }
+  .button > .icon { left: 50%; translate: -50% -50%; }
   #field { color: var(--glyph); }
-  #field .menu { left: 14px; top: 18px; } #field .reload { right: 12.64px; top: 14.6px; }
+  #field .menu { left: 14px; } #field .reload { right: 12.64px; }
   .address { position: absolute; left: 40px; right: 40px; top: 50%; transform: translateY(-50%); text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .address.big { font: ${safari.font}; letter-spacing: -0.4522px; padding-left: 1px; }
   .address.small { left: 0; right: 0; font: ${safari.pillFont}; letter-spacing: 0.12px; color: var(--pill-text); }
   #keys { position: absolute; left: 0; top: ${accessory}px; width: ${sw}px; }
   #accessory { left: 17px; top: 0; width: 368px; height: 48px; color: var(--accessory-glyph); }
-  #accessory .up { left: 14.73px; top: 10.36px; } #accessory .down { left: 68.73px; top: 11.07px; } #accessory .done { left: 333px; top: 7.19px; }
+  #accessory .up { left: 14.73px; } #accessory .down { left: 68.73px; } #accessory .done { left: 333px; }
   .keyboard { position: absolute; left: 0; top: ${kbTop + 95 - accessory}px; width: ${sw}px; height: ${sh - kbTop - 95}px; box-sizing: border-box; padding: 8px 4px 0;
     border-radius: 27px 27px 62.16px 62.16px; background: var(--kb-background); backdrop-filter: blur(${kb.blur}px);
     box-shadow: inset 0 0 0 1px var(--kb-border), inset 0 1px 2px var(--kb-inset-soft), inset 0 0 1px var(--kb-inset-hair); }
@@ -319,7 +318,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   .key .shift-on, .shifted .key .shift { display: none; }
   .shifted .key .shift-on { display: block; }
   .kb-icon { color: var(--kb-icon); }
-  .kb-icon.emoji { left: 29px; bottom: 26px; } .kb-icon.mic { left: 350.5px; bottom: 25.4px; }
+  .kb-icon.emoji { left: 29px; bottom: 26px; } .kb-icon.mic { left: 350.07px; bottom: 25.4px; }
   .callout { position: absolute; display: none; filter: drop-shadow(0 0 0.5px rgb(0 0 0 / 0.25)) drop-shadow(0 4px 10px rgb(0 0 0 / 0.18)); }
   .callout svg { position: absolute; inset: 0; overflow: visible; }
   .callout path { fill: var(--callout); }
@@ -336,7 +335,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
       <div class="stretch"><img id="stretch-shot" alt=""><img id="stretch-fade" alt="" style="opacity: 0"></div>
       <div class="page"><img id="shot" alt=""><img id="fade" alt="" style="opacity: 0"><div id="caret"></div></div>
     </div>
-    ${edgeLayers(phone, box)}
+    ${stripBlur(phone, box)}
   </div>
   <div class="points ui">
     <div class="status">

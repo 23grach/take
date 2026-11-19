@@ -41,7 +41,7 @@ Rules for writing `take.json` ([take-format.md](take-format.md)) from a scenario
 | `Lock the middle colour` (an icon that only appears on hover, with no name) | `hover` the column, probe, read the icon's point off that step's picture, then `click` with `"target": [x, y]`. |
 | `Select the word "started"` (in text or a code editor) | `click` the word with `"clicks": 2`; then `type` replaces it. A triple-click (`3`) selects the whole line. |
 | `Change Name to "Moodboard"` (a field that already has text) | `click` the field, `press` `Meta+A` (select all), then `type` without a target: typing replaces the selection. A `type` with a target adds to what's there. |
-| `slowly` / `quickly` on typing | `cps` 8 / 22 (normal 14) |
+| `slowly` / `quickly` on typing | `cps` 8 / 22 (normal 14). On a phone, typing is thumbs on glass: 5 / 11 (normal 7, the default when a phone's `type` step gives no `cps`) |
 | `show the dialog for 3 s`, `this step takes 2 s`, a length the user changed in the script | `"ms"` on that step: it lasts exactly that long, the pause after it fills the rest ([Timing](take-format.md#timing)) |
 
 **Toasts at the end.** The app's own confirmation toast during the closing hold is good: it says what happened. But if it's still showing when the closing hold ends, the loop fades it into the first screen. Then add `{ "do": "wait", "for": { "hidden": <the toast> } }` before the closing hold, so the result is shown clean for the full 2 s.
