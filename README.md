@@ -43,7 +43,13 @@ Open **Customize** in the sidebar, add a plugin **From GitHub Repository**, past
 
 ### Any other agent that reads skills
 
-Take is a standard agent skill: the folder [`skills/take`](skills/take) with its `SKILL.md`. Copy that folder to where your agent looks for skills (for example `~/.agents/skills/take`).
+Take is a standard agent skill. Install it with [skills](https://skills.sh), which finds the agents on your computer:
+
+```bash
+npx skills add 23grach/take
+```
+
+Or copy the folder [`skills/take`](skills/take) with its `SKILL.md` to where your agent looks for skills (for example `~/.agents/skills/take`).
 
 ## Make a video
 
