@@ -1,4 +1,6 @@
 import type { BrowserContext, LaunchOptions as PwLaunchOptions } from 'playwright';
+import { PHONE } from '../../take/format.ts';
+import { keepAboveSafariBar } from './above-safari-bar.ts';
 
 export function hardenLaunchArgs(extra: string[] = []): string[] {
   return [
@@ -95,6 +97,7 @@ const SAFARI_INIT_SCRIPT = `(() => {
 
 export async function actLikeIPhone(context: BrowserContext): Promise<void> {
   await context.addInitScript(SAFARI_INIT_SCRIPT);
+  await context.addInitScript(keepAboveSafariBar, PHONE.safariBar);
 }
 
 export async function hardenClientHints(

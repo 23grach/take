@@ -39,10 +39,9 @@ export const PHONE = {
   screen: [402, 874] as [number, number],
   statusBar: 54,
   safariBar: 82,
-  lookahead: 1000,
   keyboard: { top: 434, accessory: 472, clearance: 16, slide: 350 },
 };
-export const phonePage = (): [number, number] => [PHONE.screen[0], PHONE.screen[1] - PHONE.statusBar - PHONE.safariBar];
+export const phonePage = (): [number, number] => [PHONE.screen[0], PHONE.screen[1] - PHONE.statusBar];
 
 export interface WebTarget {
   kind: 'web';
@@ -277,7 +276,7 @@ export function validateTake(input: unknown): Result {
       fail('target.device', `must be ${DEVICES.map((d) => `"${d}"`).join(' or ')}, got ${show(device)}${near ? ` (did you mean "${near}"?)` : ''}`);
     }
     const phone = device === 'phone';
-    if (phone && 'viewport' in t) fail('target.viewport', `a phone's page is always ${phonePage().join('×')} (an iPhone screen between its status bar and Safari's bar); leave "viewport" out`);
+    if (phone && 'viewport' in t) fail('target.viewport', `a phone's page is always ${phonePage().join('×')} (an iPhone screen minus its status bar); leave "viewport" out`);
     if (t.kind !== 'web') fail('target.kind', `must be "web", got ${show(t.kind)}`);
     const url = text(t, 'url', 'target');
     if (url && !/^https?:\/\//.test(url)) fail('target.url', `must start with http:// or https://, got ${show(url)}`);

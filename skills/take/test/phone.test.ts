@@ -5,12 +5,12 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { serve } from '../examples/demo-app/serve.mjs';
-import { openTake } from '../src/drivers/web/browser.ts';
+import { launch, openTake } from '../src/drivers/web/browser.ts';
 import { record } from '../src/drivers/web/record.ts';
 import { compose, loadTheme, themeProblem } from '../src/compose/compose.ts';
-import { bandAt, fingerAt, keyboardAt, nextInk, pageEdgesAt, phoneLayout, safariAt, safariCollapses, type Ink } from '../src/compose/phone.ts';
+import { bandAt, fingerAt, keyboardAt, nextInk, pageTops, phoneLayout, safariAt, safariCollapses, type Ink } from '../src/compose/phone.ts';
 import { PHONE, validateTake, type Take } from '../src/take/format.ts';
-import type { Event, EventLog, PageEdge, PageEdges } from '../src/drivers/web/events.ts';
+import type { Event, EventLog, PageTop } from '../src/drivers/web/events.ts';
 import { perform } from '../src/drivers/web/driver.ts';
 import { frames } from '../src/drivers/web/pacing.ts';
 import type { Clock } from '../src/drivers/web/clock.ts';
@@ -37,16 +37,16 @@ function phoneTake(steps: unknown[]): Take {
   return r.take;
 }
 
-test('a take is for a desktop unless it says phone; a phone page is 402×738, between the status bar and Safari\'s bar, and has no hover', () => {
+test('a take is for a desktop unless it says phone; a phone page is 402×820, the screen below the status bar, and has no hover', () => {
   const desktop = draft({});
   assert.ok(desktop.ok && desktop.take.target.device === 'desktop');
   const phone = draft({ device: 'phone' });
   assert.ok(phone.ok);
-  assert.deepEqual(phone.take.target.viewport, [402, 738]);
+  assert.deepEqual(phone.take.target.viewport, [402, 820]);
   const typo = draft({ device: 'phon' });
   assert.ok(!typo.ok && typo.errors.includes('target.device: must be "desktop" or "phone", got "phon" (did you mean "phone"?)'), JSON.stringify(typo));
   const sized = draft({ device: 'phone', viewport: [390, 844] });
-  assert.ok(!sized.ok && sized.errors.some((e) => e.startsWith('target.viewport: a phone\'s page is always 402×738')));
+  assert.ok(!sized.ok && sized.errors.some((e) => e.startsWith('target.viewport: a phone\'s page is always 402×820')));
   const hover = draft({ device: 'phone' }, [{ do: 'hover', target: { text: 'Pricing' } }]);
   assert.ok(!hover.ok && hover.errors.some((e) => e.startsWith('steps[0].do: a phone has no hover')));
   assert.match(themeProblem('plain', 'phone') ?? '', /no phone look/);
@@ -78,7 +78,7 @@ test('the finger shows only around a touch: it comes down, follows the touch, an
 });
 
 test('the phone sits in the middle of the stage with the page filling its screen below the status bar', () => {
-  const box = phoneLayout(theme, look, [402, 738]);
+  const box = phoneLayout(theme, look, [402, 820]);
   const [W, H] = theme.stage.size;
   assert.ok(Math.abs(box.left * 2 + box.width - W) <= 1 && Math.abs(box.top * 2 + box.height - H) <= 1);
   assert.ok(Math.abs(box.top - theme.stage.padding) <= 1);
@@ -98,7 +98,7 @@ test('a phone opens the iPhone layout, as Safari', async () => {
       touch: matchMedia('(pointer: coarse)').matches,
       nav: getComputedStyle(document.querySelector('.nav')!).display,
     }));
-    assert.deepEqual({ ...seen, agent: /iPhone.*Version\/\S+ Mobile\/\S+ Safari/.test(seen.agent) }, { width: 402, height: 738, agent: true, hints: false, touch: true, nav: 'none' });
+    assert.deepEqual({ ...seen, agent: /iPhone.*Version\/\S+ Mobile\/\S+ Safari/.test(seen.agent) }, { width: 402, height: 820, agent: true, hints: false, touch: true, nav: 'none' });
   } finally {
     await browser.close();
   }
@@ -114,8 +114,8 @@ test('a phone take swipes, taps and types like a finger, and composes into the p
   const out = path.join(tmp, 'capture');
   const { events, capture } = await record(take, { mode: 'studio', out });
   assert.equal(events.device, 'phone');
-  assert.deepEqual(events.viewport, [402, 738]);
-  assert.deepEqual(capture.size, [402, 738]);
+  assert.deepEqual(events.viewport, [402, 820]);
+  assert.deepEqual(capture.size, [402, 820]);
   assert.deepEqual(events.cursors, [[0, 'default']]);
   const touches = events.events.filter((e) => e.type === 'down' || e.type === 'up');
   assert.deepEqual(touches.map((e) => e.type), ['down', 'up', 'down', 'up', 'down', 'up', 'down', 'up']);
@@ -124,16 +124,17 @@ test('a phone take swipes, taps and types like a finger, and composes into the p
     assert.ok(down.type === 'down' && up.type === 'up');
     const moved = events.events.filter((e) => e.type === 'scroll' && e.frame >= down.frame && e.frame <= up.frame).reduce((sum, e) => sum + (e.type === 'scroll' ? e.dy : 0), 0);
     assert.ok(sign * (down.y - up.y) > 60 && Math.abs(down.y - up.y - moved) <= 1.5, `finger moved ${down.y - up.y}, content ${moved}`);
-    assert.ok(down.y - (down.y - up.y) / 2 > 738 * 0.4 && down.y - (down.y - up.y) / 2 < 738 * 0.6);
+    const above = 820 - PHONE.safariBar;
+    assert.ok(down.y - (down.y - up.y) / 2 > above * 0.4 && down.y - (down.y - up.y) / 2 < above * 0.6, 'swipes run in the middle of the page above Safari\'s bar');
+    assert.ok(Math.max(down.y, up.y) < above, 'the finger never touches Safari\'s bar');
     const glide = events.events.filter((e) => e.type === 'scroll' && e.frame > up.frame && e.frame < touches[i + 2].frame);
     assert.ok(glide.length > 5, 'the content glides on after the finger lifts');
   }
-  const edges = events.edges!.map(([, e]) => e);
-  assert.deepEqual(edges[0].top, { cover: null, depth: 0, color: 'rgb(255 255 255 / 1)' }, 'at rest the top of the page is its white header');
-  assert.match(edges[0].bottom.color, /^rgb\(\d+ \d+ \d+ \/ 1\)$/, 'the bottom of the page has a colour for the chin under Safari\'s bar');
-  assert.ok(Math.max(...edges.map((e) => e.scrollY)) >= 250 && edges.some((e) => e.scrollY === 0 && e !== edges[0]), 'the page scrolls down and back up');
-  const backdrop = edges.find((e) => /^rgb\(\d+ \d+ \d+ \/ 0\.\d+\)$/.test(e.top.cover ?? ''));
-  assert.ok(backdrop && backdrop.bottom.cover === backdrop.top.cover && backdrop.top.depth === 738, 'the dialog\'s see-through backdrop covers the whole page, top to bottom');
+  const tops = events.tops!.map(([, t]) => t);
+  assert.deepEqual([tops[0].cover, tops[0].depth, tops[0].color], [null, 0, 'rgb(255 255 255 / 1)'], 'at rest the top of the page is its white header');
+  assert.ok(Math.max(...tops.map((t) => t.scrollY)) >= 250 && tops.some((t) => t.scrollY === 0 && t !== tops[0]), 'the page scrolls down and back up');
+  const backdrop = tops.find((t) => /^rgb\(\d+ \d+ \d+ \/ 0\.\d+\)$/.test(t.cover ?? ''));
+  assert.ok(backdrop && backdrop.depth === 820, 'the dialog\'s see-through backdrop covers the whole page');
   const typed = events.events.filter((e) => e.type === 'key').map((e) => (e.type === 'key' ? e.key : ''));
   assert.deepEqual(typed, ['A', 'b']);
   const video = path.join(tmp, 'phone.mp4');
@@ -162,7 +163,7 @@ test('a text field brings up the keyboard over the page: typing waits for it, th
       onStep: async (step) => void (step.do === 'type' && page_.push(await page.evaluate(() => [innerWidth, innerHeight, visualViewport!.height, document.activeElement!.getBoundingClientRect().bottom]))),
     });
     const [[width, height, visible, fieldBottom]] = page_;
-    assert.deepEqual([width, height, visible], [402, 738, 738], 'the page keeps its size while the keyboard is up, as in Safari');
+    assert.deepEqual([width, height, visible], [402, 820, 820], 'the page keeps its size while the keyboard is up, as in Safari');
     const changes = log.keyboard!;
     const [click, type, cancel] = log.steps;
     const opened = changes.find(([, up]) => up)!;
@@ -205,7 +206,7 @@ test('on the demo the keyboard lifts the page once, high enough for the field an
   const clear = PHONE.keyboard.top - PHONE.statusBar - PHONE.keyboard.clearance;
   assert.ok(field.y + field.height - top <= clear + 2 && create.target!.y + create.target!.height - top <= clear + 2, 'the field and Create both sit above the keyboard');
   const toast = create.waitedFor!;
-  assert.ok(toast.y + toast.height <= 738, `the toast ends at ${toast.y + toast.height} pt, inside the page that stops at Safari's bar`);
+  assert.ok(toast.y + toast.height <= 820 - PHONE.safariBar, `the toast ends at ${toast.y + toast.height} pt, above Safari's bar`);
 });
 
 test('the Safari bar folds into the address while the page scrolls down and opens again on the way up', () => {
@@ -254,56 +255,67 @@ test('the keyboard slides, presses the key being typed, shifts for capitals, swi
 });
 
 const WHITE = 'rgb(255 255 255 / 1)';
-const GREY = 'rgb(240 240 243 / 1)';
-const edge = (more: Partial<PageEdge> = {}): PageEdge => ({ cover: null, depth: 0, color: WHITE, ...more });
-const at = (scrollY: number, { top, bottom, ...more }: { inner?: number; scrollHeight?: number; top?: Partial<PageEdge>; bottom?: Partial<PageEdge> } = {}): PageEdges =>
-  ({ scrollY, scrollHeight: 2000, inner: 0, top: edge(top), bottom: edge({ color: GREY, ...bottom }), ...more });
+const at = (scrollY: number, more: Partial<PageTop> = {}): PageTop => ({ scrollY, scrollHeight: 2000, inner: 0, cover: null, depth: 0, color: WHITE, ...more });
 
 test('at rest the status bar takes the colour of the top of the page', () => {
-  const edges = [at(0), at(0, { top: { color: 'rgb(16 16 20 / 1)' } })];
-  assert.deepEqual(bandAt(edges, 0, 'top'), { pieces: [{ top: 0, height: 54, color: WHITE }], cover: null });
-  assert.deepEqual(bandAt(edges, 1, 'top'), { pieces: [{ top: 0, height: 54, color: 'rgb(16 16 20 / 1)' }], cover: null });
+  const tops = [at(0), at(0, { color: 'rgb(16 16 20 / 1)' })];
+  assert.deepEqual(bandAt(tops, 0), { pieces: [{ top: 0, height: 54, color: WHITE }], cover: null });
+  assert.deepEqual(bandAt(tops, 1), { pieces: [{ top: 0, height: 54, color: 'rgb(16 16 20 / 1)' }], cover: null });
 });
 
-test('content that has scrolled up past the page shows behind the status bar, taken from the nearest frame it was on screen', () => {
-  const edges = pageEdgesAt([[0, at(0, { top: { color: 'rgb(1 2 3 / 1)' } })], [1, at(30)], [2, at(100)], [4, at(1000)]], 5);
-  assert.deepEqual(bandAt(edges, 1, 'top'), { pieces: [{ top: 0, height: 24, color: 'rgb(1 2 3 / 1)' }, { top: 24, height: 30, frame: 0, row: 0 }], cover: null });
-  assert.deepEqual(bandAt(edges, 3, 'top'), { pieces: [{ top: 0, height: 54, frame: 1, row: 16 }], cover: null }, 'still the same rows once the page stops');
-  assert.deepEqual(bandAt(edges, 4, 'top').pieces, [{ top: 0, height: 54, color: WHITE }], 'rows never on screen take the colour at the top of the page');
+test('content that has scrolled up past the page shows behind the status bar, taken from the nearest earlier frame it was on screen', () => {
+  const tops = pageTops([[0, at(0, { color: 'rgb(1 2 3 / 1)' })], [1, at(30)], [2, at(100)], [4, at(1000)]], 5);
+  assert.deepEqual(bandAt(tops, 1), { pieces: [{ top: 0, height: 24, color: 'rgb(1 2 3 / 1)' }, { top: 24, height: 30, frame: 0, row: 0 }], cover: null });
+  assert.deepEqual(bandAt(tops, 3), { pieces: [{ top: 0, height: 54, frame: 1, row: 16 }], cover: null }, 'still the same rows once the page stops');
+  assert.deepEqual(bandAt(tops, 4).pieces, [{ top: 0, height: 54, color: WHITE }], 'rows never on screen take the colour at the top of the page');
+  assert.deepEqual(bandAt([at(200), at(0, { scrollHeight: 2300 }), at(200, { scrollHeight: 2300 })], 2).pieces, [{ top: 0, height: 54, frame: 1, row: 146 }], 'frames from before the page grew or shrank are never used');
 });
 
 test('a header pinned to the top fills the status bar with its colour; a see-through one tints what is behind it', () => {
   const header = 'rgb(24 24 29 / 1)';
   const backdrop = 'rgb(20 20 30 / 0.32)';
-  const edges = [at(0), at(200), at(200, { top: { cover: header, depth: 56 } }), at(200, { top: { cover: backdrop, depth: 738 } })];
-  assert.deepEqual(bandAt(edges, 2, 'top'), { pieces: [{ top: 0, height: 54, color: header }], cover: null });
-  assert.deepEqual(bandAt(edges, 3, 'top'), { pieces: [{ top: 0, height: 54, frame: 0, row: 146 }], cover: backdrop });
-  assert.deepEqual(bandAt([at(0, { top: { cover: header, depth: 60 } }), at(30)], 1, 'top').pieces, [{ top: 0, height: 54, color: WHITE }], 'rows filmed under a pinned header are never reused');
+  const tops = [at(0), at(200), at(200, { cover: header, depth: 56 }), at(200, { cover: backdrop, depth: 820 })];
+  assert.deepEqual(bandAt(tops, 2), { pieces: [{ top: 0, height: 54, color: header }], cover: null });
+  assert.deepEqual(bandAt(tops, 3), { pieces: [{ top: 0, height: 54, frame: 0, row: 146 }], cover: backdrop });
+  assert.deepEqual(bandAt([at(0, { cover: header, depth: 60 }), at(30)], 1).pieces, [{ top: 0, height: 54, color: WHITE }], 'rows filmed under a pinned header are never reused');
 });
 
-test('content scrolling inside a box rather than the page leaves the status bar and the chin their colour', () => {
+test('content scrolling inside a box rather than the page leaves the status bar its colour', () => {
   const inside = 'rgb(9 9 9 / 1)';
-  const edges = [at(0), at(300), at(300, { inner: 40, top: { color: inside }, bottom: { color: inside } }), at(0, { inner: 80 })];
-  assert.deepEqual(bandAt(edges, 2, 'top').pieces, [{ top: 0, height: 54, color: inside }]);
-  assert.deepEqual(bandAt(edges, 2, 'bottom').pieces, [{ top: 0, height: 82, color: inside }]);
-  assert.deepEqual(bandAt(edges, 3, 'top').pieces, [{ top: 0, height: 54, color: WHITE }]);
+  const tops = [at(0), at(300), at(300, { inner: 40, color: inside }), at(0, { inner: 80 })];
+  assert.deepEqual(bandAt(tops, 2).pieces, [{ top: 0, height: 54, color: inside }]);
+  assert.deepEqual(bandAt(tops, 3).pieces, [{ top: 0, height: 54, color: WHITE }]);
 });
 
-test('under Safari\'s bar the chin shows the content just below the page, from the nearest frame that filmed it, even a later one', () => {
-  const edges = [at(0), at(0), at(40), at(200), at(300)];
-  assert.deepEqual(bandAt(edges, 0, 'bottom'), { pieces: [{ top: 0, height: 82, frame: 3, row: 538 }], cover: null }, 'at rest the rows below the page come from the nearest later frame that shows them all');
-  assert.deepEqual(bandAt([at(0), at(40), at(60)], 0, 'bottom').pieces, [{ top: 0, height: 60, frame: 2, row: 678 }, { top: 60, height: 22, color: GREY }], 'with no frame showing them all, the rows come from the frame that shows the most of them, in as few pieces as can be');
-  assert.deepEqual(bandAt(edges, 0, 'bottom', 1).pieces, [{ top: 0, height: 82, color: GREY }], 'beyond the lookahead the chin takes the colour at the bottom of the page');
-  assert.deepEqual(bandAt([at(0), at(200, { scrollHeight: 2300 })], 0, 'bottom').pieces, [{ top: 0, height: 82, color: GREY }], 'once the page has grown or shrunk, its earlier frames no longer show what is below');
-  assert.deepEqual(bandAt([at(0.5), at(82)], 0, 'bottom').pieces, [{ top: 0, height: 81.5, frame: 1, row: 656.5 }, { top: 81.5, height: 0.5, color: GREY }], 'a page stopped between pixels takes every row it can');
-  assert.deepEqual(bandAt([at(300), at(0), at(300)], 1, 'bottom').pieces, [{ top: 0, height: 82, frame: 0, row: 438 }], 'between an earlier and a later frame as near, the earlier one wins');
-  assert.deepEqual(bandAt([at(0), at(400), at(400)], 2, 'bottom').pieces, [{ top: 0, height: 82, color: GREY }], 'rows that have never been on screen take the colour');
-});
-
-test('a bar pinned to the bottom of the page fills the chin with its colour; rows filmed under it are never reused', () => {
-  const nav = 'rgb(250 250 252 / 1)';
-  const sheet = 'rgb(0 0 0 / 0.4)';
-  assert.deepEqual(bandAt([at(0, { bottom: { cover: nav, depth: 64 } })], 0, 'bottom'), { pieces: [{ top: 0, height: 82, color: nav }], cover: null });
-  assert.deepEqual(bandAt([at(0, { bottom: { cover: sheet, depth: 738 } }), at(100)], 0, 'bottom'), { pieces: [{ top: 0, height: 82, frame: 1, row: 638 }], cover: sheet });
-  assert.deepEqual(bandAt([at(200, { bottom: { cover: nav, depth: 120 } }), at(0)], 1, 'bottom').pieces, [{ top: 0, height: 80, frame: 0, row: 538 }, { top: 80, height: 2, color: GREY }], 'rows filmed under a pinned bottom bar are never reused');
+test('elements pinned to the bottom of the page sit above Safari\'s bar, as in iOS Safari; full-height overlays stay put', async () => {
+  const { browser, context } = await launch({ viewport: { width: 402, height: 820 }, device: 'phone' });
+  try {
+    const page = await context.newPage();
+    await page.route('http://bar.test/', (route) => route.fulfill({ contentType: 'text/html', body: `<!doctype html><meta name="viewport" content="width=device-width">
+      <style>
+        body { margin: 0; height: 3000px; }
+        nav { position: fixed; left: 0; right: 0; bottom: 0; height: 60px; background: #eee; }
+        .fab { position: fixed; right: 16px; bottom: 90px; width: 56px; height: 56px; translate: 4px 0; }
+        .overlay { position: fixed; inset: 0; background: rgb(0 0 0 / 0.3); }
+        .toast { position: fixed; left: 20px; bottom: 24px; height: 40px; transition: translate 0.3s, opacity 0.3s; }
+      </style>
+      <nav></nav><div class="fab"></div><div class="overlay"></div>` }));
+    await page.goto('http://bar.test/');
+    const box = (selector: string) => page.evaluate((s) => {
+      const r = document.querySelector(s)!.getBoundingClientRect();
+      return [r.left, r.top, r.bottom];
+    }, selector);
+    assert.deepEqual(await box('nav'), [0, 820 - 60 - PHONE.safariBar, 820 - PHONE.safariBar], 'a bottom nav sits on top of Safari\'s bar');
+    assert.deepEqual(await box('.fab'), [402 - 16 - 56 + 4, 820 - 90 - 56 - PHONE.safariBar, 820 - 90 - PHONE.safariBar], 'it moves up with its own offset kept');
+    assert.deepEqual(await box('.overlay'), [0, 0, 820], 'a full-height overlay is not moved');
+    const toast = await page.evaluate(async () => {
+      const el = Object.assign(document.createElement('div'), { className: 'toast' });
+      document.body.append(el);
+      await Promise.resolve();
+      return { bottom: el.getBoundingClientRect().bottom, sliding: el.getAnimations().length };
+    });
+    assert.deepEqual(toast, { bottom: 820 - 24 - PHONE.safariBar, sliding: 0 }, 'a toast is above the bar before it is first drawn, without sliding there');
+  } finally {
+    await browser.close();
+  }
 });

@@ -2,8 +2,8 @@ import { ownError } from './page-errors.ts';
 import type { Locator, Page } from 'playwright';
 import { DEFAULTS, PHONE, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
-import type { Box, Event, EventLog, KeyboardUp, PageEdges, StepLog } from './events.ts';
-import { pageEdges } from './page-edges.ts';
+import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
+import { pageTop } from './page-top.ts';
 import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
@@ -89,7 +89,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const cursorAt = cursorReader(page);
   const carets: [number, Caret | null][] = [];
   const keyboard: [number, KeyboardUp | null][] = [];
-  const edges: [number, PageEdges][] = [];
+  const tops: [number, PageTop][] = [];
   let keyboardDisagrees = 0;
   let reachLift: number | null = null;
   const pageErrors: string[] = [];
@@ -112,7 +112,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps,
     marks,
     loop: take.loop,
-    ...(phone ? { keyboard, edges } : {}),
+    ...(phone ? { keyboard, tops } : {}),
   };
   let current = 0;
   let waited = 0;
@@ -129,7 +129,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       if (phone) await followKeyboard();
     }
     await clock.tick();
-    if (phone && watch) await followEdges(clock.frame - 1);
+    if (phone && watch) await followTop(clock.frame - 1);
     eventLog.frames = clock.frame;
     onFrame?.(eventLog);
     if (pageErrors.length)
@@ -157,17 +157,17 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     const b = await loc.boundingBox().catch(() => null);
     return b && b.y >= 0 && b.y + b.height <= vh ? [b.y, b.y + b.height] : undefined;
   }
-  async function followEdges(frame: number) {
-    const last = edges.at(-1)?.[1];
-    const now = await page.evaluate(pageEdges).catch(() => last);
-    if (now && JSON.stringify(now) !== JSON.stringify(last)) edges.push([frame, now]);
+  async function followTop(frame: number) {
+    const last = tops.at(-1)?.[1];
+    const now = await page.evaluate(pageTop).catch(() => last);
+    if (now && JSON.stringify(now) !== JSON.stringify(last)) tops.push([frame, now]);
   }
   const keyboardNow = () => keyboard.at(-1)?.[1] ?? null;
 
   function shown(): Span {
     if (!phone) return [0, vh];
     const up = keyboardNow();
-    return up ? [up.lift, up.lift + PHONE.keyboard.top - PHONE.statusBar] : [0, vh];
+    return up ? [up.lift, up.lift + PHONE.keyboard.top - PHONE.statusBar] : [0, vh - PHONE.safariBar];
   }
 
   async function keyboardUp(t: Target | undefined) {

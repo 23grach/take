@@ -6,10 +6,10 @@ import { fileURLToPath } from 'node:url';
 import type { Browser, Page } from 'playwright';
 import { launchBrowser } from '../browser-binary.ts';
 import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
-import type { EventLog, PageEdges } from '../drivers/web/events.ts';
+import type { EventLog, PageTop } from '../drivers/web/events.ts';
 import type { Device } from '../take/format.ts';
 import { stageHtml, layout, type Theme } from './stage.ts';
-import { bandAt, fingerAt, keyboardAt, LOOKAHEAD, nextInk, pageEdgesAt, phoneLayout, phoneStageHtml, safariAt, type Edge, type Ink, type PhoneTheme } from './phone.ts';
+import { bandAt, fingerAt, keyboardAt, KEYBOARD_SLIDE, nextInk, pageTops, phoneLayout, phoneStageHtml, safariAt, type Ink, type PhoneTheme } from './phone.ts';
 import { ease } from '../drivers/web/pacing.ts';
 import type { Cursor } from '../drivers/web/cursor.ts';
 import { cursorArt, type ArtSet } from './cursor-art.ts';
@@ -225,7 +225,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
       if (!log.cursors || !log.carets || log.address === undefined || !log.loop)
         throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
       log.device ??= 'desktop';
-      if (log.device === 'phone' && !log.edges) throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
+      if (log.device === 'phone' && !log.tops) throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
     }
   } catch (e) {
     await Promise.allSettled(launches.map((b) => b.then((b) => b.close())));
@@ -239,7 +239,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
     : stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art);
   const staged = new Set(Object.keys(art));
   const first = range?.[0] ?? 0;
-  const ahead = phone ? Math.max(phone.finger.lead, LOOKAHEAD) : 0;
+  const ahead = phone ? Math.max(phone.finger.lead, KEYBOARD_SLIDE) : 0;
   const ready = async (f: number): Promise<boolean> => {
     while (!ended && recorded <= f + ahead) ({ frames: recorded, ended } = await follow!.wait(f + ahead + 1));
     while (info.frames.length < recorded) info.frames.push(frameFile(info.frames.length));
@@ -289,10 +289,10 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
       }
       return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor } };
     };
-    let edges: PageEdges[] = [];
-    const bandOf = (g: number, edge: Edge = 'top') => {
-      if (edges.length < log.frames) edges = pageEdgesAt(log.edges!, log.frames);
-      const { pieces, cover } = bandAt(edges, g, edge);
+    let tops: PageTop[] = [];
+    const bandOf = (g: number) => {
+      if (tops.length < log.frames) tops = pageTops(log.tops!, log.frames);
+      const { pieces, cover } = bandAt(tops, g);
       return { cover, pieces: pieces.map((p) => ('frame' in p ? { top: p.top, height: p.height, row: p.row, src: info.frames[p.frame] } : p)) };
     };
     const inks: Ink[] = [];
@@ -310,7 +310,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
       const keyboard = keyboardAt(log, look.keyboard, f, loop);
       const footage = footageAt(info as CaptureInfo, log, theme, f);
       return {
-        footage: { ...footage, band: bandOf(g), chin: bandOf(g, 'bottom'), fade: footage.fade && { ...footage.fade, band: bandOf(0), chin: bandOf(0, 'bottom') } },
+        footage: { ...footage, band: bandOf(g), fade: footage.fade && { ...footage.fade, band: bandOf(0) } },
         caret: caretAt(log, theme, f),
         finger: fingerAt(log, look.finger, f),
         dark: ease(inks[g].amount + (inks[0].amount - inks[g].amount) * loop),
