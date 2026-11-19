@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Event, EventLog } from '../drivers/web/events.ts';
+import type { Event, EventLog, PageTop } from '../drivers/web/events.ts';
 import { ease, frames } from '../drivers/web/pacing.ts';
-import { PHONE } from '../take/format.ts';
+import { PHONE, phonePage } from '../take/format.ts';
 import type { Theme } from './stage.ts';
 
 type Colors = Record<string, string>;
@@ -14,8 +14,8 @@ export interface PhoneTheme {
   screenRadius: number;
   shadow: string;
   statusBar: { time: string; font: string; wifi: string; battery: string };
-  ink: InkRule & { band: number };
-  strip: { band: number; blur: number; steps: number; full: number; into: number };
+  ink: InkRule;
+  edge: { blur: number; depth: number; steps: number };
   safari: { morph: number; collapseAfter: number; blur: number; font: string; pillFont: string; pillPadding: number; pillWidth: number };
   keyboard: { pressFrames: number; lead: number; blur: number; letterFont: string; labelFont: string; suggestionFont: string; calloutFont: string };
   icons: Record<string, string>;
@@ -57,6 +57,51 @@ export function phoneLayout(theme: Theme, phone: PhoneTheme, page: [number, numb
     contentLeft: screenLeft, contentTop, k,
     statusBar: (contentTop - screenTop) / k,
   };
+}
+
+export function pageTops(changes: readonly [number, PageTop][], frames: number): PageTop[] {
+  const tops: PageTop[] = [];
+  for (let f = 0, i = 0; f < frames; f++) {
+    while (i + 1 < changes.length && changes[i + 1][0] <= f) i++;
+    tops.push(changes[i][1]);
+  }
+  return tops;
+}
+
+type Rows = { top: number; height: number };
+export type BandPiece = Rows & ({ color: string } | { frame: number; row: number });
+export interface Band {
+  pieces: BandPiece[];
+  cover: string | null;
+}
+
+const solid = (color: string) => color.endsWith('/ 1)');
+
+export function bandAt(tops: readonly PageTop[], f: number, height = PHONE.statusBar, pageHeight = phonePage()[1]): Band {
+  const now = tops[f];
+  if (now.cover && solid(now.cover)) return { pieces: [{ top: 0, height, color: now.cover }], cover: null };
+  const pieces: BandPiece[] = [];
+  const add = (piece: BandPiece) => {
+    const last = pieces.at(-1);
+    if (last && 'color' in last && 'color' in piece && last.color === piece.color) last.height += piece.height;
+    else pieces.push(piece);
+  };
+  const shows = (g: number, docY: number) => {
+    const t = tops[g];
+    return t.scrollY <= docY && docY < t.scrollY + pageHeight && t.inner === now.inner && !t.cover;
+  };
+  const rest = tops.slice(0, f + 1).findLast((t) => t.scrollY <= 0)?.color ?? now.color;
+  const above = Math.min(height, Math.max(0, height - now.scrollY));
+  if (above > 0) add({ top: 0, height: above, color: rest });
+  for (let y = above; y < height;) {
+    const docY = now.scrollY - height + y;
+    let g = f - 1;
+    while (g >= 0 && !shows(g, docY)) g--;
+    const end = g < 0 ? Math.min(height, Math.floor(y) + 1) : Math.min(height, tops[g].scrollY + pageHeight - now.scrollY + height);
+    add(g < 0 ? { top: y, height: end - y, color: now.color } : { top: y, height: end - y, frame: g, row: docY - tops[g].scrollY });
+    y = end;
+  }
+  return { pieces, cover: now.cover };
 }
 
 export interface Finger {
@@ -219,15 +264,12 @@ function keyboardHtml(icon: (name: string) => string, layout: Layout): string {
     </div>`;
 }
 
-function stripBlur(phone: PhoneTheme, box: PhoneLayout): string {
-  const { blur, steps, full, into } = phone.strip;
-  const k = box.k;
-  const sharp = box.statusBar + into;
-  const ramp = (sharp - full) / steps;
+function softEdge({ blur, depth, steps }: PhoneTheme['edge'], k: number): string {
+  const band = depth / steps;
   return Array.from({ length: steps }, (_, i) => {
-    const mask = `linear-gradient(to bottom, #000 ${(sharp - (i + 1) * ramp) * k}px, transparent ${(sharp - i * ramp) * k}px)`;
+    const mask = `linear-gradient(to bottom, #000 ${(depth - (i + 1) * band) * k}px, transparent ${(depth - i * band) * k}px)`;
     const each = (blur / steps) * Math.sqrt(2 * i + 1) * k;
-    return `<div class="strip-blur" style="height: ${(sharp + blur) * k}px; backdrop-filter: blur(${each}px); -webkit-mask-image: ${mask}; mask-image: ${mask};"></div>`;
+    return `<div class="soft-edge" style="height: ${(depth + 3 * blur) * k}px; backdrop-filter: blur(${each}px); -webkit-mask-image: ${mask}; mask-image: ${mask};"></div>`;
   }).join('');
 }
 
@@ -244,8 +286,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     .map((name) => `--${kebab(name)}: color-mix(in srgb, ${phone.light[name]}, ${phone.dark[name]} calc(var(--dark) * 100%));`)
     .join('\n    ');
   const { top: kbTop, accessory } = PHONE.keyboard;
-  const pageH = page[1] * box.k;
-  const strip = box.contentTop - box.screenTop;
+  const band = box.statusBar * box.k;
   return `<!doctype html>
 <meta charset="utf-8">
 <style>
@@ -259,17 +300,15 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     ${colors} }
   .viewport { position: absolute; inset: 0; filter: opacity(1); }
   .scene { position: absolute; inset: 0; }
-  .page { position: absolute; left: 0; top: ${strip}px; width: 100%; height: ${pageH}px; overflow: hidden; }
+  .band { position: absolute; left: 0; top: 0; width: 100%; height: ${band + 1}px; display: block; }
+  .page { position: absolute; left: 0; top: ${band}px; width: 100%; height: ${page[1] * box.k}px; overflow: hidden; }
   .page img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  .stretch { position: absolute; left: 0; top: 0; width: 100%; height: ${strip + 1}px; overflow: hidden; }
-  .stretch img { position: absolute; left: 0; top: 0; width: 100%; height: ${(pageH * (strip + 1)) / (phone.strip.band * box.k)}px; display: block;
-    transform: scaleY(-1); transform-origin: 0 ${(strip + 1) / 2}px; }
-  .strip-blur { position: absolute; left: 0; top: 0; width: 100%; pointer-events: none; }
+  .soft-edge { position: absolute; left: 0; top: 0; width: 100%; pointer-events: none; }
   #caret { position: absolute; left: 0; top: 0; display: none; }
   .points { position: absolute; transform: scale(${box.k}); transform-origin: 0 0; pointer-events: none; }
   .ui { left: 0; top: 0; width: ${sw}px; height: ${sh}px; }
   .status { position: absolute; left: 0; top: 0; width: ${sw}px; height: ${box.statusBar}px; display: flex; align-items: center; justify-content: center;
-    padding: 3px 8px 0; box-sizing: border-box; color: var(--ink); }
+    padding: 11px 8px 0; box-sizing: border-box; color: var(--ink); }
   .time { flex: 1; height: 13px; display: flex; align-items: center; justify-content: center; font: ${bar.font}; white-space: nowrap; }
   .island { width: 95px; align-self: stretch; }
   .levels { flex: 1; display: flex; gap: 8px; align-items: center; justify-content: center; }
@@ -332,10 +371,10 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
 <div class="screen" id="screen">
   <div class="viewport">
     <div class="scene" id="scene">
-      <div class="stretch"><img id="stretch-shot" alt=""><img id="stretch-fade" alt="" style="opacity: 0"></div>
+      <canvas class="band" id="band"></canvas><canvas class="band" id="band-fade" style="opacity: 0"></canvas>
       <div class="page"><img id="shot" alt=""><img id="fade" alt="" style="opacity: 0"><div id="caret"></div></div>
     </div>
-    ${stripBlur(phone, box)}
+    ${softEdge(phone.edge, box.k)}
   </div>
   <div class="points ui">
     <div class="status">
@@ -368,7 +407,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
 <script>
   const k = ${box.k};
   const $ = (id) => document.getElementById(id);
-  const shot = $('shot'), fade = $('fade'), stretchShot = $('stretch-shot'), stretchFade = $('stretch-fade');
+  const shot = $('shot'), fade = $('fade'), band = $('band'), bandFade = $('band-fade');
   const screen = $('screen'), scene = $('scene'), finger = $('finger'), field = $('field'), keys = $('keys'), keyboard = $('keyboard');
   const back = $('back'), tabs = $('tabs'), word = $('word'), callout = $('callout');
   const big = field.querySelector('.address.big'), small = field.querySelector('.address.small');
@@ -378,16 +417,46 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   const clamp = (t) => Math.min(1, Math.max(0, t));
   let pill = ${safari.pillWidth};
   const show = async (img, src) => { if (img.getAttribute('src') !== src) { img.src = src; await img.decode(); } };
+  const images = new Map();
+  const image = (src) => {
+    if (!images.has(src)) {
+      const img = new Image();
+      img.src = src;
+      images.set(src, img.decode().then(() => img));
+      if (images.size > 16) images.delete(images.keys().next().value);
+    }
+    return images.get(src);
+  };
+  const paint = async (ctx, { pieces, cover }, s) => {
+    const { width: w, height: h } = ctx.canvas;
+    const sources = await Promise.all(pieces.map((p) => p.src && image(p.src)));
+    ctx.clearRect(0, 0, w, h);
+    pieces.forEach((p, i) => {
+      const [y0, y1] = [Math.round(p.top * s), i === pieces.length - 1 ? h : Math.round((p.top + p.height) * s)];
+      if (y1 <= y0) return;
+      if (p.color) {
+        ctx.fillStyle = p.color;
+        return ctx.fillRect(0, y0, w, y1 - y0);
+      }
+      const img = sources[i], q = img.naturalWidth / ${page[0]};
+      ctx.drawImage(img, 0, (p.row + y0 / s - p.top) * q, img.naturalWidth, ((y1 - y0) / s) * q, 0, y0, w, y1 - y0);
+    });
+    if (cover) {
+      ctx.fillStyle = cover;
+      ctx.fillRect(0, 0, w, h);
+    }
+  };
+  const fit = (canvas) => {
+    const [w, h] = [Math.round(canvas.offsetWidth * devicePixelRatio), Math.round(canvas.offsetHeight * devicePixelRatio)];
+    if (canvas.width !== w || canvas.height !== h) Object.assign(canvas, { width: w, height: h });
+    return canvas.getContext('2d');
+  };
   const meter = document.createElement('canvas').getContext('2d', { willReadFrequently: true });
-  window.luma = async (src) => {
-    const img = new Image();
-    img.src = src;
-    await img.decode();
-    const band = Math.max(1, Math.round(img.naturalHeight * ${phone.ink.band / page[1]}));
-    meter.canvas.width = 16;
-    meter.canvas.height = 2;
-    meter.drawImage(img, 0, 0, img.naturalWidth, band, 0, 0, 16, 2);
-    const px = meter.getImageData(0, 0, 16, 2).data;
+  meter.canvas.width = ${page[0]};
+  meter.canvas.height = ${PHONE.statusBar};
+  window.luma = async (band) => {
+    await paint(meter, band, 1);
+    const px = meter.getImageData(0, 0, meter.canvas.width, meter.canvas.height).data;
     let sum = 0;
     for (let i = 0; i < px.length; i += 4) sum += (0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2]) / 255;
     return sum / (px.length / 4);
@@ -411,10 +480,10 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
       + 'C' + L + ' ' + (T + neck * 0.45) + ' 0 ' + (T + neck * 0.55) + ' 0 ' + T + 'V' + top + 'Q0 0 ' + top + ' 0Z';
   };
   window.render = async ({ footage, caret: c, finger: t, dark, lift, bar, keyboard: kb }) => {
-    await Promise.all([show(shot, footage.src), show(stretchShot, footage.src)]);
-    if (footage.fade) await Promise.all([show(fade, footage.fade.src), show(stretchFade, footage.fade.src)]);
-    const mix = footage.fade ? footage.fade.opacity : 0;
-    fade.style.opacity = stretchFade.style.opacity = mix;
+    const s = ${band / PHONE.statusBar} * devicePixelRatio;
+    await Promise.all([show(shot, footage.src), paint(fit(band), footage.band, s)]);
+    if (footage.fade) await Promise.all([show(fade, footage.fade.src), paint(fit(bandFade), footage.fade.band, s)]);
+    fade.style.opacity = bandFade.style.opacity = footage.fade ? footage.fade.opacity : 0;
     screen.style.setProperty('--dark', dark);
     scene.style.transform = 'translateY(' + (-lift * k) + 'px)';
 

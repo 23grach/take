@@ -37,7 +37,7 @@ export type Device = (typeof DEVICES)[number];
 
 export const PHONE = {
   screen: [402, 874] as [number, number],
-  statusBar: 62,
+  statusBar: 54,
   safariBar: 82,
   keyboard: { top: 434, accessory: 472, clearance: 16, slide: 350 },
 };

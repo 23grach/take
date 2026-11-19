@@ -2,7 +2,8 @@ import { ownError } from './page-errors.ts';
 import type { Locator, Page } from 'playwright';
 import { DEFAULTS, PHONE, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
-import type { Box, Event, EventLog, KeyboardUp, StepLog } from './events.ts';
+import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
+import { pageTop } from './page-top.ts';
 import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
@@ -82,6 +83,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const cursorAt = cursorReader(page);
   const carets: [number, Caret | null][] = [];
   const keyboard: [number, KeyboardUp | null][] = [];
+  const tops: [number, PageTop][] = [];
   let keyboardDisagrees = 0;
   let reachLift: number | null = null;
   const pageErrors: string[] = [];
@@ -104,7 +106,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps,
     marks,
     loop: take.loop,
-    ...(phone ? { keyboard } : {}),
+    ...(phone ? { keyboard, tops } : {}),
   };
   let current = 0;
   let waited = 0;
@@ -121,6 +123,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       if (phone) await followKeyboard();
     }
     await clock.tick();
+    if (phone && watch) await followTop(clock.frame - 1);
     eventLog.frames = clock.frame;
     onFrame?.(eventLog);
     if (pageErrors.length)
@@ -136,6 +139,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     keyboardDisagrees = 0;
     reachLift = null;
     keyboard.push([clock.frame, field === null ? null : { lift }]);
+  }
+  async function followTop(frame: number) {
+    const last = tops.at(-1)?.[1];
+    const now = await page.evaluate(pageTop).catch(() => last);
+    if (now && JSON.stringify(now) !== JSON.stringify(last)) tops.push([frame, now]);
   }
   const keyboardNow = () => keyboard.at(-1)?.[1] ?? null;
 
