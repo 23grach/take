@@ -1,8 +1,8 @@
 import { ownError } from './page-errors.ts';
 import type { Locator, Page } from 'playwright';
-import { DEFAULTS, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
+import { DEFAULTS, PHONE, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
-import type { Box, Event, EventLog, StepLog } from './events.ts';
+import type { Box, Event, EventLog, KeyboardUp, StepLog } from './events.ts';
 import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
@@ -31,6 +31,25 @@ const belowLabel = (b: Box): Point => {
   return [x + Math.min(b.width * right, maxRight), y + Math.min(b.height * down, maxDown)];
 };
 const round = (n: number) => Math.round(n * 10) / 10;
+type Span = [number, number];
+const fits = (start: number, size: number, [lo, hi]: Span) =>
+  size <= hi - lo ? start >= lo - 2 && start + size <= hi + 2 : start + size / 2 >= lo && start + size / 2 <= hi;
+const KEYBOARD_DEBOUNCE = 2;
+
+function focusedFieldBottom(): number | null {
+  let el = document.activeElement as HTMLElement | null;
+  while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement as HTMLElement;
+  if (!el) return null;
+  const notText = ['button', 'checkbox', 'radio', 'submit', 'reset', 'file', 'image', 'range', 'color', 'hidden'];
+  const takesText = el.isContentEditable || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !notText.includes((el as HTMLInputElement).type));
+  return takesText ? el.getBoundingClientRect().bottom : null;
+}
+
+function keyboardLift(fieldBottom: number): number {
+  const { clearance, top } = PHONE.keyboard;
+  const above = top - PHONE.statusBar - clearance;
+  return Math.round(Math.min(above, Math.max(0, fieldBottom - above)));
+}
 
 export interface PerformOptions {
   onStep?: (log: StepLog, pointer: [number, number]) => Promise<void>;
@@ -62,6 +81,9 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const cursors: [number, Cursor][] = [];
   const cursorAt = cursorReader(page);
   const carets: [number, Caret | null][] = [];
+  const keyboard: [number, KeyboardUp | null][] = [];
+  let keyboardDisagrees = 0;
+  let reachLift: number | null = null;
   const pageErrors: string[] = [];
   const onError = (e: Error) => void (ownError(e, page.url()) && pageErrors.push(e.message));
   page.on('pageerror', onError);
@@ -82,6 +104,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps,
     marks,
     loop: take.loop,
+    ...(phone ? { keyboard } : {}),
   };
   let current = 0;
   let waited = 0;
@@ -95,6 +118,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       if (!sameCursor(cursors.at(-1)?.[1], shape)) cursors.push([clock.frame, shape]);
       const caret = await caretAt(page).catch(() => null);
       if (!carets.length || JSON.stringify(carets.at(-1)![1]) !== JSON.stringify(caret)) carets.push([clock.frame, caret]);
+      if (phone) await followKeyboard();
     }
     await clock.tick();
     eventLog.frames = clock.frame;
@@ -102,6 +126,37 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     if (pageErrors.length)
       throw new TakeError(current, `the app threw an error: "${pageErrors[0]}". Take stops rather than film a broken app; fix the app, or the step that sets it off`);
   }
+  async function followKeyboard() {
+    const field = await page.evaluate(focusedFieldBottom).catch(() => null);
+    const now = keyboardNow();
+    const lift = field === null ? 0 : reachLift ?? keyboardLift(field);
+    if (field !== null && now && Math.abs(lift - now.lift) >= 2) keyboard.push([clock.frame, { lift }]);
+    if ((field !== null) === !!now) return void (keyboardDisagrees = 0);
+    if (++keyboardDisagrees < KEYBOARD_DEBOUNCE) return;
+    keyboardDisagrees = 0;
+    reachLift = null;
+    keyboard.push([clock.frame, field === null ? null : { lift }]);
+  }
+  const keyboardNow = () => keyboard.at(-1)?.[1] ?? null;
+
+  function shown(): Span {
+    if (!phone) return [0, vh];
+    const up = keyboardNow();
+    return up ? [up.lift, up.lift + PHONE.keyboard.top - PHONE.statusBar] : [0, vh - PHONE.safariBar];
+  }
+
+  async function keyboardUp(t: Target | undefined) {
+    const give = clock.frame + limit(PACING.find);
+    const slide = frames(PHONE.keyboard.slide);
+    for (;;) {
+      const opened = keyboard.findLast(([, up], i) => up && !keyboard[i - 1]?.[1]);
+      if (keyboardNow() && opened && clock.frame >= opened[0] + slide) return;
+      if (clock.frame >= give)
+        throw new TakeError(current, `the keyboard didn't come up: ${t ? `${describe(t)} doesn't take text` : 'no text field has focus'}; on a phone, typing goes into the focused text field`);
+      await idle();
+    }
+  }
+
   async function idle() {
     await tick();
     waited++;
@@ -138,17 +193,26 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
   }
 
-  const fitsAxis = (start: number, size: number, screen: number) =>
-    size <= screen ? start >= -2 && start + size <= screen + 2 : start + size / 2 >= 0 && start + size / 2 <= screen;
+  const inView = (b: Box) => fits(b.x, b.width, [0, vw]) && fits(b.y, b.height, shown());
+  const toMiddle = (b: Box) => {
+    const [lo, hi] = shown();
+    return Math.round(center(b)[1] - (lo + hi) / 2);
+  };
 
   async function bringIntoView(loc: Locator, t: Target) {
     let box = await boxOf(loc, t);
-    const ok = (b: Box) => fitsAxis(b.x, b.width, vw) && fitsAxis(b.y, b.height, vh);
-    if (ok(box)) return;
-    if (!fitsAxis(box.y, box.height, vh)) {
-      await scroll(0, Math.round(center(box)[1] - vh / 2));
+    if (inView(box)) return;
+    const up = keyboardNow();
+    if (up && box.y >= 0 && box.y + box.height <= vh) {
+      reachLift = box.y < up.lift ? Math.max(0, Math.round(box.y - PHONE.keyboard.clearance)) : keyboardLift(box.y + box.height);
+      keyboard.push([clock.frame, { lift: reachLift }]);
+      await wait(PHONE.keyboard.slide);
+      return;
+    }
+    if (!fits(box.y, box.height, shown())) {
+      await scroll(0, toMiddle(box));
       box = await boxOf(loc, t);
-      if (ok(box)) return;
+      if (inView(box)) return;
     }
     await loc.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
     await tick();
@@ -286,8 +350,9 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   async function scroll(dx: number, dy: number) {
     if (!phone) return wheel([dx, dy], frames(scrollMs(Math.hypot(dx, dy))), ease, pointer);
     const { lift, reach } = PACING.swipe;
+    const [lo, hi] = shown();
     let left: Point = [dx, dy];
-    for (let i = Math.max(1, Math.ceil((lift * Math.max(Math.abs(dx) / vw, Math.abs(dy) / vh)) / reach)); i > 0; i--) {
+    for (let i = Math.max(1, Math.ceil((lift * Math.max(Math.abs(dx) / vw, Math.abs(dy) / (hi - lo))) / reach)); i > 0; i--) {
       const part: Point = [Math.round(left[0] / i), Math.round(left[1] / i)];
       left = [left[0] - part[0], left[1] - part[1]];
       await swipe(part);
@@ -296,8 +361,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
 
   async function swipe([dx, dy]: Point) {
     const { lift, slower } = PACING.swipe;
-    const across = (along: number, size: number, now: number) => (along ? size / 2 + (lift * along) / 2 : Math.min(size * 0.65, Math.max(size * 0.35, now)));
-    const start: Point = [across(dx, vw, pointer[0]), across(dy, vh, pointer[1])];
+    const across = (along: number, [lo, hi]: Span, now: number) => {
+      const size = hi - lo;
+      return along ? lo + size / 2 + (lift * along) / 2 : Math.min(lo + size * 0.65, Math.max(lo + size * 0.35, now));
+    };
+    const start: Point = [across(dx, [0, vw], pointer[0]), across(dy, shown(), pointer[1])];
     await moveTo(async () => start);
     await wait(PACING.settle);
     const n = frames(scrollMs(Math.hypot(dx, dy)) * slower);
@@ -377,6 +445,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         break;
       case 'type': {
         if (s.target) log.target = await click(await find(s.target), s.target);
+        if (phone && watch) await keyboardUp(s.target);
         if (s.target) await wait(PACING.settle);
         const f0 = clock.frame;
         const chars = [...s.text].length;
@@ -414,8 +483,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         } else {
           const loc = await find(s.target);
           const box = await boxOf(loc, s.target);
-          const inView = fitsAxis(box.x, box.width, vw) && fitsAxis(box.y, box.height, vh);
-          if (!inView) await scroll(0, Math.round(center(box)[1] - vh / 2));
+          if (!inView(box)) await scroll(0, toMiddle(box));
           else log.note = `nothing scrolled: ${describe(s.target)} is already on screen; scroll "by" a distance to move the page`;
           log.target = await boxOf(loc, s.target);
         }

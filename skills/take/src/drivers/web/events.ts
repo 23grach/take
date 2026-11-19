@@ -14,6 +14,10 @@ export type Event =
   | { frame: number; type: 'key'; key: string }
   | { frame: number; type: 'scroll'; dx: number; dy: number };
 
+export interface KeyboardUp {
+  lift: number;
+}
+
 export interface StepLog {
   index: number;
   do: string;
@@ -44,4 +48,5 @@ export interface EventLog {
   marks: Record<string, number>;
   loop: 'crossfade-to-start' | 'none';
   videos?: [number, Box[]][];
+  keyboard?: [number, KeyboardUp | null][];
 }

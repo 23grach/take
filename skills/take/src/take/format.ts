@@ -35,7 +35,12 @@ export type Step = Common &
 export const DEVICES = ['desktop', 'phone'] as const;
 export type Device = (typeof DEVICES)[number];
 
-export const PHONE = { screen: [402, 874] as [number, number], statusBar: 62 };
+export const PHONE = {
+  screen: [402, 874] as [number, number],
+  statusBar: 62,
+  safariBar: 82,
+  keyboard: { top: 434, accessory: 472, clearance: 16, slide: 350 },
+};
 export const phonePage = (): [number, number] => [PHONE.screen[0], PHONE.screen[1] - PHONE.statusBar];
 
 export interface WebTarget {
@@ -60,7 +65,7 @@ export function isLocalUrl(url: string): boolean {
 }
 
 export function addressWarning(target: WebTarget): string | undefined {
-  if (target.device === 'phone' || target.address !== undefined || !isLocalUrl(target.url)) return undefined;
+  if (target.address !== undefined || !isLocalUrl(target.url)) return undefined;
   return `no address: the app runs at ${new URL(target.url).host}, which isn't shown, so the address bar will be blank. Add the product's domain as target.address, e.g. "boards.app"`;
 }
 

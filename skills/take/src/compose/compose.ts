@@ -9,7 +9,7 @@ import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog } from '../drivers/web/events.ts';
 import type { Device } from '../take/format.ts';
 import { stageHtml, layout, type Theme } from './stage.ts';
-import { fingerAt, phoneLayout, phoneStageHtml, type PhoneTheme } from './phone.ts';
+import { fingerAt, keyboardAt, nextInk, phoneLayout, phoneStageHtml, safariAt, type Ink, type PhoneTheme } from './phone.ts';
 import { ease } from '../drivers/web/pacing.ts';
 import type { Cursor } from '../drivers/web/cursor.ts';
 import { cursorArt, type ArtSet } from './cursor-art.ts';
@@ -234,7 +234,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
   const art = cursorArt(theme, themeDir);
   const { cursors, keyOf } = stageCursors(log, art);
   const html = phone
-    ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport)
+    ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport, address ?? log.address)
     : stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art);
   const staged = new Set(Object.keys(art));
   const first = range?.[0] ?? 0;
@@ -288,11 +288,34 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
       }
       return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor } };
     };
+    const inks: Ink[] = [];
+    let measured = Promise.resolve();
+    const inkUpTo = (g: number) => (measured = measured.then(async () => {
+      while (inks.length <= g) {
+        const luma = await pages[0].evaluate((src) => (window as unknown as { luma: (src: string) => Promise<number> }).luma(src), info.frames[inks.length]);
+        inks.push(nextInk(inks.at(-1), luma, phone!.ink));
+      }
+    }));
+    const phoneState = async (look: PhoneTheme, f: number) => {
+      const g = Math.min(f, log.frames - 1);
+      await inkUpTo(g);
+      const loop = loopProgress(log, theme, f);
+      const keyboard = keyboardAt(log, look.keyboard, f, loop);
+      return {
+        footage: footageAt(info as CaptureInfo, log, theme, f),
+        caret: caretAt(log, theme, f),
+        finger: fingerAt(log, look.finger, f),
+        dark: ease(inks[g].amount + (inks[0].amount - inks[g].amount) * loop),
+        lift: keyboard.lift,
+        bar: safariAt(log, look.safari, f, loop),
+        keyboard,
+      };
+    };
     const draw = (f: number): Promise<Buffer> => {
-      const state = phone ? { footage: footageAt(info as CaptureInfo, log, theme, f), caret: caretAt(log, theme, f), finger: fingerAt(log, phone.finger, f) } : desktopState(f);
+      const state = phone ? phoneState(phone, f) : desktopState(f);
       const i = (f - first) % pages.length;
       const jpeg = queues[i].then(async () => {
-        await pages[i].evaluate((s) => (window as unknown as { render: (s: unknown) => Promise<void> }).render(s), state);
+        await pages[i].evaluate((s) => (window as unknown as { render: (s: unknown) => Promise<void> }).render(s), await state);
         return pages[i].screenshot({ type: 'jpeg', quality: 95 });
       });
       queues[i] = jpeg.catch(() => {});

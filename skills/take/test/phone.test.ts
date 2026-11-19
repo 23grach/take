@@ -8,9 +8,12 @@ import { serve } from '../examples/demo-app/serve.mjs';
 import { openTake } from '../src/drivers/web/browser.ts';
 import { record } from '../src/drivers/web/record.ts';
 import { compose, loadTheme, themeProblem } from '../src/compose/compose.ts';
-import { fingerAt, phoneLayout } from '../src/compose/phone.ts';
-import { validateTake, type Take } from '../src/take/format.ts';
+import { fingerAt, keyboardAt, nextInk, phoneLayout, safariAt, safariCollapses, type Ink } from '../src/compose/phone.ts';
+import { PHONE, validateTake, type Take } from '../src/take/format.ts';
 import type { Event, EventLog } from '../src/drivers/web/events.ts';
+import { perform } from '../src/drivers/web/driver.ts';
+import { frames } from '../src/drivers/web/pacing.ts';
+import type { Clock } from '../src/drivers/web/clock.ts';
 
 const { theme } = loadTheme();
 const look = theme.phone!;
@@ -132,4 +135,90 @@ test('a phone take swipes, taps and types like a finger, and composes into the p
   assert.deepEqual(c.size, [2560, 1440]);
   const probe = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', video], { encoding: 'utf8' });
   assert.match(probe, /^2560,1440/);
+});
+
+function fastClock(): Clock {
+  let frame = 0;
+  return { fps: 60, get frame() { return frame; }, async tick() { frame++; await new Promise((r) => setImmediate(r)); } };
+}
+
+test('a text field brings up the keyboard over the page: typing waits for it, the field rises above it, and it goes when the field loses focus', async () => {
+  const take = phoneTake([
+    { do: 'click', target: { role: 'button', name: 'New project' }, waitFor: { visible: { role: 'dialog', name: 'New project' } } },
+    { do: 'type', target: { label: 'Name' }, text: 'Ab', cps: 30 },
+    { do: 'click', target: { role: 'button', name: 'Cancel' } },
+    { do: 'hold', ms: 600 },
+  ]);
+  const { browser, page } = await openTake(take);
+  try {
+    const page_: number[][] = [];
+    const log = await perform(page, take, fastClock(), {
+      onStep: async (step) => void (step.do === 'type' && page_.push(await page.evaluate(() => [innerWidth, innerHeight, visualViewport!.height, document.activeElement!.getBoundingClientRect().bottom]))),
+    });
+    const [[width, height, visible, fieldBottom]] = page_;
+    assert.deepEqual([width, height, visible], [402, 812, 812], 'the page keeps its size while the keyboard is up, as in Safari');
+    const changes = log.keyboard!;
+    const [click, type, cancel] = log.steps;
+    const opened = changes.find(([, up]) => up)!;
+    assert.ok(opened[0] >= click.start, 'the keyboard comes up once the field has focus');
+    const keys = log.events.filter((e) => e.type === 'key');
+    assert.ok(keys[0].frame >= opened[0] + frames(PHONE.keyboard.slide), `typing starts at ${keys[0].frame}, the keyboard was up at ${opened[0] + frames(PHONE.keyboard.slide)}`);
+    const { lift } = changes.filter(([frame]) => frame <= type.end).at(-1)![1]!;
+    const clear = PHONE.keyboard.top - PHONE.statusBar - PHONE.keyboard.clearance;
+    assert.ok(fieldBottom > clear && lift > 0, 'the field starts out under the keyboard');
+    assert.ok(fieldBottom - lift <= clear + 2, `the field ends ${fieldBottom - lift} pt down, above the keyboard at ${clear}`);
+    const [closed, gone] = changes.at(-1)!;
+    assert.equal(gone, null);
+    assert.ok(closed >= cancel.start && closed <= cancel.end + frames(100), 'the keyboard goes when the tap takes focus away');
+    const tap = log.events.filter((e) => e.type === 'down' && e.frame >= cancel.start)[0];
+    const liftAtTap = changes.filter(([frame]) => frame <= tap.frame).at(-1)![1]!.lift;
+    assert.ok(tap.type === 'down' && tap.y - liftAtTap < clear + PHONE.keyboard.clearance, 'the finger taps above the keyboard, never through it');
+  } finally {
+    await browser.close();
+  }
+});
+
+test('the Safari bar folds into the address while the page scrolls down and opens again on the way up', () => {
+  const scroll = (frame: number, dy: number): Event => ({ frame, type: 'scroll', dx: 0, dy });
+  const events = [scroll(10, 6), scroll(11, 20), scroll(12, 40), scroll(40, -10), scroll(60, 30), scroll(80, -200)];
+  assert.deepEqual(safariCollapses(events, look.safari.collapseAfter), [[11, true], [40, false], [60, true], [80, false]]);
+  const log = { frames: 120, events } as unknown as EventLog;
+  const bar = (f: number) => safariAt(log, look.safari, f, 0);
+  const n = look.safari.morph;
+  assert.equal(bar(10), 0);
+  assert.ok(bar(11) > 0 && bar(11) < bar(14) && bar(14) < 1, 'it folds over a few frames');
+  assert.equal(bar(11 + n - 1), 1);
+  assert.equal(bar(39), 1);
+  assert.equal(bar(40 + n - 1), 0);
+  assert.equal(bar(79), 1);
+  assert.equal(bar(119), 0);
+});
+
+test('the status bar ink switches only on a clear change of shade, and fades over a few frames', () => {
+  const rule = { toDark: 0.45, toLight: 0.6, fade: 4 };
+  const inkSeries = (lumas: number[]) => lumas.reduce<Ink[]>((out, luma) => [...out, nextInk(out.at(-1), luma, rule)], []);
+  const inks = inkSeries([0.9, 0.5, 0.46, 0.44, 0.5, 0.59, 0.6, 0.61, 0.61, 0.61, 0.61, 0.61]);
+  assert.deepEqual(inks.map((i) => i.dark), [false, false, false, true, true, true, true, false, false, false, false, false]);
+  assert.deepEqual(inks.map((i) => i.amount), [0, 0, 0, 0.25, 0.5, 0.75, 1, 0.75, 0.5, 0.25, 0, 0]);
+  assert.ok(inkSeries([0.7, 0.5, 0.55, 0.5, 0.55, 0.46]).every((i) => !i.dark), 'a shade between the two thresholds never flickers');
+  assert.deepEqual(inkSeries([0.1]), [{ dark: true, amount: 1 }]);
+});
+
+test('the keyboard slides, presses the key being typed, shifts for capitals, switches to numbers and shows the word', () => {
+  const key = (frame: number, k: string): Event => ({ frame, type: 'key', key: k });
+  const log = {
+    frames: 200,
+    events: [key(40, 'A'), key(45, 'b'), key(60, '4'), key(70, ' '), key(80, 'x')],
+    keyboard: [[10, { lift: 30 }], [50, { lift: 30 }], [100, null]],
+  } as unknown as EventLog;
+  const kb = (f: number) => keyboardAt(log, look.keyboard, f, 0);
+  const slide = frames(PHONE.keyboard.slide);
+  assert.equal(kb(9).up, 0);
+  assert.ok(kb(15).up > 0 && kb(15).up < 1 && kb(15).opacity === 1);
+  assert.deepEqual({ up: kb(10 + slide).up, lift: kb(10 + slide).lift }, { up: 1, lift: 30 });
+  assert.deepEqual(kb(40), { up: 1, opacity: 1, lift: 30, layout: 'letters', shift: true, pressed: 'a', callout: true, word: 'A' });
+  assert.equal(kb(40 - look.keyboard.lead).shift, true, 'shift goes on just before the capital');
+  assert.deepEqual([kb(52).layout, kb(56).layout, kb(60).pressed, kb(60).word], ['letters', 'numbers', '4', 'Ab4']);
+  assert.deepEqual([kb(70).pressed, kb(70).callout, kb(70).word, kb(80).word], ['space', false, '', 'x']);
+  assert.equal(kb(100 + slide).up, 0);
 });
