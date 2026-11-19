@@ -4,7 +4,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { serve } from '../examples/demo-app/serve.mjs';
-import { describeStep, probe, withoutAddresses } from '../src/probe/probe.ts';
+import { describeStep, probe } from '../src/probe/probe.ts';
+import { shortOutline } from '../src/probe/outline.ts';
 import { storyboard } from '../src/probe/storyboard.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
 import { withShortFind } from './short-find.ts';
@@ -81,25 +82,56 @@ test('probe stops at a step that fails and shows why', async () => {
   assert.ok(JSON.parse(fs.readFileSync(path.join(out, 'probe.json'), 'utf8')).error);
 });
 
-test('outlines leave out link addresses, which targets never use', () => {
+test('outlines keep what targets use and drop what they never do', () => {
   const outline = [
     '- banner:',
-    '  - link "Home":',
-    '    - /url: /home',
-    '  - link "Search and explore":',
-    '    - /url: /explore',
-    '    - text: Explore',
+    '  - list:',
+    '    - listitem:',
+    '      - link "Home":',
+    '        - /url: /home',
+    '        - img "Home"',
+    '    - listitem:',
+    '      - link "Search and explore":',
+    '        - /url: /explore',
+    '        - text: Explore',
+    '- separator',
+    '- heading "Projects" [level=1]:',
+    '  - text: Projects',
+    '- paragraph: Everything you are working on, sorted by the date you last opened it, newest first.',
     '- textbox "Name": Moodboard',
-    '- button "Create"',
+    '- \'article "Note: a long name that goes on and on past sixty characters for sure"\':',
+    '  - button "Create"',
+    '  - img',
   ].join('\n');
-  assert.equal(withoutAddresses(outline), [
+  assert.equal(shortOutline(outline).outline, [
     '- banner:',
     '  - link "Home"',
-    '  - link "Search and explore":',
-    '    - text: Explore',
+    '  - link "Search and explore"',
+    '- heading "Projects" [level=1]',
+    '- text: Everything you are working on, sorted by the date you last o…',
     '- textbox "Name": Moodboard',
-    '- button "Create"',
+    '- \'article "Note: a long name that goes on and on past sixty characters…"\':',
+    '  - button "Create"',
   ].join('\n'));
+});
+
+test('on a long page the outline keeps what is on screen and every heading', () => {
+  const outline = [
+    '- heading "Top" [level=1]',
+    '- link "Shown"',
+    '- link "Far below"',
+    '- paragraph: A sentence that is on the screen right now.',
+    '- paragraph: A sentence that is far below the screen.',
+    '- text: ","',
+    '- list:',
+    '  - listitem:',
+    '    - button',
+    '    - link "Also shown"',
+    '- heading "Further" [level=2]',
+  ].join('\n');
+  const r = shortOutline(outline, { text: 'Top Shown , A sentence that is on the screen right now. Also shown', pieces: ['Top', 'Shown', ',', 'Also shown'] });
+  assert.equal(r.outline, ['- heading "Top" [level=1]', '- link "Shown"', '- text: A sentence that is on the screen right now.', '- button', '- link "Also shown"', '- heading "Further" [level=2]'].join('\n'));
+  assert.equal(r.leftOut, 3);
 });
 
 test('probe clears only its own files from --out, never the take next to them', async () => {

@@ -11,7 +11,7 @@ import { check, formatReport } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { run } from './run.ts';
 import { addressWarning } from './take/format.ts';
-import { probe } from './probe/probe.ts';
+import { probe, type ProbeShot } from './probe/probe.ts';
 import { storyboard } from './probe/storyboard.ts';
 import { formatScript } from './probe/script.ts';
 import { defaultLoginName, forgetLogin, isLoginName, loginPath, readLogin, savedLogins, signIn } from './drivers/web/login.ts';
@@ -291,12 +291,14 @@ async function probeCommand(): Promise<number> {
   const r = await probe(take, out, { headed, speed: slow ? 1 : undefined });
   if (r.visibleWindow) process.stdout.write(`⚠ ${VISIBLE_NOTE}\n`);
   if (!r.shots.length) return fail(`✗ ${r.error}`);
-  if (r.shots[0].error) process.stdout.write(`✗ before step 1: ${r.shots[0].error}\n      what the page had: ${path.relative(process.cwd(), path.join(out, r.shots[0].outline))}\n`);
+  const outlineOf = (s: ProbeShot, intro: string) => `${intro} (${path.relative(process.cwd(), path.join(out, s.outline))}):\n${readFileSync(path.join(out, s.outline), 'utf8').trimEnd()}\n`;
+  if (r.shots[0].error) process.stdout.write(`✗ before step 1: ${r.shots[0].error}\n${outlineOf(r.shots[0], 'What the page had')}`);
   for (const s of r.shots.slice(1))
-    process.stdout.write(`${s.error ? '✗' : '✓'} ${String(s.step).padStart(2)}  ${s.label}${s.note ? `\n      ⚠ ${s.note}` : ''}${s.error ? `\n      ${s.error}\n      what the page had at that point: ${path.relative(process.cwd(), path.join(out, s.outline))}` : ''}\n`);
+    process.stdout.write(`${s.error ? '✗' : '✓'} ${String(s.step).padStart(2)}  ${s.label}${s.note ? `\n      ⚠ ${s.note}` : ''}${s.error ? `\n      ${s.error}` : ''}\n${s.error ? outlineOf(s, 'What the page had at that point') : ''}`);
   const sheet = await storyboard(r, out, path.join(out, 'storyboard.jpg'), { theme: themeFlag ?? take.theme });
   const done = r.shots.length - 1 - (r.ok ? 0 : 1);
   process.stdout.write(`${r.ok ? `All ${take.steps.length} steps work` : `Stopped at step ${done + 1} of ${take.steps.length}`} (${r.seconds} s). Storyboard: ${path.relative(process.cwd(), sheet)}\n`);
+  if (r.ok && take.steps.every((s) => s.do === 'hold')) process.stdout.write(`\n${outlineOf(r.shots[0], 'The first screen')}`);
   if (r.script) process.stdout.write(`\n${formatScript(r.script)}`);
   return r.ok ? 0 : 1;
 }

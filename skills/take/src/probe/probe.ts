@@ -11,11 +11,24 @@ import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
 import { PACING } from '../drivers/web/pacing.ts';
 import { loadTheme } from '../compose/compose.ts';
 import { timeline, type Script } from './script.ts';
+import { LONG_OUTLINE, onScreen, shortOutline, SHORT_LENGTH } from './outline.ts';
 
-export function withoutAddresses(outline: string): string {
-  const lines = outline.split('\n').filter((l) => !/^\s*- \/url: /.test(l));
-  const indent = (l: string) => l.length - l.trimStart().length;
-  return lines.map((l, i) => (l.endsWith(':') && !(indent(lines[i + 1] ?? '') > indent(l)) ? l.slice(0, -1) : l)).join('\n');
+async function pageOutline(page: Page): Promise<string> {
+  let tree: string;
+  try {
+    tree = await page.locator('body').ariaSnapshot();
+  } catch (e) {
+    return `# outline unavailable: ${(e as Error).message}\n`;
+  }
+  let short = shortOutline(tree);
+  if (short.outline.length > LONG_OUTLINE) short = shortOutline(tree, await onScreen(page));
+  return (
+    (short.outline.includes('…') ? `# Names and text longer than ${SHORT_LENGTH} characters end in "…": target them by their start (names match part of the text).\n` : '') +
+    short.outline +
+    '\n' +
+    (short.leftOut ? `\n# Long page: only what is on screen is listed, plus every heading (${short.leftOut} more lines off screen). A step that scrolls lists what is on screen after it.\n` : '') +
+    (await targetHandles(page, tree))
+  );
 }
 
 export async function targetHandles(page: Page, outline: string): Promise<string> {
@@ -219,8 +232,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
     const file = `${name}.png`;
     const outline = `${name}.outline.yml`;
     await page.screenshot({ path: path.join(out, file) });
-    const tree = await page.locator('body').ariaSnapshot().then(withoutAddresses, (e) => `# outline unavailable: ${e.message}\n`);
-    fs.writeFileSync(path.join(out, outline), tree + (await targetHandles(page, tree)));
+    fs.writeFileSync(path.join(out, outline), await pageOutline(page));
     shots.push({ step, label, at: +(clock.frame / clock.fps).toFixed(2), file, outline, pointer, cursor: await cursorAt(pointer), ...extra });
   };
   let error: string | undefined;
