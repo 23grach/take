@@ -18,11 +18,18 @@ export interface KeyboardUp {
   lift: number;
 }
 
-export interface PageTop {
-  scrollY: number;
-  inner: number;
+export interface PageEdge {
   cover: string | null;
+  depth: number;
   color: string;
+}
+
+export interface PageEdges {
+  scrollY: number;
+  scrollHeight: number;
+  inner: number;
+  top: PageEdge;
+  bottom: PageEdge;
 }
 
 export interface StepLog {
@@ -56,5 +63,5 @@ export interface EventLog {
   loop: 'crossfade-to-start' | 'none';
   videos?: [number, Box[]][];
   keyboard?: [number, KeyboardUp | null][];
-  tops?: [number, PageTop][];
+  edges?: [number, PageEdges][];
 }

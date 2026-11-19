@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Event, EventLog, PageTop } from '../drivers/web/events.ts';
+import type { Event, EventLog, PageEdges } from '../drivers/web/events.ts';
 import { ease, frames } from '../drivers/web/pacing.ts';
 import { PHONE, phonePage } from '../take/format.ts';
 import type { Theme } from './stage.ts';
@@ -50,22 +50,22 @@ export function phoneLayout(theme: Theme, phone: PhoneTheme, page: [number, numb
   const [x, y, w, h] = phone.screen;
   const k = (w * s) / page[0];
   const [screenLeft, screenTop, screenWidth, screenHeight] = [left + x * s, top + y * s, w * s, h * s];
-  const contentTop = screenTop + screenHeight - page[1] * k;
+  const contentTop = screenTop + PHONE.statusBar * k;
   return {
     left, top, width, height,
     screenLeft, screenTop, screenWidth, screenHeight, screenRadius: phone.screenRadius * s,
     contentLeft: screenLeft, contentTop, k,
-    statusBar: (contentTop - screenTop) / k,
+    statusBar: PHONE.statusBar,
   };
 }
 
-export function pageTops(changes: readonly [number, PageTop][], frames: number): PageTop[] {
-  const tops: PageTop[] = [];
-  for (let f = 0, i = 0; f < frames; f++) {
+export function pageEdgesAt(changes: readonly [number, PageEdges][], count: number): PageEdges[] {
+  const edges: PageEdges[] = [];
+  for (let f = 0, i = 0; f < count; f++) {
     while (i + 1 < changes.length && changes[i + 1][0] <= f) i++;
-    tops.push(changes[i][1]);
+    edges.push(changes[i][1]);
   }
-  return tops;
+  return edges;
 }
 
 type Rows = { top: number; height: number };
@@ -75,33 +75,54 @@ export interface Band {
   cover: string | null;
 }
 
+export type Edge = 'top' | 'bottom';
+const BAND_HEIGHT: Record<Edge, number> = { top: PHONE.statusBar, bottom: PHONE.safariBar };
+export const LOOKAHEAD = frames(PHONE.lookahead);
+
 const solid = (color: string) => color.endsWith('/ 1)');
 
-export function bandAt(tops: readonly PageTop[], f: number, height = PHONE.statusBar, pageHeight = phonePage()[1]): Band {
-  const now = tops[f];
-  if (now.cover && solid(now.cover)) return { pieces: [{ top: 0, height, color: now.cover }], cover: null };
+function furthest(f: number, count: number, reach: number, rows: (g: number) => number | undefined, all: number): number | undefined {
+  let [best, most] = [undefined as number | undefined, -Infinity];
+  for (let d = 1; d <= Math.max(f, reach); d++) {
+    for (const g of [f - d, f + d]) {
+      if (g < 0 || g >= count || g > f + reach) continue;
+      const end = rows(g);
+      if (end === undefined || end <= most) continue;
+      [best, most] = [g, end];
+      if (end >= all) return best;
+    }
+  }
+  return best;
+}
+
+export function bandAt(edges: readonly PageEdges[], f: number, edge: Edge, reach = LOOKAHEAD): Band {
+  const pageHeight = phonePage()[1];
+  const now = edges[f];
+  const height = BAND_HEIGHT[edge];
+  const { cover, color } = now[edge];
+  if (cover && solid(cover)) return { pieces: [{ top: 0, height, color: cover }], cover: null };
   const pieces: BandPiece[] = [];
   const add = (piece: BandPiece) => {
     const last = pieces.at(-1);
     if (last && 'color' in last && 'color' in piece && last.color === piece.color) last.height += piece.height;
     else pieces.push(piece);
   };
-  const shows = (g: number, docY: number) => {
-    const t = tops[g];
-    return t.scrollY <= docY && docY < t.scrollY + pageHeight && t.inner === now.inner && !t.cover;
+  const docTop = edge === 'top' ? now.scrollY - height : now.scrollY + pageHeight;
+  const filmed = (g: number): [number, number] => [edges[g].scrollY + edges[g].top.depth - docTop, edges[g].scrollY + pageHeight - edges[g].bottom.depth - docTop];
+  const shows = (g: number, y: number) => {
+    const [lo, hi] = filmed(g);
+    return lo <= y && y < hi && edges[g].inner === now.inner && edges[g].scrollHeight === now.scrollHeight;
   };
-  const rest = tops.slice(0, f + 1).findLast((t) => t.scrollY <= 0)?.color ?? now.color;
-  const above = Math.min(height, Math.max(0, height - now.scrollY));
+  const rest = edges.slice(0, f + 1).findLast((t) => t.scrollY <= 0)?.[edge].color ?? color;
+  const above = Math.min(height, Math.max(0, -docTop));
   if (above > 0) add({ top: 0, height: above, color: rest });
   for (let y = above; y < height;) {
-    const docY = now.scrollY - height + y;
-    let g = f - 1;
-    while (g >= 0 && !shows(g, docY)) g--;
-    const end = g < 0 ? Math.min(height, Math.floor(y) + 1) : Math.min(height, tops[g].scrollY + pageHeight - now.scrollY + height);
-    add(g < 0 ? { top: y, height: end - y, color: now.color } : { top: y, height: end - y, frame: g, row: docY - tops[g].scrollY });
+    const g = furthest(f, edges.length, reach, (g) => (shows(g, y) ? filmed(g)[1] : undefined), height);
+    const end = g === undefined ? Math.min(height, Math.floor(y) + 1) : Math.min(height, filmed(g)[1]);
+    add(g === undefined ? { top: y, height: end - y, color } : { top: y, height: end - y, frame: g, row: docTop + y - edges[g].scrollY });
     y = end;
   }
-  return { pieces, cover: now.cover };
+  return { pieces, cover };
 }
 
 export interface Finger {
@@ -287,6 +308,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     .join('\n    ');
   const { top: kbTop, accessory } = PHONE.keyboard;
   const band = box.statusBar * box.k;
+  const chin = PHONE.safariBar * box.k;
   return `<!doctype html>
 <meta charset="utf-8">
 <style>
@@ -301,6 +323,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   .viewport { position: absolute; inset: 0; filter: opacity(1); }
   .scene { position: absolute; inset: 0; }
   .band { position: absolute; left: 0; top: 0; width: 100%; height: ${band + 1}px; display: block; }
+  .chin { position: absolute; left: 0; top: ${band + page[1] * box.k}px; width: 100%; height: ${chin + 1}px; display: block; }
   .page { position: absolute; left: 0; top: ${band}px; width: 100%; height: ${page[1] * box.k}px; overflow: hidden; }
   .page img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .soft-edge { position: absolute; left: 0; top: 0; width: 100%; pointer-events: none; }
@@ -321,7 +344,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     box-shadow: 0 2px 40px var(--glass-shadow), 1.25px 0 0 -0.75px var(--glass-ring), -1.25px 0 0 -0.75px var(--glass-ring), 0 0 0 0.5px var(--glass-ring-outer), 0 8px 15px var(--glass-drop); }
   .glass::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
     box-shadow: inset 0 0 0 0.5px var(--glass-border), inset 0 0.5px 0 var(--glass-inset-dark), inset 0 1.5px 1px var(--glass-inset-light); }
-  .button { width: 48px; height: 48px; top: 792px; color: var(--glyph); }
+  .button { width: 48px; height: 48px; top: ${sh - PHONE.safariBar}px; color: var(--glyph); }
   #back { left: 34px; } #tabs { left: 320px; }
   .glass > .icon { top: 50%; translate: 0 -50%; }
   .button > .icon { left: 50%; translate: -50% -50%; }
@@ -372,6 +395,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   <div class="viewport">
     <div class="scene" id="scene">
       <canvas class="band" id="band"></canvas><canvas class="band" id="band-fade" style="opacity: 0"></canvas>
+      <canvas class="chin" id="chin"></canvas><canvas class="chin" id="chin-fade" style="opacity: 0"></canvas>
       <div class="page"><img id="shot" alt=""><img id="fade" alt="" style="opacity: 0"><div id="caret"></div></div>
     </div>
     ${softEdge(phone.edge, box.k)}
@@ -407,7 +431,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
 <script>
   const k = ${box.k};
   const $ = (id) => document.getElementById(id);
-  const shot = $('shot'), fade = $('fade'), band = $('band'), bandFade = $('band-fade');
+  const shot = $('shot'), fade = $('fade'), band = $('band'), bandFade = $('band-fade'), chin = $('chin'), chinFade = $('chin-fade');
   const screen = $('screen'), scene = $('scene'), finger = $('finger'), field = $('field'), keys = $('keys'), keyboard = $('keyboard');
   const back = $('back'), tabs = $('tabs'), word = $('word'), callout = $('callout');
   const big = field.querySelector('.address.big'), small = field.querySelector('.address.small');
@@ -438,8 +462,9 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
         ctx.fillStyle = p.color;
         return ctx.fillRect(0, y0, w, y1 - y0);
       }
-      const img = sources[i], q = img.naturalWidth / ${page[0]};
-      ctx.drawImage(img, 0, (p.row + y0 / s - p.top) * q, img.naturalWidth, ((y1 - y0) / s) * q, 0, y0, w, y1 - y0);
+      const img = sources[i], q = img.naturalWidth / ${page[0]}, rows = ((y1 - y0) / s) * q;
+      const from = Math.max(0, Math.min(img.naturalHeight - rows, (p.row + y0 / s - p.top) * q));
+      ctx.drawImage(img, 0, from, img.naturalWidth, rows, 0, y0, w, y1 - y0);
     });
     if (cover) {
       ctx.fillStyle = cover;
@@ -481,21 +506,21 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   };
   window.render = async ({ footage, caret: c, finger: t, dark, lift, bar, keyboard: kb }) => {
     const s = ${band / PHONE.statusBar} * devicePixelRatio;
-    await Promise.all([show(shot, footage.src), paint(fit(band), footage.band, s)]);
-    if (footage.fade) await Promise.all([show(fade, footage.fade.src), paint(fit(bandFade), footage.fade.band, s)]);
-    fade.style.opacity = bandFade.style.opacity = footage.fade ? footage.fade.opacity : 0;
+    await Promise.all([show(shot, footage.src), paint(fit(band), footage.band, s), paint(fit(chin), footage.chin, s)]);
+    if (footage.fade) await Promise.all([show(fade, footage.fade.src), paint(fit(bandFade), footage.fade.band, s), paint(fit(chinFade), footage.fade.chin, s)]);
+    fade.style.opacity = bandFade.style.opacity = chinFade.style.opacity = footage.fade ? footage.fade.opacity : 0;
     screen.style.setProperty('--dark', dark);
     scene.style.transform = 'translateY(' + (-lift * k) + 'px)';
 
     const folded = Math.max(bar, kb.up);
     const w = lerp(218, pill, folded), h = lerp(48, 28, folded);
-    const y = lerp(lerp(792, 828, folded), ${kbTop}, kb.up);
+    const y = lerp(lerp(${sh - PHONE.safariBar}, 828, folded), ${kbTop}, kb.up);
     Object.assign(field.style, { left: (${sw} - w) / 2 + 'px', top: y + 'px', width: w + 'px', height: h + 'px', borderRadius: Math.min(24, h / 2) + 'px' });
     const loud = clamp(1 - folded * 2), quiet = clamp(folded * 2 - 1);
     big.style.opacity = loud;
     small.style.opacity = quiet;
     for (const i of fieldIcons) i.style.opacity = loud;
-    for (const b of [back, tabs]) Object.assign(b.style, { opacity: 1 - folded, transform: 'translateY(' + (y - 792) + 'px) scale(' + (1 - 0.25 * folded) + ')' });
+    for (const b of [back, tabs]) Object.assign(b.style, { opacity: 1 - folded, transform: 'translateY(' + (y - ${sh - PHONE.safariBar}) + 'px) scale(' + (1 - 0.25 * folded) + ')' });
 
     keys.style.opacity = kb.opacity;
     keys.style.visibility = kb.up > 0 && kb.opacity > 0 ? 'visible' : 'hidden';

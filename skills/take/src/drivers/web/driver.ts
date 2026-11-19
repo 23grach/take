@@ -2,8 +2,8 @@ import { ownError } from './page-errors.ts';
 import type { Locator, Page } from 'playwright';
 import { DEFAULTS, PHONE, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
-import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
-import { pageTop } from './page-top.ts';
+import type { Box, Event, EventLog, KeyboardUp, PageEdges, StepLog } from './events.ts';
+import { pageEdges } from './page-edges.ts';
 import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
@@ -37,20 +37,26 @@ const fits = (start: number, size: number, [lo, hi]: Span) =>
   size <= hi - lo ? start >= lo - 2 && start + size <= hi + 2 : start + size / 2 >= lo && start + size / 2 <= hi;
 const KEYBOARD_DEBOUNCE = 2;
 
-function focusedFieldBottom(): number | null {
+function focusedField(): Span | null {
   let el = document.activeElement as HTMLElement | null;
   while (el?.shadowRoot?.activeElement) el = el.shadowRoot.activeElement as HTMLElement;
   if (!el) return null;
   const notText = ['button', 'checkbox', 'radio', 'submit', 'reset', 'file', 'image', 'range', 'color', 'hidden'];
   const takesText = el.isContentEditable || el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !notText.includes((el as HTMLInputElement).type));
-  return takesText ? el.getBoundingClientRect().bottom : null;
+  if (!takesText) return null;
+  const r = el.getBoundingClientRect();
+  return [r.top, r.bottom];
 }
 
-function keyboardLift(fieldBottom: number): number {
-  const { clearance, top } = PHONE.keyboard;
-  const above = top - PHONE.statusBar - clearance;
-  return Math.round(Math.min(above, Math.max(0, fieldBottom - above)));
+const ABOVE_KEYBOARD = PHONE.keyboard.top - PHONE.statusBar - PHONE.keyboard.clearance;
+
+function keyboardLift(field: Span, next?: Span): number {
+  const both: Span = next ? [Math.min(field[0], next[0]), Math.max(field[1], next[1])] : field;
+  const bottom = both[1] - both[0] <= ABOVE_KEYBOARD ? both[1] : field[1];
+  return Math.round(Math.min(ABOVE_KEYBOARD, Math.max(0, bottom - ABOVE_KEYBOARD)));
 }
+
+const BEFORE_NEXT_TAP = new Set<Step['do']>(['type', 'press', 'hold', 'wait']);
 
 export interface PerformOptions {
   onStep?: (log: StepLog, pointer: [number, number]) => Promise<void>;
@@ -83,7 +89,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const cursorAt = cursorReader(page);
   const carets: [number, Caret | null][] = [];
   const keyboard: [number, KeyboardUp | null][] = [];
-  const tops: [number, PageTop][] = [];
+  const edges: [number, PageEdges][] = [];
   let keyboardDisagrees = 0;
   let reachLift: number | null = null;
   const pageErrors: string[] = [];
@@ -106,7 +112,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps,
     marks,
     loop: take.loop,
-    ...(phone ? { keyboard, tops } : {}),
+    ...(phone ? { keyboard, edges } : {}),
   };
   let current = 0;
   let waited = 0;
@@ -123,34 +129,45 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       if (phone) await followKeyboard();
     }
     await clock.tick();
-    if (phone && watch) await followTop(clock.frame - 1);
+    if (phone && watch) await followEdges(clock.frame - 1);
     eventLog.frames = clock.frame;
     onFrame?.(eventLog);
     if (pageErrors.length)
       throw new TakeError(current, `the app threw an error: "${pageErrors[0]}". Take stops rather than film a broken app; fix the app, or the step that sets it off`);
   }
   async function followKeyboard() {
-    const field = await page.evaluate(focusedFieldBottom).catch(() => null);
+    const field = await page.evaluate(focusedField).catch(() => null);
     const now = keyboardNow();
-    const lift = field === null ? 0 : reachLift ?? keyboardLift(field);
-    if (field !== null && now && Math.abs(lift - now.lift) >= 2) keyboard.push([clock.frame, { lift }]);
+    if (field !== null && now && reachLift === null) {
+      const opening = keyboard.at(-1)!;
+      if (!keyboard.at(-2)?.[1] && clock.frame < opening[0] + frames(PHONE.keyboard.slide)) opening[1] = { lift: keyboardLift(field, await nextTap()) };
+      else if (!fits(field[0], field[1] - field[0], [now.lift, now.lift + ABOVE_KEYBOARD])) keyboard.push([clock.frame, { lift: keyboardLift(field) }]);
+    }
     if ((field !== null) === !!now) return void (keyboardDisagrees = 0);
     if (++keyboardDisagrees < KEYBOARD_DEBOUNCE) return;
     keyboardDisagrees = 0;
     reachLift = null;
-    keyboard.push([clock.frame, field === null ? null : { lift }]);
+    keyboard.push([clock.frame, field === null ? null : { lift: keyboardLift(field, await nextTap()) }]);
   }
-  async function followTop(frame: number) {
-    const last = tops.at(-1)?.[1];
-    const now = await page.evaluate(pageTop).catch(() => last);
-    if (now && JSON.stringify(now) !== JSON.stringify(last)) tops.push([frame, now]);
+  async function nextTap(): Promise<Span | undefined> {
+    const next = take.steps.slice(current + 1).find((s) => !BEFORE_NEXT_TAP.has(s.do));
+    if (next?.do !== 'click' || Array.isArray(next.target)) return undefined;
+    const loc = locate(page, next.target).filter({ visible: true });
+    if ((await loc.count().catch(() => 0)) !== 1) return undefined;
+    const b = await loc.boundingBox().catch(() => null);
+    return b && b.y >= 0 && b.y + b.height <= vh ? [b.y, b.y + b.height] : undefined;
+  }
+  async function followEdges(frame: number) {
+    const last = edges.at(-1)?.[1];
+    const now = await page.evaluate(pageEdges).catch(() => last);
+    if (now && JSON.stringify(now) !== JSON.stringify(last)) edges.push([frame, now]);
   }
   const keyboardNow = () => keyboard.at(-1)?.[1] ?? null;
 
   function shown(): Span {
     if (!phone) return [0, vh];
     const up = keyboardNow();
-    return up ? [up.lift, up.lift + PHONE.keyboard.top - PHONE.statusBar] : [0, vh - PHONE.safariBar];
+    return up ? [up.lift, up.lift + PHONE.keyboard.top - PHONE.statusBar] : [0, vh];
   }
 
   async function keyboardUp(t: Target | undefined) {
@@ -212,7 +229,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     if (inView(box)) return;
     const up = keyboardNow();
     if (up && box.y >= 0 && box.y + box.height <= vh) {
-      reachLift = box.y < up.lift ? Math.max(0, Math.round(box.y - PHONE.keyboard.clearance)) : keyboardLift(box.y + box.height);
+      reachLift = box.y < up.lift ? Math.max(0, Math.round(box.y - PHONE.keyboard.clearance)) : keyboardLift([box.y, box.y + box.height]);
       keyboard.push([clock.frame, { lift: reachLift }]);
       await wait(PHONE.keyboard.slide);
       return;
