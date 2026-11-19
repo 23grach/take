@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { serve } from '../examples/demo-app/serve.mjs';
 import { record } from '../src/drivers/web/record.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
+import { mediaTool } from '../src/media-tools.ts';
 
 let app: { url: string; close: () => Promise<unknown> };
 let tmp: string;
@@ -89,7 +90,7 @@ test('the browser\'s own caret is never filmed, and the drawn one keeps the page
     const carets = events.carets.filter(([, c]) => c);
     assert.ok(carets.length > 0 && carets.every(([, c]) => c!.color === 'rgb(255, 0, 0)'), JSON.stringify(events.carets));
     const from = carets[0][0];
-    const rgb = execFileSync('ffmpeg', ['-v', 'error', '-start_number', String(from), '-i', path.join(out, 'frames/f%05d.jpg'), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 2 ** 30 });
+    const rgb = execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-start_number', String(from), '-i', path.join(out, 'frames/f%05d.jpg'), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 2 ** 30 });
     const [w, h] = capture.size;
     assert.equal(rgb.length, (capture.frames.length - from) * w * h * 3);
     for (let i = 0; i < rgb.length; i += 3)
@@ -151,7 +152,7 @@ test('the frozen clock runs a chain of page timers without the 4 ms clamp', asyn
 
 test('a video in the page plays at its true speed in studio mode, and the log says where it was', async () => {
   const dir = fs.mkdtempSync(path.join(tmp, 'video-'));
-  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=30:duration=4', '-c:v', 'libvpx', '-b:v', '200k', path.join(dir, 'v.webm')]);
+  execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x120:rate=30:duration=4', '-c:v', 'libvpx', '-b:v', '200k', path.join(dir, 'v.webm')]);
   const page = '<!doctype html><body style="margin:0"><video src="v.webm" autoplay muted loop style="width:320px;height:240px"></video>'
     + '<script>window.heard = []; for (const t of ["seeking", "seeked", "waiting", "ratechange"]) document.querySelector("video").addEventListener(t, () => heard.push(t));</script>';
   const server = http.createServer((req, res) => {
@@ -284,7 +285,7 @@ test('setup steps close a banner before filming, and are not filmed', async () =
 
 function boxLeft(out: string, capture: { size: [number, number]; frames: string[] }): number {
   const [w, h] = capture.size;
-  const rgb = execFileSync('ffmpeg', ['-v', 'error', '-i', path.join(out, capture.frames.at(-1)!), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 2 ** 30 });
+  const rgb = execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', path.join(out, capture.frames.at(-1)!), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 2 ** 30 });
   for (let x = 0; x < w; x++)
     for (let y = 0; y < h; y++) {
       const i = (y * w + x) * 3;

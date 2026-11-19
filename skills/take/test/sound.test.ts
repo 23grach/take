@@ -7,6 +7,7 @@ import http from 'node:http';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { run } from '../src/run.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
+import { mediaTool } from '../src/media-tools.ts';
 
 const page = `<!doctype html><body style="font:24px sans-serif">
 <button id="chime">Chime</button> <button id="tone">Tone</button> <button id="stream">Stream</button>
@@ -43,8 +44,8 @@ let server: http.Server;
 let url: string;
 before(async () => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'take-sound-'));
-  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=f=1000:d=0.2', '-ar', '48000', path.join(tmp, 'chime.wav')]);
-  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'sine=f=600:d=0.3', '-c:a', 'libopus', '-output_ts_offset', '10', path.join(tmp, 'stream.webm')]);
+  execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', 'sine=f=1000:d=0.2', '-ar', '48000', path.join(tmp, 'chime.wav')]);
+  execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', 'sine=f=600:d=0.3', '-c:a', 'libopus', '-output_ts_offset', '10', path.join(tmp, 'stream.webm')]);
   const files: Record<string, string> = { '/chime.wav': 'audio/wav', '/stream.webm': 'audio/webm' };
   server = http.createServer((req, res) => {
     const type = files[req.url ?? ''];
@@ -72,11 +73,11 @@ async function runTake(name: string, steps: unknown[], extra: Record<string, unk
 }
 
 function streams(video: string): { codec_type: string; codec_name: string; duration: string }[] {
-  return JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-show_streams', '-of', 'json', video], { encoding: 'utf8' })).streams;
+  return JSON.parse(execFileSync(mediaTool('ffprobe'), ['-v', 'error', '-show_streams', '-of', 'json', video], { encoding: 'utf8' })).streams;
 }
 
 function soundStarts(video: string, length: number): number[] {
-  const r = spawnSync('ffmpeg', ['-hide_banner', '-i', video, '-af', 'silencedetect=n=-40dB:d=0.05', '-f', 'null', '-'], { encoding: 'utf8' });
+  const r = spawnSync(mediaTool('ffmpeg'), ['-hide_banner', '-i', video, '-af', 'silencedetect=n=-40dB:d=0.05', '-f', 'null', '-'], { encoding: 'utf8' });
   return [...r.stderr.matchAll(/silence_end: ([\d.]+)/g)].map((m) => +m[1]).filter((t) => t < length - 0.01);
 }
 

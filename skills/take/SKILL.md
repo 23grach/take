@@ -9,7 +9,7 @@ You turn the user's scenario into an exact `take.json`, prove every step works w
 
 The CLI lives in this skill's base directory, the folder that holds this `SKILL.md`: run it as `node <base>/bin/take <command>`. Below, `take` means that.
 
-**Before first use:** if `<base>/node_modules` is missing (a fresh install), run `npm ci --omit=dev` in `<base>` once, then `take doctor`.
+**Before first use:** if `<base>/node_modules` is missing (a fresh install), run `npm ci --omit=dev` in `<base>` once, then `take doctor`. When `take doctor` reports problems, tell the user in one short list what is missing and what each fix does. Offer to run each fix yourself (Take's own ffmpeg or Chromium download). Give the user the exact command to paste into their own terminal for any fix you can't finish: one that asks for a password (`sudo`) or a new Node from nodejs.org. Run `take doctor` again once they say it's done, and continue with their video.
 
 | Command | Does |
 |---|---|

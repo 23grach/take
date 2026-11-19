@@ -1,6 +1,7 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { browserLabel, DOWNLOAD_CHROMIUM } from './browser-binary.ts';
+import { isBundled, mediaTool, type MediaTool } from './media-tools.ts';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,7 +15,8 @@ export interface CheckResult {
 export interface Probe {
   platform: NodeJS.Platform;
   nodeVersion: string;
-  run(cmd: string, args: string[]): Promise<string | null>;
+  run(tool: MediaTool, args: string[]): Promise<string | null>;
+  bundled(tool: MediaTool): boolean;
   browser(): Promise<string>;
 }
 
@@ -23,22 +25,22 @@ export const MIN_NODE_MAJOR = 24;
 export const realProbe: Probe = {
   platform: process.platform,
   nodeVersion: process.versions.node,
-  async run(cmd, args) {
+  async run(tool, args) {
     try {
-      const { stdout, stderr } = await execFileAsync(cmd, args, { maxBuffer: 16 * 1024 * 1024 });
+      const { stdout, stderr } = await execFileAsync(mediaTool(tool), args, { maxBuffer: 16 * 1024 * 1024 });
       return stdout || stderr;
     } catch {
       return null;
     }
   },
+  bundled: isBundled,
   browser: browserLabel,
 };
 
-function installFfmpeg(platform: NodeJS.Platform): string {
-  if (platform === 'darwin') return 'brew install ffmpeg';
-  if (platform === 'linux') return 'sudo apt install ffmpeg   (or your distro’s package manager)';
-  return 'download it from https://ffmpeg.org/download.html and put it on your PATH';
-}
+export const DOWNLOAD_FFMPEG = 'node src/install-ffmpeg.ts';
+
+const missingFix = `run in Take's folder: ${DOWNLOAD_FFMPEG}`;
+const version = (probe: Probe, tool: MediaTool, number: string) => (probe.bundled(tool) ? `${number} (Take's own copy)` : number);
 
 export async function runChecks(probe: Probe = realProbe): Promise<CheckResult[]> {
   const results: CheckResult[] = [];
@@ -68,10 +70,9 @@ export async function runChecks(probe: Probe = realProbe): Promise<CheckResult[]
 
   const ffmpeg = await probe.run('ffmpeg', ['-hide_banner', '-version']);
   if (ffmpeg === null) {
-    results.push({ name: 'ffmpeg', ok: false, detail: 'not found', fix: installFfmpeg(probe.platform) });
+    results.push({ name: 'ffmpeg', ok: false, detail: 'not found', fix: missingFix });
   } else {
-    const version = /ffmpeg version (\S+)/.exec(ffmpeg)?.[1] ?? 'unknown version';
-    results.push({ name: 'ffmpeg', ok: true, detail: version });
+    results.push({ name: 'ffmpeg', ok: true, detail: version(probe, 'ffmpeg', /ffmpeg version (\S+)/.exec(ffmpeg)?.[1] ?? 'unknown version') });
 
     const encoders = (await probe.run('ffmpeg', ['-hide_banner', '-encoders'])) ?? '';
     results.push(
@@ -89,8 +90,8 @@ export async function runChecks(probe: Probe = realProbe): Promise<CheckResult[]
   const ffprobe = await probe.run('ffprobe', ['-hide_banner', '-version']);
   results.push(
     ffprobe === null
-      ? { name: 'ffprobe', ok: false, detail: 'not found', fix: installFfmpeg(probe.platform) }
-      : { name: 'ffprobe', ok: true, detail: /ffprobe version (\S+)/.exec(ffprobe)?.[1] ?? 'unknown version' },
+      ? { name: 'ffprobe', ok: false, detail: 'not found', fix: missingFix }
+      : { name: 'ffprobe', ok: true, detail: version(probe, 'ffprobe', /ffprobe version (\S+)/.exec(ffprobe)?.[1] ?? 'unknown version') },
   );
 
   return results;

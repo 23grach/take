@@ -15,6 +15,7 @@ import type { Cursor } from '../drivers/web/cursor.ts';
 import { cursorArt, type ArtSet } from './cursor-art.ts';
 import type { StageCursor } from './stage.ts';
 import { addSound, readSound } from './sound.ts';
+import { mediaTool } from '../media-tools.ts';
 
 export interface ComposeOptions {
   capture: string;
@@ -96,7 +97,7 @@ export function themeProblem(name: string, device: Device = 'desktop'): string |
 const phoneLessTheme = (name: string) => `the "${name}" theme has no phone look; use the default theme for phone takes`;
 
 export function ffmpegProblem(): string | undefined {
-  const r = spawnSync('ffmpeg', ['-hide_banner', '-version'], { stdio: 'ignore' });
+  const r = spawnSync(mediaTool('ffmpeg'), ['-hide_banner', '-version'], { stdio: 'ignore' });
   return r.error ? "ffmpeg isn't installed (or isn't on the PATH). Run take doctor to see how to install it." : undefined;
 }
 
@@ -368,7 +369,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
 const ARGS = ['--force-color-profile=srgb', '--hide-scrollbars'];
 
 function encoder(out: string, fps: number) {
-  const proc = spawn('ffmpeg', [
+  const proc = spawn(mediaTool('ffmpeg'), [
     '-v', 'error', '-y',
     '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
     '-vf', 'scale=in_color_matrix=bt601:out_color_matrix=bt709:in_range=pc:out_range=tv,format=yuv420p',

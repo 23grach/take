@@ -3,6 +3,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import type { Frame, Page } from 'playwright';
 import type { Played } from './media.ts';
+import { mediaTool } from '../../media-tools.ts';
 
 export interface SoundLog {
   version: 0;
@@ -330,7 +331,7 @@ export async function catchSound(page: Page): Promise<SoundCatcher> {
 const wavSeconds = (wav: Buffer) => wav.readUInt32LE(40) / wav.readUInt32LE(28);
 
 function startTime(file: string): number {
-  const r = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'format=start_time', '-of', 'csv=p=0', file], { encoding: 'utf8' });
+  const r = spawnSync(mediaTool('ffprobe'), ['-v', 'error', '-show_entries', 'format=start_time', '-of', 'csv=p=0', file], { encoding: 'utf8' });
   const t = parseFloat(r.stdout);
   return Number.isFinite(t) ? t : 0;
 }

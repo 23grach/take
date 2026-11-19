@@ -14,6 +14,7 @@ import type { Event, EventLog, PageTop } from '../src/drivers/web/events.ts';
 import { perform } from '../src/drivers/web/driver.ts';
 import { frames } from '../src/drivers/web/pacing.ts';
 import type { Clock } from '../src/drivers/web/clock.ts';
+import { mediaTool } from '../src/media-tools.ts';
 
 const { theme } = loadTheme();
 const look = theme.phone!;
@@ -140,7 +141,7 @@ test('a phone take swipes, taps and types like a finger, and composes into the p
   const video = path.join(tmp, 'phone.mp4');
   const c = await compose({ capture: out, out: video, range: [0, 5] });
   assert.deepEqual(c.size, [2560, 1440]);
-  const probe = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', video], { encoding: 'utf8' });
+  const probe = execFileSync(mediaTool('ffprobe'), ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'stream=width,height', '-of', 'csv=p=0', video], { encoding: 'utf8' });
   assert.match(probe, /^2560,1440/);
 });
 

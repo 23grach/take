@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { launchBrowser } from '../browser-binary.ts';
 import type { Report } from './check.ts';
 import type { StepMatch } from './rehearsal.ts';
+import { mediaTool } from '../media-tools.ts';
 
 const COLS = 6;
 const TILE = 300;
@@ -19,7 +20,7 @@ export async function contactSheet(report: Report, out: string, { loop = true, r
 
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'take-contact-'));
   try {
-    execFileSync('ffmpeg', ['-v', 'error', '-i', report.file, '-vf', `select='${wanted.map((f) => `eq(n\\,${f})`).join('+')}',scale=${TILE * 2}:-2`,
+    execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', report.file, '-vf', `select='${wanted.map((f) => `eq(n\\,${f})`).join('+')}',scale=${TILE * 2}:-2`,
       '-fps_mode', 'passthrough', '-q:v', '3', path.join(tmp, 'p%04d.jpg')]);
     const img = new Map(wanted.map((f, i) => [f, `data:image/jpeg;base64,${fs.readFileSync(path.join(tmp, `p${String(i + 1).padStart(4, '0')}.jpg`)).toString('base64')}`]));
     const time = (f: number) => `${(f / report.fps).toFixed(2)} s`;

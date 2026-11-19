@@ -8,6 +8,7 @@ import { compose, composeWorkers, following, footageAt, loadTheme, loopProgress,
 import type { CaptureInfo } from '../src/drivers/web/capture.ts';
 import { layout } from '../src/compose/stage.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
+import { mediaTool } from '../src/media-tools.ts';
 
 const { theme } = loadTheme();
 
@@ -60,14 +61,14 @@ test('composes a capture into a 2560×1440, 60 fps H.264 MP4', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
   try {
     fs.mkdirSync(path.join(dir, 'frames'));
-    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1440x900:rate=60', '-frames:v', '30', path.join(dir, 'frames/f%05d.jpg')]);
+    execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1440x900:rate=60', '-frames:v', '30', path.join(dir, 'frames/f%05d.jpg')]);
     const frames = Array.from({ length: 30 }, (_, i) => `frames/f${String(i + 1).padStart(5, '0')}.jpg`);
     fs.writeFileSync(path.join(dir, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [1440, 900], frames, renderSeconds: 0, images: 30 }));
     fs.writeFileSync(path.join(dir, 'events.json'), JSON.stringify(log(30)));
     const out = path.join(dir, 'out.mp4');
     const r = await compose({ capture: dir, out });
     assert.equal(r.frames, 30 + theme.loop.frames);
-    const probe = execFileSync('ffprobe', ['-v', 'error', '-count_frames', '-select_streams', 'v', '-show_entries', 'stream=codec_name,width,height,pix_fmt,avg_frame_rate,nb_read_frames,color_range', '-of', 'json', out], { encoding: 'utf8' });
+    const probe = execFileSync(mediaTool('ffprobe'), ['-v', 'error', '-count_frames', '-select_streams', 'v', '-show_entries', 'stream=codec_name,width,height,pix_fmt,avg_frame_rate,nb_read_frames,color_range', '-of', 'json', out], { encoding: 'utf8' });
     const { side_data_list: _, ...stream } = JSON.parse(probe).streams[0];
     assert.deepEqual(stream, { codec_name: 'h264', width: 2560, height: 1440, pix_fmt: 'yuv420p', color_range: 'tv', avg_frame_rate: '60/1', nb_read_frames: String(30 + theme.loop.frames) });
   } finally {
@@ -79,7 +80,7 @@ test('the plain theme is just the page: a 1920×1080 page fills the 1920×1080 v
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
   try {
     fs.mkdirSync(path.join(dir, 'frames'));
-    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=0x303030:size=1920x1080:rate=60', '-frames:v', '10', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
+    execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', 'color=c=0x303030:size=1920x1080:rate=60', '-frames:v', '10', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
     const frames = Array.from({ length: 10 }, (_, i) => `frames/f${String(i + 1).padStart(5, '0')}.jpg`);
     fs.writeFileSync(path.join(dir, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [1920, 1080], frames, renderSeconds: 0, images: 10 }));
     fs.writeFileSync(path.join(dir, 'events.json'), JSON.stringify({ ...log(10), viewport: [1920, 1080], loop: 'none', events: [], pointer: Array(10).fill([960, 540]) }));
@@ -87,10 +88,10 @@ test('the plain theme is just the page: a 1920×1080 page fills the 1920×1080 v
     fs.writeFileSync(out, 'the video before');
     await compose({ capture: dir, out, theme: 'plain' });
     assert.equal(fs.readFileSync(path.join(dir, 'out.previous.mp4'), 'utf8'), 'the video before');
-    const probe = JSON.parse(execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=width,height', '-of', 'json', out], { encoding: 'utf8' }));
+    const probe = JSON.parse(execFileSync(mediaTool('ffprobe'), ['-v', 'error', '-select_streams', 'v', '-show_entries', 'stream=width,height', '-of', 'json', out], { encoding: 'utf8' }));
     assert.deepEqual([probe.streams[0].width, probe.streams[0].height], [1920, 1080]);
     for (const crop of ['1920:8:0:0', '1920:8:0:1072', '8:1080:0:0', '8:1080:1912:0']) {
-      const stats = execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-frames:v', '1', '-vf', `crop=${crop},signalstats,metadata=print:key=lavfi.signalstats.YMAX:file=-`, '-f', 'null', '-'], { encoding: 'utf8' });
+      const stats = execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', out, '-frames:v', '1', '-vf', `crop=${crop},signalstats,metadata=print:key=lavfi.signalstats.YMAX:file=-`, '-f', 'null', '-'], { encoding: 'utf8' });
       const max = Number(/YMAX=([\d.]+)/.exec(stats)![1]);
       assert.ok(max < 70, `edge ${crop} has something lighter than the page (brightest ${max})`);
     }
@@ -103,13 +104,13 @@ test('several browsers share the frames, and the video keeps them in order', asy
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
   try {
     fs.mkdirSync(path.join(dir, 'frames'));
-    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', "color=c=black:size=1440x900:rate=60,format=gray,geq=lum='16+N*6'", '-frames:v', '30', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
+    execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', "color=c=black:size=1440x900:rate=60,format=gray,geq=lum='16+N*6'", '-frames:v', '30', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
     const frames = Array.from({ length: 30 }, (_, i) => `frames/f${String(i + 1).padStart(5, '0')}.jpg`);
     fs.writeFileSync(path.join(dir, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [1440, 900], frames, renderSeconds: 0, images: 30 }));
     fs.writeFileSync(path.join(dir, 'events.json'), JSON.stringify({ ...log(30), loop: 'none', pointer: Array(30).fill([20, 20]) }));
     const out = path.join(dir, 'out.mp4');
     await compose({ capture: dir, out, workers: 3 });
-    const stats = execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-vf', 'crop=400:400:1080:520,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const stats = execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', out, '-vf', 'crop=400:400:1080:520,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     const shades = [...stats.matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
     assert.equal(shades.length, 30);
     for (let i = 1; i < shades.length; i++) assert.ok(shades[i] > shades[i - 1], `frame ${i} is out of order: ${shades.join(', ')}`);
@@ -122,7 +123,7 @@ test('compose follows a recording as it happens: same frames, in order, and noth
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
   try {
     fs.mkdirSync(path.join(dir, 'frames'));
-    execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', "color=c=black:size=1440x900:rate=60,format=gray,geq=lum='16+N*6'", '-frames:v', '30', '-start_number', '0', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
+    execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', "color=c=black:size=1440x900:rate=60,format=gray,geq=lum='16+N*6'", '-frames:v', '30', '-start_number', '0', '-q:v', '2', path.join(dir, 'frames/f%05d.jpg')]);
     const done: EventLog = { ...log(30), loop: 'none', pointer: Array(30).fill([20, 20]) };
     const live: EventLog = { ...done, frames: 0, pointer: [], events: [] };
     const out = path.join(dir, 'out.mp4');
@@ -138,7 +139,7 @@ test('compose follows a recording as it happens: same frames, in order, and noth
     recording.end(live);
     const r = await composing;
     assert.equal(r.frames, 30);
-    const stats = execFileSync('ffmpeg', ['-v', 'error', '-i', out, '-vf', 'crop=400:400:1080:520,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+    const stats = execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', out, '-vf', 'crop=400:400:1080:520,signalstats,metadata=print:key=lavfi.signalstats.YAVG:file=-', '-f', 'null', '-'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
     const shades = [...stats.matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
     assert.equal(shades.length, 30);
     for (let i = 1; i < shades.length; i++) assert.ok(shades[i] > shades[i - 1], `frame ${i} is out of order: ${shades.join(', ')}`);
@@ -169,7 +170,7 @@ test('up to 4 browsers compose at once, fewer on small machines and short videos
 function testCapture(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-compose-'));
   fs.mkdirSync(path.join(dir, 'frames'));
-  execFileSync('ffmpeg', ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1440x900:rate=60', '-frames:v', '30', path.join(dir, 'frames/f%05d.jpg')]);
+  execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=1440x900:rate=60', '-frames:v', '30', path.join(dir, 'frames/f%05d.jpg')]);
   const frames = Array.from({ length: 30 }, (_, i) => `frames/f${String(i + 1).padStart(5, '0')}.jpg`);
   fs.writeFileSync(path.join(dir, 'capture.json'), JSON.stringify({ version: 0, mode: 'studio', fps: 60, size: [1440, 900], frames, renderSeconds: 0, images: 30 }));
   fs.writeFileSync(path.join(dir, 'events.json'), JSON.stringify(log(30)));

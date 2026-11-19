@@ -15,7 +15,7 @@ The result is a 2560×1440 H.264 MP4 at 60 fps that plays everywhere. Or ask for
 
 ## Install
 
-You need **macOS or Linux**, **[Node.js](https://nodejs.org) 24 or newer** and **ffmpeg** (`brew install ffmpeg` on a Mac). Take records with your **Google Chrome** if you have it, so the first use downloads almost nothing. Without Chrome, it downloads Chromium once (about 200 MB). If anything is missing, it tells you what to install.
+You need **macOS or Linux** and **[Node.js](https://nodejs.org) 24 or newer**. Take uses your **Google Chrome** and your **ffmpeg** if you have them, so the first use downloads almost nothing. Without them, it downloads Chromium (about 200 MB) and ffmpeg (about 45 MB) once. If anything else is missing, it tells you what to install.
 
 ### Claude Code
 
@@ -115,4 +115,4 @@ cd skills/take && npm install && npm test
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). When you don't have ffmpeg, Take downloads a copy of [FFmpeg](https://ffmpeg.org), which comes under its own license (GPL).

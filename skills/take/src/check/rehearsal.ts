@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import type { CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog } from '../drivers/web/events.ts';
 import type { ProbeResult } from '../probe/probe.ts';
+import { mediaTool } from '../media-tools.ts';
 
 const SIZE = { w: 160, h: 100 };
 const PIXEL = 32;
@@ -69,7 +70,7 @@ function blockDifference(a: Buffer, b: Buffer, masked: Uint8Array): number {
 }
 
 function grey(file: string): Buffer {
-  return execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-vf', `scale=${SIZE.w}:${SIZE.h},format=gray`, '-f', 'rawvideo', '-']);
+  return execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', file, '-vf', `scale=${SIZE.w}:${SIZE.h},format=gray`, '-f', 'rawvideo', '-']);
 }
 
 function videoMask(log: EventLog, frame: number, vw: number, vh: number): Uint8Array {

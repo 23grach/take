@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { cpSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { mediaTool } from '../src/media-tools.ts';
 
 const bin = fileURLToPath(new URL('../bin/take', import.meta.url));
 
@@ -30,14 +31,15 @@ test('a wrong --mode is named', () => {
   assert.match(r.stderr, /--mode must be studio or live, got "fast"/);
 });
 
-test('a missing ffprobe is one plain line pointing to take doctor, not a stack trace', () => {
+test('a missing ffmpeg is one plain line pointing to take doctor, not a stack trace', () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'take-cli-'));
   try {
     const video = path.join(dir, 'v.mp4');
-    writeFileSync(video, '');
-    const r = spawnSync(process.execPath, [bin, 'check', video], { encoding: 'utf8', env: { ...process.env, PATH: dir } });
+    execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', 'testsrc=size=160x90:rate=60:duration=1', '-pix_fmt', 'yuv420p', '-c:v', 'libx264', video]);
+    const env = { ...process.env, PATH: dir, FFMPEG_BIN: path.join(dir, 'missing-ffmpeg') };
+    const r = spawnSync(process.execPath, [bin, 'check', video], { encoding: 'utf8', env });
     assert.equal(r.status, 1);
-    assert.match(r.stderr, /^✗ take check: ffprobe isn't installed .*take doctor to see how to install it\.\n$/);
+    assert.match(r.stderr, /^✗ take check: ffmpeg isn't installed .*take doctor to see how to install it\.\n$/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

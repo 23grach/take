@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import type { SoundLog } from '../drivers/web/sound.ts';
+import { mediaTool } from '../media-tools.ts';
 
 const RATE = 48000;
 const END_FADE = 0.05;
@@ -56,7 +57,7 @@ export async function addSound(video: string, out: string, sound: SoundLog, capt
 
 function ffmpeg(args: string[]): Promise<void> {
   return new Promise((resolve, reject) => {
-    const proc = spawn('ffmpeg', args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    const proc = spawn(mediaTool('ffmpeg'), args, { stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
     proc.stderr.on('data', (d) => (err += d));
     proc.on('error', reject);

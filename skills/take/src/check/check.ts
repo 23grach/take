@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
+import { mediaTool } from '../media-tools.ts';
 
 export type Status = 'pass' | 'warn' | 'fail';
 export interface Finding {
@@ -35,7 +36,7 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
   const add = (name: string, status: Status, detail: string) => findings.push({ name, status, detail });
 
   const probe = JSON.parse(
-    execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries',
+    execFileSync(mediaTool('ffprobe'), ['-v', 'error', '-select_streams', 'v:0', '-show_entries',
       'stream=codec_name,profile,width,height,pix_fmt,color_range,r_frame_rate,avg_frame_rate:format=duration,bit_rate',
       '-of', 'json', file], { encoding: 'utf8' }),
   );
@@ -53,7 +54,7 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
   add('colour', s.pix_fmt === 'yuv420p' && s.color_range === 'tv' ? 'pass' : 'warn',
     `${s.pix_fmt}, ${s.color_range === 'tv' ? 'limited' : s.color_range ?? 'unknown'} range${s.pix_fmt === 'yuv420p' && s.color_range === 'tv' ? '' : '; expected yuv420p limited range, or some players shift the contrast'}`);
 
-  const durations = execFileSync('ffprobe', ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts', '-of', 'csv=p=0', file], { encoding: 'utf8' })
+  const durations = execFileSync(mediaTool('ffprobe'), ['-v', 'error', '-select_streams', 'v:0', '-show_entries', 'packet=pts', '-of', 'csv=p=0', file], { encoding: 'utf8' })
     .trim().split('\n').map(Number).sort((a, b) => a - b);
   const steps = new Set(durations.slice(1).map((p, i) => p - durations[i]));
   const constant = steps.size <= 1 && Math.abs(rate(s.avg_frame_rate) - fps) < 0.01;
@@ -146,7 +147,7 @@ function fastStart(file: string): boolean {
 }
 
 function greyFrames(file: string): Buffer {
-  return execFileSync('ffmpeg', ['-v', 'error', '-i', file, '-vf', `scale=${GRID.w}:${GRID.h},format=gray`, '-f', 'rawvideo', '-'], { maxBuffer: 2 ** 31 });
+  return execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', file, '-vf', `scale=${GRID.w}:${GRID.h},format=gray`, '-f', 'rawvideo', '-'], { maxBuffer: 2 ** 31 });
 }
 
 let cache: { file: string; grey: Buffer } | undefined;

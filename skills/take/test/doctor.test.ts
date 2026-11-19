@@ -9,6 +9,9 @@ const healthy: Probe = {
     if (args.includes('-encoders')) return ' V....D libx264   libx264 H.264';
     return `${cmd} version 9.0.1 Copyright`;
   },
+  bundled() {
+    return false;
+  },
   async browser() {
     return 'Chromium 156.0.8078.4 (Playwright)';
   },
@@ -38,8 +41,13 @@ test('missing tools come with a fix', async () => {
   const failed = results.filter((r) => !r.ok);
   assert.deepEqual(failed.map((r) => r.name), ['Node', 'Browser', 'ffmpeg', 'ffprobe']);
   assert.ok(failed.every((r) => r.fix));
-  assert.equal(results.find((r) => r.name === 'ffmpeg')?.fix, 'brew install ffmpeg');
+  assert.equal(results.find((r) => r.name === 'ffmpeg')?.fix, "run in Take's folder: node src/install-ffmpeg.ts");
   assert.match(formatReport(results), /4 problems to fix/);
+});
+
+test('Take\'s own ffmpeg is named as such', async () => {
+  const results = await runChecks({ ...healthy, bundled: () => true });
+  assert.equal(results.find((r) => r.name === 'ffmpeg')?.detail, "9.0.1 (Take's own copy)");
 });
 
 test('ffmpeg without libx264 is flagged', async () => {
