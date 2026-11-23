@@ -110,7 +110,7 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
     const info = await recorder.finish();
     const warnings = (await sound?.finish(out)) ?? [];
     if (recorder.videos?.length) events.videos = recorder.videos;
-    const capture: CaptureInfo = { version: 0, ...info, size, theme: take.theme, renderSeconds: +((performance.now() - t0) / 1000).toFixed(2), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
+    const capture: CaptureInfo = { version: 0, ...info, size, theme: take.theme, ...(take.target.appearance ? { appearance: take.target.appearance } : {}), renderSeconds: +((performance.now() - t0) / 1000).toFixed(2), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
     fs.writeFileSync(path.join(out, 'capture.json'), JSON.stringify(capture, null, 1));
     fs.writeFileSync(path.join(out, 'events.json'), JSON.stringify(events));
     return { capture, events, warnings };

@@ -7,7 +7,7 @@ Describe a demo video in plain words. Take plays it in your real web app and giv
 You write a few lines: the app's address and the steps (*click "New project", type "Moodboard", click "Create"*). Your AI agent tries the steps in the app, shows you a storyboard with one picture per step, and after you say yes, Take records it:
 
 - **Real app, real frames.** Every frame comes from the browser itself, one at a time at 60 fps, so nothing stutters, however busy the page is.
-- **Finished look.** A browser window with your product's address, a soft background and shadow, a smooth cursor that presses on every click, a text caret while typing.
+- **Finished look.** A browser window with your product's address, a soft background and shadow (light or dark, matching your site, or your pick), a smooth cursor that presses on every click, a text caret while typing.
 - **Seamless loop.** The video ends by fading back into its first frame, ready for a landing page or a release note.
 - **Easy to change.** "Type slower", "no loop", "show the result longer", "the app changed, record it again". Ask in chat; the scenario stays in your project.
 

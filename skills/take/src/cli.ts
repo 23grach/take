@@ -10,7 +10,7 @@ import { compose, ffmpegProblem, themeProblem } from './compose/compose.ts';
 import { check, formatReport } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { run } from './run.ts';
-import { addressWarning } from './take/format.ts';
+import { addressWarning, type Appearance } from './take/format.ts';
 import { probe, type ProbeShot } from './probe/probe.ts';
 import { storyboard } from './probe/storyboard.ts';
 import { formatScript } from './probe/script.ts';
@@ -231,7 +231,7 @@ async function composeCommand(): Promise<number> {
   if (!existsSync(path.join(file, 'capture.json'))) return fail(`take compose: no capture.json in ${file}. Record first: take record <take.json>`);
   const takeDir = path.dirname(path.resolve(file));
   const out = outFlag ?? path.join(takeDir, 'out', `${path.basename(takeDir)}.mp4`);
-  let captured: { theme?: string };
+  let captured: { theme?: string; appearance?: Appearance };
   try {
     captured = JSON.parse(readFileSync(path.join(file, 'capture.json'), 'utf8'));
   } catch {
@@ -243,7 +243,7 @@ async function composeCommand(): Promise<number> {
   process.stdout.write(`Composing ${file}…\n`);
   let r;
   try {
-    r = await compose({ capture: file, out, theme, address: opts.address });
+    r = await compose({ capture: file, out, theme, appearance: captured.appearance, address: opts.address });
   } catch (e) {
     return fail(`✗ take compose: ${(e as Error).message}`);
   }

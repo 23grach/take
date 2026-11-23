@@ -7,6 +7,7 @@ import { downloadsDone, giveUpDownloads } from './browser.ts';
 import { stepMedia, watchMedia, type Played } from './media.ts';
 import type { Box } from './events.ts';
 import type { SoundCatcher } from './sound.ts';
+import type { Appearance } from '../../take/format.ts';
 
 export type Mode = 'studio' | 'live';
 
@@ -20,6 +21,7 @@ export interface CaptureInfo {
   images: number;
   visibleWindow?: true;
   theme?: string;
+  appearance?: Appearance;
 }
 
 export interface Recorder {

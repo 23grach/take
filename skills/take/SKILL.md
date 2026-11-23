@@ -103,6 +103,7 @@ Then offer one concrete cut and what it saves, picked from the timeline (for exa
 | "no loop" / "loop it" | `loop` → `"none"` / `"crossfade-to-start"`, then `take run`. |
 | "no sound", "mute it" | `"sound": false`, then `take run`. |
 | "no window", "just the page", "plain 1920×1080" | `theme` → `"plain"` and `target.viewport` → `[1920, 1080]`: the page fills a 1920×1080 video, no window or background. The viewport changes the layout, so probe again, then run. |
+| "dark mode", "light mode" | `target.appearance` → `"dark"` / `"light"`: the site switches to that mode if it has one, and the window and background match. Left out, they follow the site. The page can look different, so probe again, then run. |
 | "on a phone", "mobile version" | `target.device` → `"phone"` and no `viewport`: the iPhone layout in an iPhone on the same 2560×1440 video. Phones have no hover, so tap instead or drop `hover` steps; probe again (the layout changes), then run. |
 | "change the address" | `target.address`, then `take compose takes/<name>/capture --address <new>` (no re-record), or `take run`. |
 | "show the result longer", "start slower", "pause after X" | Change or add `hold` steps, then probe and run. |

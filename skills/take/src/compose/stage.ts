@@ -1,10 +1,12 @@
 import type { CursorArt } from './cursor-art.ts';
 import type { PhoneTheme } from './phone.ts';
+import type { Appearance } from '../take/format.ts';
 
 export interface Theme {
   stage: { size: [number, number]; output: [number, number]; background: string; padding: number };
   window: {
     radius: number;
+    background: string;
     shadow: string;
     border: string;
     bar: { height: number; background: string; divider: string };
@@ -15,7 +17,19 @@ export interface Theme {
   caret: { width: number; solidFrames: number; blinkFrames: number };
   loop: { frames: number };
   phone?: PhoneTheme;
+  dark?: Overrides<Pick<Theme, 'stage' | 'window'>>;
 }
+
+type Overrides<T> = { [K in keyof T]?: T[K] extends unknown[] ? T[K] : T[K] extends object ? Overrides<T[K]> : T[K] };
+
+function overlaid<T>(base: T, over: unknown): T {
+  if (typeof over !== 'object' || over === null || Array.isArray(over)) return (over ?? base) as T;
+  const out: Record<string, unknown> = { ...(base as Record<string, unknown>) };
+  for (const [key, value] of Object.entries(over)) out[key] = overlaid(out[key], value);
+  return out as T;
+}
+
+export const themeFor = (theme: Theme, appearance: Appearance): Theme => (appearance === 'dark' && theme.dark ? overlaid(theme, theme.dark) : theme);
 
 export type WindowButton = 'close' | 'minimize' | 'zoom';
 const BUTTONS: WindowButton[] = ['close', 'minimize', 'zoom'];
@@ -56,7 +70,7 @@ export function stageHtml(theme: Theme, address: string, box: Layout, cursors: R
   html, body { margin: 0; width: ${W}px; height: ${H}px; overflow: hidden; }
   body { background: ${theme.stage.background}; }
   .window { position: absolute; left: ${box.left}px; top: ${box.top}px; width: ${box.width}px; height: ${box.height}px;
-    border-radius: ${win.radius}px; box-shadow: ${win.shadow}; overflow: hidden; background: #fff; }
+    border-radius: ${win.radius}px; box-shadow: ${win.shadow}; overflow: hidden; background: ${win.background}; }
   .window::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: ${win.border}; pointer-events: none; }
   .bar { height: ${win.bar.height}px; background: ${win.bar.background}; border-bottom: 1px solid ${win.bar.divider};
     box-sizing: border-box; display: flex; align-items: center; padding: 0 ${win.bar.height / 2 - win.dots.size / 2 + 2}px; position: relative; }

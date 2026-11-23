@@ -35,6 +35,9 @@ export type Step = Common &
 export const DEVICES = ['desktop', 'phone'] as const;
 export type Device = (typeof DEVICES)[number];
 
+export const APPEARANCES = ['light', 'dark'] as const;
+export type Appearance = (typeof APPEARANCES)[number];
+
 export const PHONE = {
   screen: [402, 874] as [number, number],
   statusBar: 54,
@@ -51,6 +54,7 @@ export interface WebTarget {
   viewport: [number, number];
   scale: 1 | 1.5 | 2;
   login?: string;
+  appearance?: Appearance;
 }
 
 export function isLocalUrl(url: string): boolean {
@@ -269,7 +273,7 @@ export function validateTake(input: unknown): Result {
   if (!isObj(input.target)) fail('target', `must be an object such as { "kind": "web", "url": "http://localhost:3000" }, got ${show(input.target)}`);
   else {
     const t = input.target;
-    onlyKeys(t, 'target', ['kind', 'device', 'url', 'address', 'viewport', 'scale', 'login']);
+    onlyKeys(t, 'target', ['kind', 'device', 'url', 'address', 'viewport', 'scale', 'login', 'appearance']);
     const device = t.device ?? 'desktop';
     if (!DEVICES.includes(device as Device)) {
       const near = typeof device === 'string' ? closest(device, DEVICES) : undefined;
@@ -291,6 +295,9 @@ export function validateTake(input: unknown): Result {
     const login = t.login;
     if (login !== undefined && (typeof login !== 'string' || !isLoginName(login)))
       fail('target.login', `must be the name of a saved login, e.g. "boards.app" (letters, digits, dots, dashes, underscores), got ${show(login)}`);
+    const appearance = t.appearance;
+    if (appearance !== undefined && !APPEARANCES.includes(appearance as Appearance))
+      fail('target.appearance', `must be ${APPEARANCES.map((a) => `"${a}"`).join(' or ')}, or left out to follow the site, got ${show(appearance)}`);
     web = {
       kind: 'web',
       device: phone ? 'phone' : 'desktop',
@@ -299,6 +306,7 @@ export function validateTake(input: unknown): Result {
       viewport: viewport as [number, number],
       scale: scale as 1 | 1.5 | 2,
       ...(typeof login === 'string' ? { login } : {}),
+      ...(appearance !== undefined ? { appearance: appearance as Appearance } : {}),
     };
   }
 

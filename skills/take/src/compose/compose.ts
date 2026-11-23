@@ -7,8 +7,8 @@ import type { Browser, Page } from 'playwright';
 import { launchBrowser } from '../browser-binary.ts';
 import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog, PageTop } from '../drivers/web/events.ts';
-import type { Device } from '../take/format.ts';
-import { stageHtml, layout, type Theme } from './stage.ts';
+import type { Appearance, Device } from '../take/format.ts';
+import { stageHtml, layout, themeFor, type Theme } from './stage.ts';
 import { bandAt, fingerAt, keyboardAt, KEYBOARD_SLIDE, nextInk, pageTops, phoneLayout, phoneStageHtml, safariAt, type Ink, type PhoneTheme } from './phone.ts';
 import { ease } from '../drivers/web/pacing.ts';
 import type { Cursor } from '../drivers/web/cursor.ts';
@@ -21,6 +21,7 @@ export interface ComposeOptions {
   capture: string;
   out: string;
   theme?: string;
+  appearance?: Appearance;
   address?: string;
   range?: [number, number];
   follow?: Follow;
@@ -96,9 +97,11 @@ export function themeProblem(name: string, device: Device = 'desktop'): string |
 
 const phoneLessTheme = (name: string) => `the "${name}" theme has no phone look; use the default theme for phone takes`;
 
+const NO_FFMPEG = "ffmpeg isn't installed (or isn't on the PATH). Run take doctor to see how to install it.";
+
 export function ffmpegProblem(): string | undefined {
   const r = spawnSync(mediaTool('ffmpeg'), ['-hide_banner', '-version'], { stdio: 'ignore' });
-  return r.error ? "ffmpeg isn't installed (or isn't on the PATH). Run take doctor to see how to install it." : undefined;
+  return r.error ? NO_FFMPEG : undefined;
 }
 
 export function loadTheme(name = 'default'): { theme: Theme; dir: string } {
@@ -111,6 +114,13 @@ export function loadTheme(name = 'default'): { theme: Theme; dir: string } {
 export function phoneLook(theme: Theme, name: string): PhoneTheme {
   if (!theme.phone) throw new Error(phoneLessTheme(name));
   return theme.phone;
+}
+
+export function pageAppearance(frame: string): Appearance {
+  const r = spawnSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', frame, '-vf', 'scale=1:1:flags=area,format=gray', '-f', 'rawvideo', '-'], { maxBuffer: 1024 });
+  if ((r.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') throw new Error(NO_FFMPEG);
+  if (r.status !== 0 || !r.stdout?.length) throw new Error(`ffmpeg failed (${r.status}): ${r.stderr?.toString().trim() || r.error?.message}`);
+  return r.stdout[0] < 128 ? 'dark' : 'light';
 }
 
 export function totalFrames(log: EventLog, theme: Theme): number {
@@ -203,11 +213,11 @@ export function overlayAt(log: EventLog, theme: Theme, f: number) {
   return { x, y, shape: shapeAt(log, f), opacity, pressed, caret: caretAt(log, theme, f) };
 }
 
-export async function compose({ capture, out, theme: themeName = 'default', address, range, follow, workers: asked }: ComposeOptions): Promise<ComposeResult> {
-  const { theme, dir: themeDir } = loadTheme(themeName);
-  const [W, H] = theme.stage.size;
-  const scale = theme.stage.output[0] / W;
-  const size = theme.stage.output;
+export async function compose({ capture, out, theme: themeName = 'default', appearance, address, range, follow, workers: asked }: ComposeOptions): Promise<ComposeResult> {
+  const { theme: base, dir: themeDir } = loadTheme(themeName);
+  const [W, H] = base.stage.size;
+  const scale = base.stage.output[0] / W;
+  const size = base.stage.output;
   const t0 = performance.now();
   const workers = asked ?? (follow ? Math.min(2, composeWorkers(Infinity)) : undefined);
   const launches = follow ? Array.from({ length: workers! }, () => launchBrowser({ args: ARGS })) : [];
@@ -216,6 +226,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
   let info: Pick<CaptureInfo, 'fps' | 'frames'>;
   let recorded = 0;
   let ended = true;
+  let theme: Theme;
   try {
     if (follow) {
       ({ log, frames: recorded, ended } = await follow.wait(1));
@@ -228,6 +239,7 @@ export async function compose({ capture, out, theme: themeName = 'default', addr
       log.device ??= 'desktop';
       if (log.device === 'phone' && !log.tops) throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
     }
+    theme = themeFor(base, appearance ?? pageAppearance(path.join(capture, info.frames[0] ?? frameFile(0))));
   } catch (e) {
     await Promise.allSettled(launches.map((b) => b.then((b) => b.close())));
     throw e;
@@ -372,10 +384,10 @@ function encoder(out: string, fps: number) {
   const proc = spawn(mediaTool('ffmpeg'), [
     '-v', 'error', '-y',
     '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
-    '-vf', 'scale=in_color_matrix=bt601:out_color_matrix=bt709:in_range=pc:out_range=tv,format=yuv420p',
+    '-vf', 'scale=in_color_matrix=bt601:out_color_matrix=bt709:in_range=pc:out_range=tv:flags=accurate_rnd+full_chroma_int+full_chroma_inp,format=yuv420p,'
+      + 'setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=iec61966-2-1',
     '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-profile:v', 'high',
     '-r', String(fps), '-fps_mode', 'cfr',
-    '-colorspace', 'bt709', '-color_primaries', 'bt709', '-color_trc', 'bt709', '-color_range', 'tv',
     '-movflags', '+faststart', '-f', 'mp4', out,
   ], { stdio: ['pipe', 'ignore', 'pipe'] });
   let err = '';
@@ -385,7 +397,7 @@ function encoder(out: string, fps: number) {
   const done = new Promise<void>((resolve, reject) => {
     const fail = (e: Error) => reject((failure ??= e));
     proc.on('error', (e: NodeJS.ErrnoException) =>
-      fail(e.code === 'ENOENT' ? new Error("ffmpeg isn't installed (or isn't on the PATH). Run take doctor to see how to install it.") : e));
+      fail(e.code === 'ENOENT' ? new Error(NO_FFMPEG) : e));
     proc.on('close', (code) => (code === 0 ? resolve() : fail(new Error(`ffmpeg failed (${code}): ${err.trim()}`))));
   });
   done.catch(() => {});

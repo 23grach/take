@@ -4,9 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { compose, composeWorkers, following, footageAt, loadTheme, loopProgress, overlayAt, totalFrames } from '../src/compose/compose.ts';
+import { compose, composeWorkers, following, footageAt, loadTheme, loopProgress, overlayAt, pageAppearance, totalFrames } from '../src/compose/compose.ts';
 import type { CaptureInfo } from '../src/drivers/web/capture.ts';
-import { layout } from '../src/compose/stage.ts';
+import { layout, themeFor } from '../src/compose/stage.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
 import { mediaTool } from '../src/media-tools.ts';
 
@@ -29,6 +29,29 @@ test('the window fits inside the stage, centred, keeping the page proportions', 
   assert.ok(Math.abs(box.left * 2 + box.width - W) <= 1);
   assert.ok(Math.abs(box.top * 2 + box.height - H) <= 1);
   assert.ok(Math.abs((box.height - theme.window.bar.height) / box.width - 900 / 1440) < 0.002);
+});
+
+test('a dark page gets the dark background and window; everything else stays the same', () => {
+  const dark = themeFor(theme, 'dark');
+  assert.equal(theme.stage.background, '#f2f2f2');
+  assert.equal(dark.stage.background, '#181b25');
+  assert.notEqual(dark.window.bar.background, theme.window.bar.background);
+  assert.deepEqual(dark.stage.size, theme.stage.size);
+  assert.equal(dark.window.bar.height, theme.window.bar.height);
+  assert.deepEqual(dark.window.dots, theme.window.dots);
+  assert.equal(themeFor(theme, 'light'), theme);
+});
+
+test('the opening frame decides whether the site is light or dark', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-appearance-'));
+  const frame = (name: string, color: string) => {
+    const file = path.join(dir, name);
+    execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-f', 'lavfi', '-i', `color=c=${color}:s=320x200`, '-frames:v', '1', file]);
+    return file;
+  };
+  assert.equal(pageAppearance(frame('light.jpg', '0xf7f7f8')), 'light');
+  assert.equal(pageAppearance(frame('dark.jpg', '0x15171c')), 'dark');
+  fs.rmSync(dir, { recursive: true, force: true });
 });
 
 test('the cursor follows the log and shrinks while pressed', () => {

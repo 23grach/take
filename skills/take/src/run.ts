@@ -60,7 +60,7 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
     return `${s.toFixed(1)} s`;
   };
 
-  const options = { capture, out: video, theme: theme ?? take.theme, address: shownAddress(take.target) };
+  const options = { capture, out: video, theme: theme ?? take.theme, appearance: take.target.appearance, address: shownAddress(take.target) };
   let composing: Promise<ComposeResult> | undefined;
   let recorded: Awaited<ReturnType<typeof record>> | undefined;
   for (let unthrottled = true; ; unthrottled = false) {

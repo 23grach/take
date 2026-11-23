@@ -1,6 +1,6 @@
 import type { Browser, BrowserContext, Page } from 'playwright';
 import { launchBrowser } from '../../browser-binary.ts';
-import type { Device, Take } from '../../take/format.ts';
+import type { Appearance, Device, Take } from '../../take/format.ts';
 import { ownError } from './page-errors.ts';
 import { TakeError } from './driver.ts';
 import { describeCondition, holds } from './targets.ts';
@@ -18,6 +18,7 @@ export interface LaunchOptions {
   headed?: boolean;
   login?: SavedLogin;
   args?: string[];
+  appearance?: Appearance;
 }
 
 export async function launch({
@@ -27,6 +28,7 @@ export async function launch({
   headed = false,
   login,
   args = [],
+  appearance,
 }: LaunchOptions = {}): Promise<{
   browser: Browser;
   context: BrowserContext;
@@ -42,6 +44,7 @@ export async function launch({
     ...(phone ? { isMobile: true, hasTouch: true } : {}),
     locale: 'en-US',
     userAgent,
+    ...(appearance ? { colorScheme: appearance } : {}),
     ...(login ? { storageState: login.state } : {}),
   });
   await applyHarden(context);
@@ -72,7 +75,7 @@ export const VISIBLE_NOTE = "the site refused Take's hidden browser (error 403),
 async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promise<unknown>) | undefined, args: string[], quietMs: number): Promise<{ browser: Browser; page: Page }> {
   const [width, height] = take.target.viewport;
   const login = savedLogin(take);
-  const { browser, context, userAgent } = await launch({ viewport: { width, height }, scale: take.target.scale, device: take.target.device, headed, login, args });
+  const { browser, context, userAgent } = await launch({ viewport: { width, height }, scale: take.target.scale, device: take.target.device, headed, login, args, appearance: take.target.appearance });
   const page = await context.newPage();
   await hardenClientHints(context, page, userAgent);
   const errors: string[] = [];

@@ -52,6 +52,14 @@ test('"sound" turns the page\'s own sound off, and is true or false', () => {
   assert.deepEqual(errorsOf({ ...minimal(), sound: 'off' }), ['sound: must be true or false, got "off"']);
 });
 
+test('"target.appearance" picks light or dark, and follows the site when left out', () => {
+  const r = validateTake({ ...minimal(), target: { ...minimal().target, appearance: 'dark' } });
+  assert.ok(r.ok && r.take.target.appearance === 'dark');
+  const left = validateTake(minimal());
+  assert.ok(left.ok && !('appearance' in left.take.target));
+  assert.deepEqual(errorsOf({ ...minimal(), target: { ...minimal().target, appearance: 'night' } }), ['target.appearance: must be "light" or "dark", or left out to follow the site, got "night"']);
+});
+
 test('typos get a suggestion', () => {
   const take = minimal();
   (take.steps[0] as Record<string, unknown>).taget = take.steps[0].target;
