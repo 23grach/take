@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import type { CursorArt } from './cursor-art.ts';
 import type { PhoneTheme } from './phone.ts';
 import type { Appearance } from '../take/format.ts';
@@ -9,9 +11,10 @@ export interface Theme {
     background: string;
     shadow: string;
     border: string;
-    bar: { height: number; background: string; divider: string };
+    bar: { height: number; padding: [number, number]; background: string; divider: string };
     dots: { size: number; gap: number; outlineWidth: number } & Record<WindowButton, { fill: string; outline: string }>;
-    address: { show: boolean; width: number; height: number; background: string; color: string; font: string };
+    address: { show: boolean; width: number; color: string; font: string };
+    toolbar?: Toolbar;
   };
   cursor: { art?: 'system'; size: number; pressScale: number; hideFade: number; shapes: Record<'arrow' | 'hand' | 'text', { file: string; hotspot: [number, number] }> };
   caret: { width: number; solidFrames: number; blinkFrames: number };
@@ -19,6 +22,27 @@ export interface Theme {
   phone?: PhoneTheme;
   dark?: Overrides<Pick<Theme, 'stage' | 'window'>>;
 }
+
+interface Glass {
+  fill: string[];
+  ring: { width: number; top: string; side: string };
+  specular: { width: number; color: string; reach: number };
+  shadow: string;
+}
+
+interface Toolbar {
+  height: number;
+  navGap: number;
+  navButton: number;
+  button: number;
+  glyph: string;
+  glyphOff: string;
+  separator: string;
+  glass: Glass;
+  icons: Record<ToolbarIcon, string>;
+}
+
+type ToolbarIcon = 'back' | 'forward' | 'reload' | 'share' | 'newTab' | 'tabs';
 
 type Overrides<T> = { [K in keyof T]?: T[K] extends unknown[] ? T[K] : T[K] extends object ? Overrides<T[K]> : T[K] };
 
@@ -60,8 +84,52 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export type StageCursor = Omit<CursorArt, 'size'> & { size?: [number, number] };
 
-export function stageHtml(theme: Theme, address: string, box: Layout, cursors: Record<string, StageCursor>): string {
+type Stop = [color: string, offset: string, opacity?: number];
+
+function glassArt(g: Glass, width: number, height: number): string {
+  const gradient = (id: string, stops: Stop[]) => `<linearGradient id="${id}" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="${height}">${stops
+    .map(([color, offset, opacity = 1]) => `<stop offset="${offset}" stop-color="${color}" stop-opacity="${opacity}"/>`).join('')}</linearGradient>`;
+  const shape = (inset: number, paint: string) =>
+    `<rect x="${inset}" y="${inset}" width="${width - 2 * inset}" height="${height - 2 * inset}" rx="${height / 2 - inset}" fill="url(#${paint})"/>`;
+  const { ring, specular } = g;
+  const reach = specular.reach * 100;
+  const fill = g.fill.map((stop): Stop => [stop.slice(0, stop.lastIndexOf(' ')), stop.slice(stop.lastIndexOf(' ') + 1)]);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}"><defs>${gradient('fill', fill)}`
+    + gradient('ring', [[ring.top, '0%'], [ring.side, '50%'], [ring.top, '100%']])
+    + gradient('light', [[specular.color, '0%'], [specular.color, `${reach}%`, 0], [specular.color, `${100 - reach}%`, 0], [specular.color, '100%']])
+    + `</defs>${shape(0, 'ring')}${shape(ring.width, 'fill')}${shape(ring.width, 'light')}${shape(ring.width + specular.width, 'fill')}</svg>`;
+  return `background: url("data:image/svg+xml,${encodeURIComponent(svg)}") center / 100% 100% no-repeat; box-shadow: ${g.shadow};`;
+}
+
+function toolbarParts(win: Theme['window'], themeDir: string, address: string): { css: string; nav: string; address: string; actions: string } {
+  const bar = win.toolbar;
+  const field = (glass: string, inner: string) => `<div class="address${glass}">${inner}${esc(address)}</div>`;
+  if (!bar) return { css: '', nav: '', address: field('', ''), actions: '' };
+  const icon = (name: ToolbarIcon) => `<i class="icon">${fs.readFileSync(path.join(themeDir, bar.icons[name]), 'utf8').trim()}</i>`;
+  const tool = (name: ToolbarIcon, width: number, off = false) => `<span class="tool${off ? ' off' : ''}" style="width: ${width}px">${icon(name)}</span>`;
+  const css = `
+  .glass { position: relative; height: ${bar.height}px; border-radius: ${bar.height / 2}px; display: flex; align-items: center; color: ${bar.glyph}; }
+  .tool { height: 100%; display: flex; align-items: center; justify-content: center; }
+  .tool.off { color: ${bar.glyphOff}; }
+  .icon { display: block; line-height: 0; font-style: normal; }
+  .icon svg { display: block; }
+  .separator { width: 1px; height: ${Math.round(bar.height * 0.55)}px; background: ${bar.separator}; }
+  .nav { margin-left: ${bar.navGap - win.dots.gap}px; ${glassArt(bar.glass, 2 * bar.navButton + 1, bar.height)} }
+  .actions { margin-left: auto; ${glassArt(bar.glass, 3 * bar.button, bar.height)} }
+  .glass.address { position: absolute; justify-content: center; ${glassArt(bar.glass, win.address.width, bar.height)} }
+  .address .icon { position: absolute; right: ${(bar.height - 12) / 2}px; top: 50%; transform: translateY(-50%); }`;
+  return {
+    css,
+    nav: `<div class="glass nav">${tool('back', bar.navButton)}<span class="separator"></span>${tool('forward', bar.navButton, true)}</div>`,
+    address: field(' glass', icon('reload')),
+    actions: `<div class="glass actions">${tool('share', bar.button)}${tool('newTab', bar.button)}${tool('tabs', bar.button)}</div>`,
+  };
+}
+
+export function stageHtml(theme: Theme, address: string, box: Layout, cursors: Record<string, StageCursor>, themeDir: string): string {
   const { window: win, cursor } = theme;
+  const parts = toolbarParts(win, themeDir, address);
+  const fieldHeight = win.toolbar?.height ?? 0;
   const [W, H] = theme.stage.size;
   const keys = Object.keys(cursors);
   return `<!doctype html>
@@ -73,19 +141,18 @@ export function stageHtml(theme: Theme, address: string, box: Layout, cursors: R
     border-radius: ${win.radius}px; box-shadow: ${win.shadow}; overflow: hidden; background: ${win.background}; }
   .window::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: ${win.border}; pointer-events: none; }
   .bar { height: ${win.bar.height}px; background: ${win.bar.background}; border-bottom: 1px solid ${win.bar.divider};
-    box-sizing: border-box; display: flex; align-items: center; padding: 0 ${win.bar.height / 2 - win.dots.size / 2 + 2}px; position: relative; }
+    box-sizing: border-box; display: flex; align-items: center; padding: 0 ${win.bar.padding[1]}px 0 ${win.bar.padding[0]}px; position: relative; }
   .dot { width: ${win.dots.size}px; height: ${win.dots.size}px; border-radius: 50%; margin-right: ${win.dots.gap}px; }
 ${BUTTONS.map((b) => `  .dot.${b} { background: ${win.dots[b].fill}; box-shadow: inset 0 0 0 ${win.dots.outlineWidth}px ${win.dots[b].outline}; }`).join('\n')}
-  .address { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: ${win.address.width}px; height: ${win.address.height}px;
-    border-radius: ${win.address.height / 2}px; background: ${win.address.background}; color: ${win.address.color}; font: ${win.address.font};
-    display: ${win.address.show ? 'flex' : 'none'}; align-items: center; justify-content: center; }
+  .address { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: ${win.address.width}px; height: ${fieldHeight}px;
+    color: ${win.address.color}; font: ${win.address.font}; display: ${win.address.show ? 'flex' : 'none'}; align-items: center; justify-content: center; }${parts.css}
   .content { position: absolute; left: 0; top: ${win.bar.height}px; width: ${box.width}px; height: ${box.height - win.bar.height}px; overflow: hidden; }
   .content img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   #caret { position: absolute; left: 0; top: 0; display: none; }
   .cursor { position: absolute; left: 0; top: 0; visibility: hidden; }
 </style>
 <div class="window">
-  <div class="bar">${BUTTONS.map((b) => `<span class="dot ${b}"></span>`).join('')}<div class="address">${esc(address)}</div></div>
+  <div class="bar">${BUTTONS.map((b) => `<span class="dot ${b}"></span>`).join('')}${parts.nav}${parts.address}${parts.actions}</div>
   <div class="content"><img id="shot" alt=""><img id="fade" alt="" style="opacity: 0"><div id="caret"></div></div>
 </div>
 ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${i}" src="${esc(cursors[key].src)}" alt="">`).join('')}

@@ -249,7 +249,7 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
   const { cursors, keyOf } = stageCursors(log, art);
   const html = phone
     ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport, address ?? log.address)
-    : stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art);
+    : stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art, themeDir);
   const staged = new Set(Object.keys(art));
   const first = range?.[0] ?? 0;
   const ahead = phone ? Math.max(phone.finger.lead, KEYBOARD_SLIDE) : 0;
