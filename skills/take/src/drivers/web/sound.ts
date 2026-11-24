@@ -24,7 +24,7 @@ export const WEB_AUDIO_SECONDS = 180;
 const TAIL_SECONDS = 3;
 
 export interface SoundCatcher {
-  moved(played: Played[], filmed: boolean): Promise<void>;
+  moved(played: Played[], filmed: boolean, ms: number): Promise<void>;
   start(): Promise<void>;
   finish(dir: string): Promise<string[]>;
 }
@@ -226,12 +226,21 @@ export async function catchSound(page: Page): Promise<SoundCatcher> {
   await page.context().exposeBinding('__takeWebAudio', ({ frame }) => void audible.add(frame));
   await page.context().addInitScript(webAudio, [WEB_AUDIO_SECONDS, TAIL_SECONDS] as [number, number]);
   let t0 = 0;
+  let started = false;
+  let since = 0;
+  const unfilmed: [number, number][] = [];
   const srcOf = new Map<string, string>();
   const open = new Map<string, Run>();
   const runs: Run[] = [];
 
   return {
-    async moved(played, filmed) {
+    async moved(played, filmed, ms) {
+      if (started && !filmed) {
+        const last = unfilmed.at(-1);
+        if (last && last[1] === since) last[1] += ms;
+        else unfilmed.push([since, since + ms]);
+      }
+      if (started) since += ms;
       for (const p of played) if (p.src !== undefined) srcOf.set(p.id, p.src);
       if (filmed) {
         const playing = new Set<string>();
@@ -257,6 +266,7 @@ export async function catchSound(page: Page): Promise<SoundCatcher> {
     },
     async start() {
       t0 = await page.evaluate(() => Date.now());
+      started = true;
     },
     async finish(dir) {
       for (const run of open.values()) runs.push({ ...run, to: run.to + TAIL_SECONDS * run.rate });
@@ -264,7 +274,10 @@ export async function catchSound(page: Page): Promise<SoundCatcher> {
       const warnings: string[] = [];
       const clips: Clip[] = [];
       const files: [string, Buffer][] = [];
-      const seconds = (pageMs: number) => (pageMs - t0) / 1000;
+      const seconds = (pageMs: number) => {
+        const t = pageMs - t0;
+        return (t - unfilmed.reduce((cut, [a, b]) => cut + Math.max(0, Math.min(b, t) - a), 0)) / 1000;
+      };
 
       for (const f of audible) {
         const all: Rendered[] = await f.evaluate(() => (globalThis as unknown as { __takeSound: PageSound }).__takeSound.finish()).catch(() => []);

@@ -10,7 +10,7 @@ import type { EventLog } from '../src/drivers/web/events.ts';
 import { mediaTool } from '../src/media-tools.ts';
 
 const page = `<!doctype html><body style="font:24px sans-serif">
-<button id="chime">Chime</button> <button id="tone">Tone</button> <button id="stream">Stream</button>
+<button id="later" onclick="setTimeout(() => state.textContent = 'later done', 1500)">Later</button> <button id="chime">Chime</button> <button id="tone">Tone</button> <button id="stream">Stream</button>
 <p id="state">loading</p><audio id="player"></audio>
 <script>
   chime.onclick = () => new Audio('/chime.wav').play();
@@ -97,6 +97,16 @@ test('the page\'s own sounds land on the frames they were made on, under the vid
   assert.deepEqual(s.map((x) => [x.codec_type, x.codec_name]), [['video', 'h264'], ['audio', 'aac']]);
   assert.ok(Math.abs(+s[1].duration - length) <= 1 / 60, `sound lasts ${s[1].duration} s, the video ${length} s`);
   assert.ok(fs.existsSync(path.join(capture, 'sound.json')));
+});
+
+test('after a wait that isn\'t filmed, sounds still land on their frames', async () => {
+  const { video, events } = await runTake('off-camera', [
+    { do: 'hold', ms: 300 }, click('Later'), { do: 'wait', for: { text: 'later done' }, film: false }, click('Chime'), { do: 'hold', ms: 600 },
+  ]);
+  const chime = events.events.filter((e) => e.type === 'up').at(-1)!.frame / events.fps;
+  const starts = soundStarts(video, events.frames / events.fps);
+  assert.equal(starts.length, 1, `sound starts at ${starts.join(', ')} s`);
+  assert.ok(Math.abs(starts[0] - chime) <= 1 / 60, `the chime starts at ${starts[0]} s, its click is at ${chime.toFixed(3)} s`);
 });
 
 test('"sound": false leaves the video silent, and catches nothing', async () => {

@@ -57,12 +57,15 @@ function keyboardLift(field: Span, next?: Span): number {
   return Math.round(Math.min(ABOVE_KEYBOARD, Math.max(0, bottom - ABOVE_KEYBOARD)));
 }
 
+const offCameraWait = (s: Step | undefined) => s?.do === 'wait' && s.film === false;
+
 const BEFORE_NEXT_TAP = new Set<Step['do']>(['type', 'press', 'hold', 'wait']);
 
 export interface PerformOptions {
   onStep?: (log: StepLog, pointer: [number, number]) => Promise<void>;
   onFrame?: (log: EventLog) => void;
   watch?: boolean;
+  unfilmed?: Clock;
 }
 
 export async function performSetup(page: Page, take: Take, clock: Clock): Promise<boolean> {
@@ -76,7 +79,7 @@ export async function performSetup(page: Page, take: Take, clock: Clock): Promis
   return true;
 }
 
-export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true }: PerformOptions = {}): Promise<EventLog> {
+export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true, unfilmed }: PerformOptions = {}): Promise<EventLog> {
   const [vw, vh] = take.target.viewport;
   const phone = take.target.device === 'phone';
   const glass = phone ? await page.context().newCDPSession(page) : undefined;
@@ -480,6 +483,20 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     return false;
   }
 
+  async function offCamera(c: Condition, timeout: number) {
+    unfilmed!.resume?.();
+    const give = unfilmed!.frame + frames(timeout * (unfilmed!.speed ?? 1));
+    while (!(await holds(page, c))) {
+      if (unfilmed!.frame >= give) {
+        const sign = await botCheck(page);
+        const what = `waited ${timeout / 1000} s, off camera, for ${describeCondition(c)}`;
+        throw new TakeError(current, sign ? botCheckMessage(what, sign) : what);
+      }
+      await unfilmed!.tick();
+    }
+    clock.resume?.();
+  }
+
   async function until(c: Condition, timeout: number): Promise<Box | undefined> {
     const give = clock.frame + limit(timeout);
     while (!(await holds(page, c))) {
@@ -560,7 +577,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         break;
       }
       case 'wait':
-        log.waitedFor = await until(s.for, s.timeout);
+        if (s.film === false && unfilmed) await offCamera(s.for, s.timeout);
+        else log.waitedFor = await until(s.for, s.timeout);
         break;
       case 'hold':
         await wait(s.ms);
@@ -588,7 +606,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps.push(log);
     await onStep?.(log, pointer);
     if (length !== undefined) while (since(log.start) < length) await tick();
-    else if (s.do !== 'hold' && i < take.steps.length - 1) await wait(PACING.gap);
+    else if (s.do !== 'hold' && !offCameraWait(s) && !offCameraWait(take.steps[i + 1]) && i < take.steps.length - 1) await wait(PACING.gap);
   }
   page.off('pageerror', onError);
   fillSkipped(path);

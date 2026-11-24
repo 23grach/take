@@ -102,6 +102,7 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
     let reported = Promise.resolve();
     const saved = recorder.saved;
     const events = await perform(page, take, recorder.clock, {
+      ...(studioMode ? { unfilmed: wallPacedClock(drawn) } : {}),
       onFrame: onFrame && saved && ((log) => {
         const n = log.frames;
         reported = reported.then(() => saved(n - 1)).then(() => onFrame(log, n));

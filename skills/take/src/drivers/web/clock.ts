@@ -3,6 +3,7 @@ export interface Clock {
   readonly frame: number;
   readonly speed?: number;
   tick(): Promise<void>;
+  resume?(): void;
 }
 
 export interface RealtimeClock extends Clock {

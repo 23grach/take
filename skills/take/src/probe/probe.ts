@@ -146,7 +146,7 @@ export function describeStep(s: Step): string {
     case 'type': text = `Type "${s.text}"${s.target ? ` into ${describe(s.target)}` : ''}`; break;
     case 'press': text = `Press ${s.key}`; break;
     case 'scroll': text = 'target' in s ? `Scroll to ${describe(s.target)}` : `Scroll by ${s.by.join(', ')} px`; break;
-    case 'wait': text = `Wait for ${describeCondition(s.for)}`; break;
+    case 'wait': text = `Wait for ${describeCondition(s.for)}${s.film === false ? ', not filmed' : ''}`; break;
     case 'hold': text = `Hold ${+(s.ms / 1000).toFixed(2)} s`; break;
   }
   return s.waitFor ? `${text}, then wait for ${describeCondition(s.waitFor)}` : text;
@@ -221,6 +221,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
     await shoot(0, 'First screen', pointer, error ? { error } : {});
     if (!error) try {
       const log = await perform(page, rehearsal(take), clock, {
+        unfilmed: realtimeClock(60, speed),
         watch: false,
         onStep: async (log, p) => {
           pointer = p;
