@@ -10,7 +10,21 @@ const W = 560;
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
-export async function storyboard(result: ProbeResult, dir: string, out: string, { theme: themeName = 'default' } = {}): Promise<string> {
+export async function storyboard(result: ProbeResult, dir: string, out: string, { theme = 'default' } = {}): Promise<string> {
+  const html = storyboardHtml(result, dir, theme);
+  const browser = await launchBrowser();
+  try {
+    const page = await browser.newPage({ viewport: { width: COLS * (W + 20) + 56, height: 600 } });
+    await page.setContent(html);
+    await page.evaluate(() => Promise.all([...document.images].map((i) => i.decode())));
+    await page.screenshot({ path: out, fullPage: true, type: 'jpeg', quality: 88 });
+  } finally {
+    await browser.close();
+  }
+  return out;
+}
+
+export function storyboardHtml(result: ProbeResult, dir: string, themeName: string): string {
   const { theme, dir: themeDir } = loadTheme(themeName);
   const k = W / result.viewport[0];
   const H = Math.round(result.viewport[1] * k);
@@ -22,7 +36,10 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
   const shots = result.shots[1] && !result.shots[1].error && /^Hold /.test(result.shots[1].label) ? result.shots.slice(1) : result.shots;
   const cards = shots.map((s) => {
     const c = typeof s.cursor === 'object' ? { src: s.cursor.image, hotspot: s.cursor.hotspot ?? [0, 0] } : s.cursor === 'none' ? null : art[s.cursor] ?? art.default;
-    const cursor = c ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px;transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
+    const touched = s.step > 0 && !/^Hold /.test(s.label);
+    const cursor = result.phone
+      ? touched ? `<div class="finger" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px"></div>` : ''
+      : c ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px;transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
     return `<figure class="${s.error ? 'failed' : ''}">
       <div class="shot"><img src="${data(path.join(dir, s.file), 'image/png')}">${s.target ? box(s.target, 'target') : ''}${s.waitedFor ? box(s.waitedFor, 'waited') : ''}${cursor}</div>
       <figcaption><b>${s.step === 0 ? 'Start' : s.step}</b><span>${esc(s.label)}${s.error ? `<em>${esc(s.error)}</em>` : ''}</span><i>${s.at.toFixed(1)} s</i></figcaption>
@@ -33,7 +50,7 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
     ? `<div class="ok">✓ All ${steps} step${steps === 1 ? '' : 's'} work</div>`
     : `<div class="bad">✗ ${esc(result.error ?? 'failed')}</div>`;
 
-  const html = `<!doctype html><meta charset="utf-8"><style>
+  return `<!doctype html><meta charset="utf-8"><style>
     body { margin: 0; padding: 28px; width: ${COLS * (W + 20)}px; font: 14px/1.4 system-ui, sans-serif; color: #222; background: #fafaf8; }
     h1 { font-size: 22px; margin: 0 0 4px; } .ok, .bad { margin-bottom: 18px; font-weight: 600; } .ok { color: #1a7f4b; } .bad { color: #c0362c; }
     .legend { color: #777; font-size: 12px; margin: -10px 0 16px; } .legend span { display: inline-block; width: 14px; height: 10px; vertical-align: -1px; margin: 0 4px 0 12px; border-radius: 3px; }
@@ -43,6 +60,7 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
     .target, .waited { position: absolute; border-radius: 6px; box-sizing: border-box; }
     .target { border: 2.5px solid #2f6bff; } .waited { border: 2px dashed #1a9f5b; }
     .cursor { position: absolute; transform-origin: 0 0; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .3)); }
+    .finger { position: absolute; width: 30px; height: 30px; margin: -15px 0 0 -15px; border-radius: 50%; background: rgb(255 255 255 / .55); box-shadow: 0 0 0 1px rgb(0 0 0 / .25), 0 1px 4px rgb(0 0 0 / .3); }
     figcaption { display: flex; gap: 8px; align-items: baseline; margin-top: 7px; }
     figcaption b { flex: none; min-width: 22px; height: 22px; padding: 0 6px; box-sizing: border-box; border-radius: 11px; background: #222; color: #fff; font-size: 12px; display: inline-grid; place-items: center; }
     figcaption span { flex: 1; } figcaption i { flex: none; color: #888; font-style: normal; font-size: 12px; font-variant-numeric: tabular-nums; }
@@ -53,17 +71,6 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
   ${verdict}
   <div class="legend">Each picture is the page after that step.<span style="border:2px solid #2f6bff"></span>acted on<span style="border:2px dashed #1a9f5b"></span>waited for</div>
   <div class="grid">${cards.join('')}</div>`;
-
-  const browser = await launchBrowser();
-  try {
-    const page = await browser.newPage({ viewport: { width: COLS * (W + 20) + 56, height: 600 } });
-    await page.setContent(html);
-    await page.evaluate(() => Promise.all([...document.images].map((i) => i.decode())));
-    await page.screenshot({ path: out, fullPage: true, type: 'jpeg', quality: 88 });
-  } finally {
-    await browser.close();
-  }
-  return out;
 }
 
 export const passedSheet = (sheet: string) => sheet.replace(/\.jpg$/, '.passed.jpg');

@@ -161,6 +161,17 @@ test('a failed probe points to the storyboard of the last probe that passed', as
   assert.equal(fs.readFileSync(path.join(dir, 'storyboard.passed.jpg'), 'utf8'), 'good');
 });
 
+test('a phone storyboard shows a fingertip where steps touched, never a desktop cursor', async () => {
+  const { storyboardHtml } = await import('../src/probe/storyboard.ts');
+  const dir = path.join(tmp, 'phone-board');
+  fs.mkdirSync(dir);
+  fs.copyFileSync(path.join(tmp, 'ok', 'step-00.png'), path.join(dir, 'step-00.png'));
+  const shot = (step: number, label: string) => ({ step, label, at: step, file: 'step-00.png', outline: '', pointer: [100, 200] as [number, number], cursor: 'default' as const });
+  const html = storyboardHtml({ ok: true, title: 'p', viewport: [402, 820], shots: [shot(0, 'First screen'), shot(1, 'Hold 1 s'), shot(2, 'Click button "Buy"')], seconds: 1, phone: true }, dir, 'default');
+  assert.equal(html.match(/class="finger"/g)?.length, 1);
+  assert.doesNotMatch(html, /class="cursor"/);
+});
+
 test('a rehearsal cuts the opening and closing holds short, and keeps the ones between steps', async () => {
   const { rehearsal } = await import('../src/probe/probe.ts');
   const t = take([{ do: 'hold', ms: 2000 }, { do: 'click', target: { role: 'button', name: 'New project' } }, { do: 'hold', ms: 1500 }, { do: 'press', key: 'Escape' }, { do: 'hold', ms: 2000 }]);

@@ -112,6 +112,8 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   const loop = take.loop !== 'none';
   const report = check(video, { loop, pageVideos: recorded && pageVideoAreas(recorded.events, options.theme), exactFrames: mode === 'studio' });
   const matches = mode === 'studio' && recorded ? compareWithRehearsal(capture, recorded.events, path.join(path.dirname(file), 'probe'), file) : undefined;
+  if (mode === 'studio' && !matches)
+    report.findings.push({ name: 'rehearsal', status: 'warn', detail: 'not compared with the rehearsal: the last probe of this take.json failed, is older than it, or has other steps; probe it again to compare' });
   if (matches) {
     const off = matches.filter((m) => m.differs > STEP_LIMIT);
     report.findings.push({

@@ -134,6 +134,7 @@ export interface ProbeResult {
   seconds: number;
   script?: Script;
   visibleWindow?: true;
+  phone?: true;
 }
 
 export function describeStep(s: Step): string {
@@ -244,7 +245,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   } finally {
     await browser.close();
   }
-  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(script ? { script } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
+  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(script ? { script } : {}), ...(take.target.device === 'phone' ? { phone: true as const } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
   fs.writeFileSync(path.join(out, 'probe.json'), JSON.stringify(result, null, 1));
   return result;
 }
