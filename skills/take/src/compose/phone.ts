@@ -29,17 +29,38 @@ interface GlassTone {
   gain: number;
   lift: number;
   chroma: number;
-  rim: number;
+  over: string;
+  fill: string[];
+  ring: { width: number; top: string; side: string };
+  specular: { width: number; color: string; reach: number };
 }
 
 interface GlassLook {
   blur: number;
   bevel: number;
   curve: number;
-  rim: number;
-  rimReach: number;
   light: GlassTone;
   dark: GlassTone;
+}
+
+const channels = (color: string): number[] => {
+  const hex = /^#([0-9a-f]{6})$/i.exec(color);
+  if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)).concat(1);
+  const [r, g, b, a = '1'] = color.match(/[\d.]+/g) ?? [];
+  return [Number(r), Number(g), Number(b), Number(a)];
+};
+const grey = (color: string) => { const [r, g, b] = channels(color); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const alpha = (color: string) => channels(color)[3];
+
+export function glassTone({ gain, lift, chroma, over, fill, ring, specular }: GlassTone) {
+  const stops = fill.map((stop) => [parseFloat(stop.slice(stop.lastIndexOf(' ') + 1)) / 100, grey(stop.slice(0, stop.lastIndexOf(' ')))]);
+  const seen = gain * grey(over) + lift * 255;
+  return {
+    gain, lift, chroma,
+    glow: stops.map(([at, g]) => [at, g - seen]),
+    ring: { width: ring.width, top: alpha(ring.top), side: alpha(ring.side) },
+    specular: { width: specular.width, strength: alpha(specular.color), reach: specular.reach },
+  };
 }
 
 export interface PhoneLayout {
@@ -346,7 +367,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   .levels svg { display: block; }
   .icon { position: absolute; display: block; line-height: 0; font-style: normal; }
   .icon svg { display: block; }
-  .glass { position: absolute; border-radius: 24px; box-shadow: 0 6px 16px var(--glass-shadow); }
+  .glass { position: absolute; border-radius: 24px; box-shadow: 0 6px 10px -3px var(--glass-shadow); }
   .lens { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .button { width: 48px; height: 48px; top: ${sh - PHONE.safariBar}px; color: var(--glyph); }
   #back { left: 34px; } #tabs { left: 320px; }
@@ -507,7 +528,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
       + 'H' + (L + r) + 'Q' + L + ' ' + Hh + ' ' + L + ' ' + (Hh - r) + 'V' + lift
       + 'C' + L + ' ' + (T + neck * 0.45) + ' 0 ' + (T + neck * 0.55) + ' 0 ' + T + 'V' + top + 'Q0 0 ' + top + ' 0Z';
   };
-  const glassLook = ${JSON.stringify(phone.glass)};
+  const glassLook = ${JSON.stringify({ ...phone.glass, light: glassTone(phone.glass.light), dark: glassTone(phone.glass.dark) })};
   const glasses = [back, tabs, field, $('accessory')].map((el) => {
     const canvas = document.createElement('canvas');
     canvas.className = 'lens';
@@ -543,7 +564,21 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     out.filter = 'none';
     return out.getImageData(0, 0, out.canvas.width, out.canvas.height);
   };
-  const tone = (dark) => Object.fromEntries(Object.keys(glassLook.light).map((name) => [name, lerp(glassLook.light[name], glassLook.dark[name], dark)]));
+  const glowAt = (glow, y) => {
+    const next = glow.findIndex(([at]) => at >= y);
+    if (next <= 0) return next === 0 ? glow[0][1] : glow.at(-1)[1];
+    const [[a, ga], [b, gb]] = [glow[next - 1], glow[next]];
+    return ga + (gb - ga) * (y - a) / (b - a);
+  };
+  const edgeAt = (look, y) => {
+    const { ring, specular: spec } = look;
+    const fade = y < spec.reach ? 1 - y / spec.reach : y > 1 - spec.reach ? (y - 1 + spec.reach) / spec.reach : 0;
+    return { glow: glowAt(look.glow, y), ring: ring.top + (ring.side - ring.top) * (1 - Math.abs(2 * y - 1)), shine: spec.strength * fade, ringWidth: ring.width, shineWidth: spec.width };
+  };
+  const toneAt = (dark, y) => {
+    const [l, d] = [edgeAt(glassLook.light, y), edgeAt(glassLook.dark, y)];
+    return Object.fromEntries(Object.keys(l).map((name) => [name, lerp(l[name], d[name], dark)]));
+  };
   const lens = ({ el, canvas }, view) => {
     const w = el.offsetWidth, h = el.offsetHeight;
     const box = el.getBoundingClientRect(), frame = screen.getBoundingClientRect();
@@ -555,7 +590,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     if (canvas.width !== cw || canvas.height !== ch) Object.assign(canvas, { width: cw, height: ch });
     const r = Math.min(w / 2, h / 2, parseFloat(getComputedStyle(el).borderRadius) || 0);
     const bevel = glassLook.bevel * Math.min(w, h) / 2;
-    const reach = (glassLook.rimReach + 3 * glassLook.blur) * grow;
+    const reach = 3 * glassLook.blur * grow;
     const [ax, ay] = [Math.max(0, x0 - reach), Math.max(0, y0 - reach)];
     const [bx, by] = [Math.min(${sw}, x0 + w * grow + reach), Math.min(${sh}, y0 + h * grow + reach)];
     const img = backdrop(ax, ay, bx - ax, by - ay, res, view), data = img.data, [iw, ih] = [img.width, img.height];
@@ -566,7 +601,10 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
       const p = 4 * (iy * iw + ix), q = p + 4 * iw;
       for (let c = 0; c < 3; c++) color[c] = (data[p + c] * (1 - tx) + data[p + 4 + c] * tx) * (1 - ty) + (data[q + c] * (1 - tx) + data[q + 4 + c] * tx) * ty;
     };
-    const { gain, lift: raise, chroma, rim } = tone(view.dark);
+    const [gain, raise, chroma] = ['gain', 'lift', 'chroma'].map((name) => lerp(glassLook.light[name], glassLook.dark[name], view.dark));
+    const rows = Array.from({ length: ch }, (_, j) => toneAt(view.dark, (j + 0.5) / ch));
+    const half = 0.5 / local;
+    const band = (depth, from, to) => Math.max(0, Math.min(to, depth + half) - Math.max(from, depth - half)) * local;
     const pixels = new ImageData(cw, ch), px = pixels.data;
     const [hw, hh] = [w / 2, h / 2];
     for (let j = 0; j < ch; j++) {
@@ -581,16 +619,15 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
         if (outer > 0) [nx, ny] = [(ox / outer) * Math.sign(u), (oy / outer) * Math.sign(v)];
         else if (qx > qy) nx = Math.sign(u) || 1;
         else ny = Math.sign(v) || 1;
-        const edge = clamp(1 - depth / glassLook.rim);
-        const inner = Math.max(0, depth), bend = inner < bevel ? inner - bevel * (inner / bevel) ** glassLook.curve : 0;
-        const shift = bend * (1 - edge) + (inner + glassLook.rimReach) * edge;
+        const inner = Math.max(0, depth), shift = inner < bevel ? inner - bevel * (inner / bevel) ** glassLook.curve : 0;
         sample(x0 + (u + hw + nx * shift) * grow, y0 + (v + hh + ny * shift) * grow);
         const luma = 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2];
-        const bright = gain * luma + raise * 255, shine = rim * edge;
+        const row = rows[j], bright = gain * luma + raise * 255 + row.glow;
+        const ring = row.ring * band(depth, 0, row.ringWidth), shine = row.shine * band(depth, row.ringWidth, row.ringWidth + row.shineWidth);
         const o = 4 * (j * cw + i);
         for (let c = 0; c < 3; c++) {
           const value = bright + chroma * (color[c] - luma);
-          px[o + c] = value + (255 - value) * shine;
+          px[o + c] = (value + (255 - value) * shine) * (1 - ring);
         }
         px[o + 3] = 255 * cover;
       }
