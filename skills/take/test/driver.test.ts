@@ -75,6 +75,19 @@ test('a scroll lasts its own length even when a slow page makes the clock skip f
   assert.equal(await page.evaluate(() => scrollY), 300);
 });
 
+test('a scroll given a length moves slowly for all of it, as one move', async () => {
+  const take = takeOf([{ do: 'scroll', by: [0, 300], ms: 3000 }, { do: 'hold', ms: 100 }]);
+  const page = await open(take);
+  await page.evaluate(() => document.body.style.setProperty('min-height', '4000px'));
+  const log = await perform(page, take, fastClock(), { watch: false });
+  const scrolls = log.events.filter((e) => e.type === 'scroll');
+  const span = scrolls.at(-1)!.frame - scrolls[0].frame;
+  assert.ok(span > 4 * frames(scrollMs(300)), `the scroll moved for ${span} frames, its usual pace is ${frames(scrollMs(300))}`);
+  assert.equal(log.steps[1].start - log.steps[0].start, frames(3000));
+  assert.ok(scrolls.every((e, i) => i === 0 || e.frame === scrolls[i - 1].frame + 1), 'once moving, the page moves every frame until it arrives');
+  assert.equal(await page.evaluate(() => scrollY), 300);
+});
+
 test('typing with no text field focused says so', async () => {
   const take = takeOf([{ do: 'type', text: 'ab', cps: 30 }]);
   const page = await open(take);

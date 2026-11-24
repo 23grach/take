@@ -75,7 +75,7 @@ Script: "Create a project", 10.12 s (from the rehearsal: steps that wait for the
       0:10.12            End
 ```
 
-A step's length runs from its start to the start of the next step. Without `ms` it's as long as the action takes (the cursor's travel, the typing, waiting for the app) plus a 0.45 s pause. With `"ms": 3000` the step lasts exactly 3 s: the action plays at its usual pace and the pause after it fills the rest, so the viewer sees the result longer. A `type` step fills it with slower or faster typing instead. A hold's `ms` is its length already. A length shorter than the action needs can't be met: the step runs at its usual pace with no pause after, and the probe says how short it can be (`⚠ … it can't be under 1.20 s`).
+A step's length runs from its start to the start of the next step. Without `ms` it's as long as the action takes (the cursor's travel, the typing, waiting for the app) plus a 0.45 s pause. With `"ms": 3000` the step lasts exactly 3 s: the action plays at its usual pace and the pause after it fills the rest, so the viewer sees the result longer. A `type` step fills it with slower or faster typing instead, and a `scroll` step with one slower scroll (a 2500 px scroll with `"ms": 6000` glides for about 5.5 s); `ms` never makes a scroll faster than its usual pace. A hold's `ms` is its length already. A length shorter than the action needs can't be met: the step runs at its usual pace with no pause after, and the probe says how short it can be (`⚠ … it can't be under 1.20 s`).
 
 Lengths marked `*` are set in the take. Rehearsals play twice as fast, so a step that waits for the app is an estimate there, usually within a few hundredths of a second; set lengths come out exact.
 

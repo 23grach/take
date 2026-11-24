@@ -391,19 +391,20 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     return box;
   }
 
-  async function scroll(dx: number, dy: number) {
-    if (!phone) return wheel([dx, dy], frames(scrollMs(Math.hypot(dx, dy))), ease, pointer);
+  async function scroll(dx: number, dy: number, room = 0) {
+    if (!phone) return wheel([dx, dy], Math.max(frames(scrollMs(Math.hypot(dx, dy))), room), ease, pointer);
     const { lift, reach } = PACING.swipe;
     const [lo, hi] = shown();
     let left: Point = [dx, dy];
-    for (let i = Math.max(1, Math.ceil((lift * Math.max(Math.abs(dx) / vw, Math.abs(dy) / (hi - lo))) / reach)); i > 0; i--) {
+    const strokes = Math.max(1, Math.ceil((lift * Math.max(Math.abs(dx) / vw, Math.abs(dy) / (hi - lo))) / reach));
+    for (let i = strokes; i > 0; i--) {
       const part: Point = [Math.round(left[0] / i), Math.round(left[1] / i)];
       left = [left[0] - part[0], left[1] - part[1]];
-      await swipe(part);
+      await swipe(part, Math.round(room / strokes));
     }
   }
 
-  async function swipe([dx, dy]: Point) {
+  async function swipe([dx, dy]: Point, room = 0) {
     const { lift, slower } = PACING.swipe;
     const across = (along: number, [lo, hi]: Span, now: number) => {
       const size = hi - lo;
@@ -412,7 +413,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     const start: Point = [across(dx, [0, vw], pointer[0]), across(dy, shown(), pointer[1])];
     await moveTo(async () => start);
     await wait(PACING.settle);
-    const n = frames(scrollMs(Math.hypot(dx, dy)) * slower);
+    const n = Math.max(frames(scrollMs(Math.hypot(dx, dy)) * slower), room);
     const held = Math.max(1, Math.round(n * lift));
     contact('down');
     let lifted = false;
@@ -423,6 +424,13 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     });
   }
 
+  const atLeastAPixel = (total: number, due: number, done: number) => {
+    if (phone || !done) return Math.round(due);
+    const way = Math.sign(total);
+    const left = Math.abs(total - done);
+    return left < 0.5 ? 0 : way * Math.min(Math.round(left), Math.max(1, Math.round(way * due)));
+  };
+
   async function wheel([dx, dy]: Point, n: number, progress: (t: number) => number, at: Point, each?: (k: number, p: number) => void) {
     let done: Point = [0, 0];
     let waitForMove = true;
@@ -430,7 +438,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     for (let k = 1; ; k = Math.min(n, clock.frame - f0 + 1)) {
       const p = progress(k / n);
       each?.(k, p);
-      const step: Point = [Math.round(dx * p - done[0]), Math.round(dy * p - done[1])];
+      const step: Point = [atLeastAPixel(dx, dx * p - done[0], done[0]), atLeastAPixel(dy, dy * p - done[1], done[1])];
       if (step[0] || step[1]) {
         const before = waitForMove ? await scrolledAt(at) : undefined;
         if (phone) await glass!.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: at[0], y: at[1], deltaX: step[0], deltaY: step[1] });
@@ -524,22 +532,24 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         });
         await tick();
         break;
-      case 'scroll':
+      case 'scroll': {
+        const room = length === undefined ? 0 : Math.max(0, length - since(log.start) - frames(PACING.gap));
         if ('by' in s) {
           const at = () => page.evaluate(() => [scrollX, scrollY]).catch(() => [0, 0]);
           const before = await at();
-          await scroll(...s.by);
+          await scroll(...s.by, room);
           const after = await at();
           if (before[0] === after[0] && before[1] === after[1])
             log.note = "the page didn't scroll (fine if something under the pointer was meant to, like a map or a list; otherwise the page may be locked, e.g. by an open menu)";
         } else {
           const loc = await find(s.target);
           const box = await boxOf(loc, s.target);
-          if (!inView(box)) await scroll(0, toMiddle(box));
+          if (!inView(box)) await scroll(0, toMiddle(box), room);
           else log.note = `nothing scrolled: ${describe(s.target)} is already on screen; scroll "by" a distance to move the page`;
           log.target = await boxOf(loc, s.target);
         }
         break;
+      }
       case 'wait':
         log.waitedFor = await until(s.for, s.timeout);
         break;
