@@ -29,6 +29,7 @@ const PAGES: Record<string, string> = {
     draw();
     addEventListener('mousemove', () => { const t = setInterval(draw, 120); setTimeout(() => clearInterval(t), 500); }, { once: true });`),
   '/blocked': page('<div style="padding-top: 80px"><button>Save</button></div><div id="toast" aria-label="Cookie banner">We use cookies</div>'),
+  '/bot-wall': page('<h4>Click the button below to continue shopping</h4><button>Continue shopping</button>'),
   '/twins': page('<button>Create</button><button>Create project</button>'),
   '/counted': page('<nav><a href="/issues" onclick="event.preventDefault()">Issues <span aria-hidden="true">871</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">(871)</span></a></nav><div style="height:2000px"></div><a href="/good">Good first issues</a>'),
   '/throws': page('<button onclick="null.x">Break</button>'),
@@ -106,6 +107,11 @@ test('follows a button that is re-rendered while the cursor travels to it', asyn
 
 test('says what is in the way when something stays on top', async () => {
   assert.match(await failure('/blocked', [click('Save')]), /^step 1: button "Save" is covered by div "Cookie banner"$/);
+});
+
+test('says the site is checking for bots instead of only that a target is missing', async () => {
+  assert.match(await failure('/bot-wall', [click('Dismiss')]), /^step 1: can't find button "Dismiss": the site is showing a bot check instead of the page \("Click the button below to continue shopping"\)/);
+  assert.match(await failure('/bot-wall', [{ do: 'wait', for: { text: 'Results' } }]), /the site is showing a bot check/);
 });
 
 test('names the matches when a target is ambiguous', async () => {

@@ -4,6 +4,7 @@ import { DEFAULTS, PHONE, shownAddress, type Condition, type Spot, type Step, ty
 import type { Clock } from './clock.ts';
 import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
 import { pageTop } from './page-top.ts';
+import { botCheck, botCheckMessage } from './bot-check.ts';
 import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, describeMatches, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
@@ -201,7 +202,10 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       const n = await loc.count();
       if (n === 1) return loc;
       if (clock.frame >= give) {
-        if (n === 0) throw new TakeError(current, `can't find ${describe(t)} (looked for ${PACING.find / 1000} s)`);
+        if (n === 0) {
+          const sign = await botCheck(page);
+          throw new TakeError(current, sign ? botCheckMessage(`can't find ${describe(t)}`, sign) : `can't find ${describe(t)} (looked for ${PACING.find / 1000} s)`);
+        }
         const matches = await describeMatches(page, loc, n, shown());
         throw new TakeError(current, `${n} elements match ${describe(t)} (${matches.join(', ')}${n > matches.length ? ', …' : ''}); make the target more specific: the full name with "exact": true, or the "css" given for the one on screen`);
       }
@@ -462,7 +466,10 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   async function until(c: Condition, timeout: number): Promise<Box | undefined> {
     const give = clock.frame + limit(timeout);
     while (!(await holds(page, c))) {
-      if (clock.frame >= give) throw new TakeError(current, `waited ${timeout / 1000} s for ${describeCondition(c)}`);
+      if (clock.frame >= give) {
+        const sign = await botCheck(page);
+        throw new TakeError(current, sign ? botCheckMessage(`waited ${timeout / 1000} s for ${describeCondition(c)}`, sign) : `waited ${timeout / 1000} s for ${describeCondition(c)}`);
+      }
       await idle();
     }
     if ('visible' in c) {
