@@ -634,7 +634,9 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     }
     canvas.getContext('2d').putImageData(pixels, 0, 0);
   };
-  window.render = async ({ footage, caret: c, finger: t, dark, lift, bar, keyboard: kb }) => {
+  window.render = async ({ footage, caret: c, finger: t, dark, lift, bar, keyboard: kb, address }) => {
+    const domain = address.split('/')[0];
+    if (big.textContent !== domain) big.textContent = small.textContent = domain;
     const s = ${band / PHONE.statusBar} * devicePixelRatio;
     await Promise.all([show(shot, footage.src), paint(fit(band), footage.band, s)]);
     if (footage.fade) await Promise.all([show(fade, footage.fade.src), paint(fit(bandFade), footage.fade.band, s)]);

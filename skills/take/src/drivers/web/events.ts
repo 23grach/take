@@ -59,4 +59,5 @@ export interface EventLog {
   videos?: [number, Box[]][];
   keyboard?: [number, KeyboardUp | null][];
   tops?: [number, PageTop][];
+  urls?: [number, string][];
 }

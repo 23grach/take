@@ -91,6 +91,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const carets: [number, Caret | null][] = [];
   const keyboard: [number, KeyboardUp | null][] = [];
   const tops: [number, PageTop][] = [];
+  const urls: [number, string][] = [[clock.frame, page.url()]];
   let keyboardDisagrees = 0;
   let reachLift: number | null = null;
   const pageErrors: string[] = [];
@@ -113,6 +114,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps,
     marks,
     loop: take.loop,
+    urls,
     ...(phone ? { keyboard, tops } : {}),
   };
   let current = 0;
@@ -131,6 +133,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
     await clock.tick();
     if (phone && watch) await followTop(clock.frame - 1);
+    if (urls.at(-1)![1] !== page.url()) urls.push([clock.frame - 1, page.url()]);
     eventLog.frames = clock.frame;
     onFrame?.(eventLog);
     if (pageErrors.length)

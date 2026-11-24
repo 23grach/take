@@ -7,7 +7,7 @@ import type { Browser, Page } from 'playwright';
 import { launchBrowser } from '../browser-binary.ts';
 import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog, PageTop } from '../drivers/web/events.ts';
-import type { Appearance, Device } from '../take/format.ts';
+import { followedAddress, type Appearance, type Device } from '../take/format.ts';
 import { stageHtml, layout, themeFor, type Theme } from './stage.ts';
 import { bandAt, fingerAt, keyboardAt, KEYBOARD_SLIDE, nextInk, pageTops, phoneLayout, phoneStageHtml, safariAt, type Ink, type PhoneTheme } from './phone.ts';
 import { ease } from '../drivers/web/pacing.ts';
@@ -132,6 +132,13 @@ export function loopProgress(log: EventLog, theme: Theme, f: number): number {
   return ease((f - log.frames + 1) / (theme.loop.frames + 1));
 }
 
+export function addressAt(log: EventLog, theme: Theme, shown: string, f: number): string {
+  const urls = log.urls ?? [];
+  if (urls.length < 2 || loopProgress(log, theme, f) > 0.5) return shown;
+  const now = urls.findLast(([frame]) => frame <= f) ?? urls[0];
+  return followedAddress(shown, urls[0][1], now[1]);
+}
+
 export function footageAt(info: CaptureInfo, log: EventLog, theme: Theme, f: number) {
   const p = loopProgress(log, theme, f);
   return { src: info.frames[Math.min(f, info.frames.length - 1)], fade: p > 0 ? { src: info.frames[0], opacity: p } : null };
@@ -245,11 +252,12 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
     throw e;
   }
   const phone = log.device === 'phone' ? phoneLook(theme, themeName) : undefined;
+  const shown = address ?? log.address;
   const art = cursorArt(theme, themeDir);
   const { cursors, keyOf } = stageCursors(log, art);
   const html = phone
-    ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport, address ?? log.address)
-    : stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art, themeDir);
+    ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport, shown)
+    : stageHtml(theme, shown, layout(theme, log.viewport), art, themeDir);
   const staged = new Set(Object.keys(art));
   const first = range?.[0] ?? 0;
   const ahead = phone ? Math.max(phone.finger.lead, KEYBOARD_SLIDE) : 0;
@@ -300,7 +308,7 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
         const { src, hotspot } = cursors[cursor];
         onEvery((page) => page.evaluate((c) => (window as unknown as { addCursor: (c: unknown) => Promise<void> }).addCursor(c), { key: cursor, src, hotspot }));
       }
-      return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor } };
+      return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor }, address: addressAt(log, theme, shown, f) };
     };
     let tops: PageTop[] = [];
     const bandOf = (g: number) => {
@@ -330,6 +338,7 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
         lift: keyboard.lift,
         bar: safariAt(log, look.safari, f, loop),
         keyboard,
+        address: addressAt(log, theme, shown, f),
       };
     };
     const draw = (f: number): Promise<Buffer> => {

@@ -80,6 +80,15 @@ export function shownAddress(target: WebTarget): string {
   return (u.host + u.pathname).replace(/\/$/, '');
 }
 
+export function followedAddress(shown: string, firstUrl: string, url: string): string {
+  const [first, now] = [new URL(firstUrl), new URL(url)];
+  const path = now.pathname.replace(/\/$/, '');
+  if (now.host !== first.host) return now.host + path;
+  if (now.pathname === first.pathname) return shown;
+  const domain = shown.split('/')[0];
+  return domain ? domain + path : '';
+}
+
 export interface Take {
   version: 0;
   title: string;
