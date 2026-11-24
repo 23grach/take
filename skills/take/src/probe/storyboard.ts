@@ -65,3 +65,10 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
   }
   return out;
 }
+
+export const passedSheet = (sheet: string) => sheet.replace(/\.jpg$/, '.passed.jpg');
+
+export function keepPassing(ok: boolean, sheet: string): string | undefined {
+  if (ok) return void fs.copyFileSync(sheet, passedSheet(sheet));
+  return fs.existsSync(passedSheet(sheet)) ? passedSheet(sheet) : undefined;
+}

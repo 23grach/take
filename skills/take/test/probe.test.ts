@@ -149,6 +149,18 @@ test('probe clears only its own files from --out, never the take next to them', 
   assert.deepEqual(fs.readdirSync(dir).sort(), ['scenario.md', 'take.json']);
 });
 
+test('a failed probe points to the storyboard of the last probe that passed', async () => {
+  const { keepPassing } = await import('../src/probe/storyboard.ts');
+  const dir = path.join(tmp, 'passing');
+  fs.mkdirSync(dir);
+  const sheet = path.join(dir, 'storyboard.jpg');
+  fs.writeFileSync(sheet, 'good');
+  assert.equal(keepPassing(true, sheet), undefined);
+  fs.writeFileSync(sheet, 'failed');
+  assert.equal(keepPassing(false, sheet), path.join(dir, 'storyboard.passed.jpg'));
+  assert.equal(fs.readFileSync(path.join(dir, 'storyboard.passed.jpg'), 'utf8'), 'good');
+});
+
 test('a rehearsal cuts the opening and closing holds short, and keeps the ones between steps', async () => {
   const { rehearsal } = await import('../src/probe/probe.ts');
   const t = take([{ do: 'hold', ms: 2000 }, { do: 'click', target: { role: 'button', name: 'New project' } }, { do: 'hold', ms: 1500 }, { do: 'press', key: 'Escape' }, { do: 'hold', ms: 2000 }]);
