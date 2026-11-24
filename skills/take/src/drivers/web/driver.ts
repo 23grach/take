@@ -411,17 +411,19 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     const n = frames(scrollMs(Math.hypot(dx, dy)) * slower);
     const held = Math.max(1, Math.round(n * lift));
     contact('down');
+    let lifted = false;
     await wheel([dx, dy], n, swipeProgress, start, (k, p) => {
-      if (k > held) return;
+      if (lifted) return;
       pointer = [start[0] - dx * p, start[1] - dy * p];
-      if (k === held) contact('up');
+      if (k >= held) [lifted] = [true, contact('up')];
     });
   }
 
   async function wheel([dx, dy]: Point, n: number, progress: (t: number) => number, at: Point, each?: (k: number, p: number) => void) {
     let done: Point = [0, 0];
     let waitForMove = true;
-    for (let k = 1; k <= n; k++) {
+    const f0 = clock.frame;
+    for (let k = 1; ; k = Math.min(n, clock.frame - f0 + 1)) {
       const p = progress(k / n);
       each?.(k, p);
       const step: Point = [Math.round(dx * p - done[0]), Math.round(dy * p - done[1])];
@@ -434,6 +436,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         done = [done[0] + step[0], done[1] + step[1]];
       }
       await tick();
+      if (k === n) return;
     }
   }
 

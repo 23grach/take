@@ -9,6 +9,7 @@ import { realtimeClock, type Clock } from '../src/drivers/web/clock.ts';
 import { loadTake } from '../src/take/load.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
 import { withShortFind } from './short-find.ts';
+import { frames, PACING, scrollMs } from '../src/drivers/web/pacing.ts';
 
 let app: { url: string; close: () => Promise<unknown> };
 let browser: Browser | undefined;
@@ -60,6 +61,18 @@ test('performs the example take in real time and logs it', async () => {
     assert.ok(down.x >= s.target.x && down.x <= s.target.x + s.target.width && down.y >= s.target.y && down.y <= s.target.y + s.target.height);
   }
   assert.ok(log.steps[3].waitedFor);
+});
+
+test('a scroll lasts its own length even when a slow page makes the clock skip frames', async () => {
+  const take = takeOf([{ do: 'scroll', by: [0, 300] }, { do: 'hold', ms: 100 }]);
+  const page = await open(take);
+  await page.evaluate(() => document.body.style.setProperty('min-height', '4000px'));
+  let frame = 0;
+  const skipping: Clock = { fps: 60, get frame() { return frame; }, async tick() { frame += 3; await new Promise((r) => setImmediate(r)); } };
+  const log = await perform(page, take, skipping, { watch: false });
+  const scrollFrames = frames(scrollMs(300)) + frames(PACING.gap);
+  assert.ok(log.steps[1].start - log.steps[0].start <= scrollFrames + 6, `the scroll took ${log.steps[1].start - log.steps[0].start} frames, not ${scrollFrames}`);
+  assert.equal(await page.evaluate(() => scrollY), 300);
 });
 
 test('a step given a length lasts exactly that long, and typing fits into it', async () => {

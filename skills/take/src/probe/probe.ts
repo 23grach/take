@@ -235,7 +235,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
         },
       });
       const loopFrames = take.loop === 'none' ? 0 : loadTheme(take.theme).theme.loop.frames;
-      script = timeline(take, log.steps, log.frames, { fps: clock.fps, speed, loopFrames });
+      script = timeline(take, log.steps, log.frames, { fps: clock.fps, speed, loopFrames, rehearsed: true });
     } catch (e) {
       if (!(e instanceof TakeError)) throw e;
       error = e.message;
