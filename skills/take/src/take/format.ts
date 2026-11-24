@@ -42,6 +42,7 @@ export const PHONE = {
   screen: [402, 874] as [number, number],
   statusBar: 54,
   safariBar: 82,
+  endGap: 8,
   keyboard: { top: 434, accessory: 472, clearance: 16, slide: 350 },
 };
 export const phonePage = (): [number, number] => [PHONE.screen[0], PHONE.screen[1] - PHONE.statusBar];

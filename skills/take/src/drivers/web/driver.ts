@@ -91,6 +91,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const carets: [number, Caret | null][] = [];
   const keyboard: [number, KeyboardUp | null][] = [];
   const tops: [number, PageTop][] = [];
+  const ends: [number, boolean][] = [];
   const urls: [number, string][] = [[clock.frame, page.url()]];
   let keyboardDisagrees = 0;
   let reachLift: number | null = null;
@@ -115,7 +116,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     marks,
     loop: take.loop,
     urls,
-    ...(phone ? { keyboard, tops } : {}),
+    ...(phone ? { keyboard, tops, ends } : {}),
   };
   let current = 0;
   let waited = 0;
@@ -133,6 +134,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
     await clock.tick();
     if (phone && watch) await followTop(clock.frame - 1);
+    if (phone && watch) await followEnd(clock.frame - 1);
     if (urls.at(-1)![1] !== page.url()) urls.push([clock.frame - 1, page.url()]);
     eventLog.frames = clock.frame;
     onFrame?.(eventLog);
@@ -160,6 +162,10 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     if ((await loc.count().catch(() => 0)) !== 1) return undefined;
     const b = await loc.boundingBox().catch(() => null);
     return b && b.y >= 0 && b.y + b.height <= vh ? [b.y, b.y + b.height] : undefined;
+  }
+  async function followEnd(frame: number) {
+    const atEnd = await page.evaluate(() => scrollY > 0 && scrollY + innerHeight >= document.documentElement.scrollHeight - 2).catch(() => false);
+    if (atEnd !== (ends.at(-1)?.[1] ?? false)) ends.push([frame, atEnd]);
   }
   async function followTop(frame: number) {
     const last = tops.at(-1)?.[1];

@@ -60,4 +60,5 @@ export interface EventLog {
   keyboard?: [number, KeyboardUp | null][];
   tops?: [number, PageTop][];
   urls?: [number, string][];
+  ends?: [number, boolean][];
 }

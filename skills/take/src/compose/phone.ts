@@ -198,14 +198,18 @@ function glide(changes: readonly (readonly [number, number])[], f: number, n: nu
 
 const toggled = (changes: [number, boolean][], f: number, n: number) => glide(changes.map(([frame, on]) => [frame, on ? 1 : 0]), f, n);
 
-export function safariCollapses(events: Event[], after: number): [number, boolean][] {
+export function safariCollapses(events: Event[], after: number, ends: [number, boolean][] = []): [number, boolean][] {
   const changes: [number, boolean][] = [];
-  let [y, collapsed] = [0, false];
-  for (const e of events) {
-    if (e.type !== 'scroll' || !e.dy) continue;
-    y = Math.max(0, y + e.dy);
-    const want = e.dy > 0 && y > after;
-    if (want !== collapsed) changes.push([e.frame, (collapsed = want)]);
+  let [y, down, atEnd, collapsed] = [0, false, false, false];
+  const marks = [...events.flatMap((e) => (e.type === 'scroll' && e.dy ? [{ frame: e.frame, dy: e.dy }] : [])), ...ends.map(([frame, end]) => ({ frame, end }))].sort((a, b) => a.frame - b.frame);
+  for (const m of marks) {
+    if ('end' in m) atEnd = m.end;
+    else {
+      y = Math.max(0, y + m.dy);
+      down = m.dy > 0 && y > after;
+    }
+    const want = down && !atEnd;
+    if (want !== collapsed) changes.push([m.frame, (collapsed = want)]);
   }
   return changes;
 }
@@ -291,7 +295,7 @@ export function keyboardAt(log: EventLog, look: PhoneTheme['keyboard'], f: numbe
 }
 
 export function safariAt(log: EventLog, look: PhoneTheme['safari'], f: number, loop: number): number {
-  const changes = safariCollapses(log.events, look.collapseAfter);
+  const changes = safariCollapses(log.events, look.collapseAfter, log.ends);
   const end = toggled(changes, Math.min(f, log.frames - 1), look.morph);
   return end + (toggled(changes, 0, look.morph) - end) * loop;
 }
