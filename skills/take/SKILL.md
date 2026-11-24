@@ -87,7 +87,7 @@ The video carries the page's own sound (click sounds, chimes, a video's soundtra
 Read the report `take run` prints (it ends with the script as recorded: lengths the user set should match) and look at `out/<name>.contact.jpg` against the second part of the review checklist.
 - A step failed during recording (the page behaved differently from the probe): look at `failed/screen.png` and its outline, probe again, fix, run again.
 - `rehearsal` ⚠: a step looks different from its rehearsal picture. The contact sheet shows the two side by side. Something missing from the video (a panel, a menu, map tiles) means the recording went wrong: run once more, and if it repeats tell the user. Live content that changed is fine.
-- A doubled frame (`smoothness` ✗): look at that moment on the contact sheet first. If it's the page's own behaviour (content vanishing in one frame, a picture popping in, a video in the page), recording again gives the same result: deliver and tell the user what it is. Run once more only when it looks like a recording glitch.
+- A doubled frame (`smoothness` ⚠ in a final video, ✗ in a draft or a plain `take check`): look at that moment on the contact sheet first. If it's the page's own behaviour (content vanishing in one frame, a picture popping in, a video in the page), recording again gives the same result: deliver and tell the user what it is. Run once more only when it looks like a recording glitch.
 - Any other ✗: the report says what and where; fix the take and run again.
 - Never patch the video by hand. Every fix goes into `take.json` and is recorded again.
 

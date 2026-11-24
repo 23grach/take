@@ -110,7 +110,7 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   log(`✓ composed  ${composed.size.join('×')}, ${composed.frames} frames (${composed.seconds.toFixed(2)} s of video) in ${lap()} → ${rel(video)}`);
 
   const loop = take.loop !== 'none';
-  const report = check(video, { loop, pageVideos: recorded && pageVideoAreas(recorded.events, options.theme) });
+  const report = check(video, { loop, pageVideos: recorded && pageVideoAreas(recorded.events, options.theme), exactFrames: mode === 'studio' });
   const matches = mode === 'studio' && recorded ? compareWithRehearsal(capture, recorded.events, path.join(path.dirname(file), 'probe'), file) : undefined;
   if (matches) {
     const off = matches.filter((m) => m.differs > STEP_LIMIT);
