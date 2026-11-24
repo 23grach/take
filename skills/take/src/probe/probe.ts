@@ -207,8 +207,8 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   try {
     await page.waitForLoadState('load');
     try {
-      await untilReady(page, take.ready, (ms) => page.waitForTimeout(ms));
       if (await performSetup(page, take, realtimeClock(60, speed))) await page.waitForTimeout(600 / speed);
+      await untilReady(page, take.ready, (ms) => page.waitForTimeout(ms));
     } catch (e) {
       if (!(e instanceof TakeError)) throw e;
       error = e.message;

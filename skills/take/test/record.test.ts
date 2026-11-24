@@ -283,6 +283,27 @@ test('setup steps close a banner before filming, and are not filmed', async () =
   }
 });
 
+test('"ready" is checked after setup, so a consent page closed in setup does not hold it up', async () => {
+  const page = `<!doctype html><div id="consent"><button onclick="consent.remove(); document.body.insertAdjacentHTML('beforeend', '<button>Layers</button>')">Accept all</button></div>`;
+  const server = http.createServer((_, res) => res.writeHead(200, { 'content-type': 'text/html' }).end(page));
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const r = validateTake({
+      version: 0, title: 'Consent', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none',
+      ready: { visible: { role: 'button', name: 'Layers' } },
+      setup: [{ do: 'click', target: { role: 'button', name: 'Accept all' } }],
+      steps: [{ do: 'click', target: { role: 'button', name: 'Layers' } }],
+    });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    const t0 = performance.now();
+    await record(r.take, { mode: 'studio', out: path.join(tmp, 'consent') });
+    assert.ok(performance.now() - t0 < 20_000);
+  } finally {
+    server.close();
+  }
+});
+
 test('setup runs like a real browser: a late banner slides in, is clicked once still, and animates out', async () => {
   const page = `<!doctype html><style>
       @keyframes up { from { transform: translateY(50px) } } @keyframes down { to { transform: translateY(160px) } }

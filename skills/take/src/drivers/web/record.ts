@@ -95,8 +95,8 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
       const shot = page.screenshot({ clip: { x: 0, y: 0, width: 1, height: 1 } }).catch(() => null);
       await (studioMode ? picture(page, shot) : shot);
     };
-    await untilReady(page, take.ready, drawn);
     if (await performSetup(page, take, studioMode ? wallPacedClock(drawn) : realtimeClock())) await recorder.warmup(SETTLE_AFTER_SETUP_MS);
+    await untilReady(page, take.ready, drawn);
     await sound?.start();
     const t0 = performance.now();
     let reported = Promise.resolve();
