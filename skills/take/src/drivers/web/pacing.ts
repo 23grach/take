@@ -7,6 +7,7 @@ export const PACING = {
   aim: { right: 0.22, down: 0.3, maxRight: 16, maxDown: 12 },
   stiffness: 7,
   settle: 140,
+  still: { pxPerFrame: 0.1, longest: 2000 },
   press: 90,
   tap: 120,
   multiClickPress: 60,

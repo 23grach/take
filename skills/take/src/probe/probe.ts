@@ -8,12 +8,13 @@ import { perform, performSetup, TakeError } from '../drivers/web/driver.ts';
 import { cursorReader, type Cursor } from '../drivers/web/cursor.ts';
 import type { Box } from '../drivers/web/events.ts';
 import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
+import { installCssHandles } from '../drivers/web/css-handle.ts';
 import { PACING } from '../drivers/web/pacing.ts';
 import { loadTheme } from '../compose/compose.ts';
 import { timeline, type Script } from './script.ts';
 import { LONG_OUTLINE, onScreen, shortOutline, SHORT_LENGTH } from './outline.ts';
 
-async function pageOutline(page: Page): Promise<string> {
+export async function pageOutline(page: Page): Promise<string> {
   let tree: string;
   try {
     tree = await page.locator('body').ariaSnapshot();
@@ -40,6 +41,7 @@ export async function targetHandles(page: Page, outline: string): Promise<string
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   const shared = [...counts].filter(([, n]) => n > 1).map(([k]) => k);
+  await installCssHandles(page);
   const found = await page
     .locator(CONTROLS)
     .evaluateAll(handlesInPage, { shared, vw: vp.width, vh: vp.height })
@@ -53,42 +55,7 @@ export async function targetHandles(page: Page, outline: string): Promise<string
 const CONTROLS = 'a[href], button, input, select, textarea, summary, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=radio], [role=switch], [role=combobox], [role=searchbox], [role=textbox]';
 
 function handlesInPage(els: Element[], { shared, vw, vh }: { shared: string[]; vw: number; vh: number }) {
-  function uniqueSelector(el: Element): string | null {
-    const one = (sel: string) => {
-      try {
-        return document.querySelectorAll(sel).length === 1;
-      } catch {
-        return false;
-      }
-    };
-    const own = (e: Element): string[] => {
-      const tag = e.tagName.toLowerCase();
-      const out: string[] = [];
-      for (const a of ['data-testid', 'data-test', 'data-qa', 'aria-controls', 'title', 'name'])
-        if (e.getAttribute(a)) out.push(`${tag}[${a}=${JSON.stringify(e.getAttribute(a))}]`);
-      if (e.id && !/\d{3,}|:/.test(e.id)) out.push(`#${CSS.escape(e.id)}`);
-      const classes = [...e.classList].filter((c) => !/^(is-|has-)|\d{4,}/.test(c)).map((c) => `.${CSS.escape(c)}`);
-      for (const c of classes) out.push(c, `${tag}${c}`);
-      for (let i = 0; i < classes.length; i++) for (let j = i + 1; j < classes.length; j++) out.push(`${tag}${classes[i]}${classes[j]}`);
-      return out;
-    };
-    for (const sel of own(el)) if (one(sel)) return sel;
-    let path = el.tagName.toLowerCase() + (el.classList[0] ? `.${CSS.escape(el.classList[0])}` : '');
-    for (let p = el.parentElement, depth = 0; p && p !== document.body && depth < 4; p = p.parentElement, depth++) {
-      for (const sel of own(p)) if (one(sel) && one(`${sel} ${path}`)) return `${sel} ${path}`;
-      path = `${p.tagName.toLowerCase()}${p.classList[0] ? `.${CSS.escape(p.classList[0])}` : ''} > ${path}`;
-    }
-    const nth = (e: Element) => `${e.tagName.toLowerCase()}:nth-of-type(${[...(e.parentElement?.children ?? [])].filter((x) => x.tagName === e.tagName).indexOf(e) + 1})`;
-    let chain = nth(el);
-    for (let p = el.parentElement, depth = 0; p && depth < 6; p = p.parentElement, depth++) {
-      const named = p === document.body ? 'body' : own(p).find(one);
-      if (named && one(`${named} > ${chain}`)) return `${named} > ${chain}`;
-      if (p === document.body) break;
-      chain = `${nth(p)} > ${chain}`;
-    }
-    return null;
-  }
-
+  const uniqueSelector = (globalThis as unknown as { __takeUniqueSelector: (el: Element) => string | null }).__takeUniqueSelector;
   const roleOf = (el: Element) => {
     const r = el.getAttribute('role');
     if (r) return r;
@@ -116,7 +83,7 @@ function handlesInPage(els: Element[], { shared, vw, vh }: { shared: string[]; v
   const unnamed: string[] = [];
   for (const el of els) {
     const r = el.getBoundingClientRect();
-    if (!(r.width > 0 && r.height > 0) || getComputedStyle(el).visibility === 'hidden') continue;
+    if (!(r.width > 0 && r.height > 0) || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
     const role = roleOf(el);
     const name = nameOf(el);
     if (!name && (role === 'button' || role === 'link')) {
@@ -167,6 +134,7 @@ export interface ProbeResult {
   seconds: number;
   script?: Script;
   visibleWindow?: true;
+  phone?: true;
 }
 
 export function describeStep(s: Step): string {
@@ -178,7 +146,7 @@ export function describeStep(s: Step): string {
     case 'type': text = `Type "${s.text}"${s.target ? ` into ${describe(s.target)}` : ''}`; break;
     case 'press': text = `Press ${s.key}`; break;
     case 'scroll': text = 'target' in s ? `Scroll to ${describe(s.target)}` : `Scroll by ${s.by.join(', ')} px`; break;
-    case 'wait': text = `Wait for ${describeCondition(s.for)}`; break;
+    case 'wait': text = `Wait for ${describeCondition(s.for)}${s.film === false ? ', not filmed' : ''}`; break;
     case 'hold': text = `Hold ${+(s.ms / 1000).toFixed(2)} s`; break;
   }
   return s.waitFor ? `${text}, then wait for ${describeCondition(s.waitFor)}` : text;
@@ -240,8 +208,8 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   try {
     await page.waitForLoadState('load');
     try {
-      await untilReady(page, take.ready, (ms) => page.waitForTimeout(ms));
       if (await performSetup(page, take, realtimeClock(60, speed))) await page.waitForTimeout(600 / speed);
+      await untilReady(page, take.ready, (ms) => page.waitForTimeout(ms));
     } catch (e) {
       if (!(e instanceof TakeError)) throw e;
       error = e.message;
@@ -253,6 +221,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
     await shoot(0, 'First screen', pointer, error ? { error } : {});
     if (!error) try {
       const log = await perform(page, rehearsal(take), clock, {
+        unfilmed: realtimeClock(60, speed),
         watch: false,
         onStep: async (log, p) => {
           pointer = p;
@@ -268,7 +237,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
         },
       });
       const loopFrames = take.loop === 'none' ? 0 : loadTheme(take.theme).theme.loop.frames;
-      script = timeline(take, log.steps, log.frames, { fps: clock.fps, speed, loopFrames });
+      script = timeline(take, log.steps, log.frames, { fps: clock.fps, speed, loopFrames, rehearsed: true });
     } catch (e) {
       if (!(e instanceof TakeError)) throw e;
       error = e.message;
@@ -277,7 +246,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   } finally {
     await browser.close();
   }
-  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(script ? { script } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
+  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(script ? { script } : {}), ...(take.target.device === 'phone' ? { phone: true as const } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
   fs.writeFileSync(path.join(out, 'probe.json'), JSON.stringify(result, null, 1));
   return result;
 }

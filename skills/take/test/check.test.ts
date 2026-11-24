@@ -43,6 +43,13 @@ test('a doubled frame mid-motion is caught, with its time', () => {
   assert.match(formatReport(r), /✗ smoothness +1 doubled frame: motion stalls for one frame at 0\.50 s \(frame 30\)/);
 });
 
+test('a doubled frame in a studio recording is the page standing still: a warning, not a failure', () => {
+  const r = check(video('doubled', { filter: 'loop=loop=1:size=1:start=30,setpts=N/60/TB' }), { loop: false, exactFrames: true });
+  assert.equal(r.ok, true);
+  assert.equal(status(r, 'smoothness'), 'warn');
+  assert.match(formatReport(r), /⚠ smoothness +1 doubled frame: .*the page itself stood still there/);
+});
+
 test('wrong frame rate, colour and missing fast start are flagged', () => {
   const r = check(video('off', { rate: 30, extra: ['-pix_fmt', 'yuv444p'], faststart: false }), { loop: false });
   assert.equal(status(r, 'frame rate'), 'warn');

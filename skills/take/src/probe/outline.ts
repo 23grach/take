@@ -40,13 +40,13 @@ export function shortOutline(outline: string, onScreen?: OnScreen): { outline: s
 const SHORT_LABEL = 15;
 
 function shownOn({ text, pieces }: OnScreen): (n: Node) => boolean {
-  const seenText = normal(text);
-  const seenPieces = new Set(pieces.map(normal));
+  const seenText = loose(text);
+  const seenPieces = [...new Set(pieces.map(loose))];
   return (n) => {
     if (n.kind === 'heading') return true;
-    const label = normal(n.label);
-    if (label.length < SHORT_LABEL) return n.kind === 'element' && seenPieces.has(label);
-    return seenText.includes(label.slice(0, 30));
+    const label = loose(n.label);
+    if (normal(n.label).length < SHORT_LABEL) return n.kind === 'element' && !!label && seenPieces.some((p) => p.startsWith(label));
+    return seenText.includes(loose(n.label).slice(0, 24));
   };
 }
 
@@ -133,6 +133,7 @@ function quoteValue(v: string): string {
 
 const short = (s: string) => (s.length > SHORT_LENGTH ? `${s.slice(0, SHORT_LENGTH).trimEnd()}…` : s);
 const normal = (s: string) => s.replace(/[\s⁠]+/g, ' ').trim().toLowerCase();
+const loose = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
 function keepOnScreen(nodes: Node[], onScreen: (n: Node) => boolean): Node[] {
   const kept = nodes.map((n) => {
@@ -158,6 +159,7 @@ export async function onScreen(page: Page): Promise<OnScreen> {
       const vw = innerWidth;
       const vh = innerHeight;
       const shows = (r: DOMRect) => r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < vh && r.left < vw;
+      const seen = (el: Element | null) => !el || el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
       const text: string[] = [];
       const pieces: string[] = [];
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -165,10 +167,10 @@ export async function onScreen(page: Page): Promise<OnScreen> {
       for (let t = walker.nextNode(); t; t = walker.nextNode()) {
         if (!t.textContent?.trim()) continue;
         range.selectNodeContents(t);
-        if (shows(range.getBoundingClientRect())) text.push(t.textContent);
+        if (shows(range.getBoundingClientRect()) && seen(t.parentElement)) text.push(t.textContent);
       }
       for (const el of document.querySelectorAll('a, button, input, select, textarea, summary, label, h1, h2, h3, h4, h5, h6, [role], [aria-label], [alt], [title], [placeholder]')) {
-        if (!shows(el.getBoundingClientRect())) continue;
+        if (!shows(el.getBoundingClientRect()) || !seen(el)) continue;
         pieces.push((el as HTMLElement).innerText ?? '');
         for (const a of ['aria-label', 'alt', 'title', 'placeholder', 'value']) {
           const v = el.getAttribute(a);

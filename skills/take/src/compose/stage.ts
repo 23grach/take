@@ -103,7 +103,7 @@ function glassArt(g: Glass, width: number, height: number): string {
 
 function toolbarParts(win: Theme['window'], themeDir: string, address: string): { css: string; nav: string; address: string; actions: string } {
   const bar = win.toolbar;
-  const field = (glass: string, inner: string) => `<div class="address${glass}">${inner}${esc(address)}</div>`;
+  const field = (glass: string, inner: string) => `<div class="address${glass}">${inner}<span id="address">${esc(address)}</span></div>`;
   if (!bar) return { css: '', nav: '', address: field('', ''), actions: '' };
   const icon = (name: ToolbarIcon) => `<i class="icon">${fs.readFileSync(path.join(themeDir, bar.icons[name]), 'utf8').trim()}</i>`;
   const tool = (name: ToolbarIcon, width: number, off = false) => `<span class="tool${off ? ' off' : ''}" style="width: ${width}px">${icon(name)}</span>`;
@@ -180,7 +180,9 @@ ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${
   const shot = document.getElementById('shot'), fade = document.getElementById('fade');
   const sx = (x) => box.contentLeft + x * box.k, sy = (y) => box.contentTop + y * box.k;
   const show = async (img, src) => { if (img.getAttribute('src') !== src) { img.src = src; await img.decode(); } };
-  window.render = async ({ footage, overlay: o }) => {
+  const addressText = document.getElementById('address');
+  window.render = async ({ footage, overlay: o, address }) => {
+    if (addressText.textContent !== address) addressText.textContent = address;
     await show(shot, footage.src);
     if (footage.fade) await show(fade, footage.fade.src);
     fade.style.opacity = footage.fade ? footage.fade.opacity : 0;

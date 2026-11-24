@@ -12,7 +12,7 @@ import { contactSheet } from './check/contact.ts';
 import { run } from './run.ts';
 import { addressWarning, type Appearance } from './take/format.ts';
 import { probe, type ProbeShot } from './probe/probe.ts';
-import { storyboard } from './probe/storyboard.ts';
+import { keepPassing, storyboard } from './probe/storyboard.ts';
 import { formatScript } from './probe/script.ts';
 import { defaultLoginName, forgetLogin, isLoginName, loginPath, readLogin, savedLogins, signIn } from './drivers/web/login.ts';
 import { loginCommand, VISIBLE_NOTE } from './drivers/web/browser.ts';
@@ -298,6 +298,8 @@ async function probeCommand(): Promise<number> {
   const sheet = await storyboard(r, out, path.join(out, 'storyboard.jpg'), { theme: themeFlag ?? take.theme });
   const done = r.shots.length - 1 - (r.ok ? 0 : 1);
   process.stdout.write(`${r.ok ? `All ${take.steps.length} steps work` : `Stopped at step ${done + 1} of ${take.steps.length}`} (${r.seconds} s). Storyboard: ${path.relative(process.cwd(), sheet)}\n`);
+  const passed = keepPassing(r.ok, sheet);
+  if (passed) process.stdout.write(`The last probe that passed: ${path.relative(process.cwd(), passed)}\n`);
   if (r.ok && take.steps.every((s) => s.do === 'hold')) process.stdout.write(`\n${outlineOf(r.shots[0], 'The first screen')}`);
   if (r.script) process.stdout.write(`\n${formatScript(r.script)}`);
   return r.ok ? 0 : 1;

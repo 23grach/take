@@ -24,6 +24,7 @@ export interface CheckOptions {
   loop?: boolean;
   fps?: number;
   pageVideos?: (f: number) => [number, number, number, number][];
+  exactFrames?: boolean;
 }
 
 const GRID = { w: 320, h: 180, cols: 8, rows: 5 };
@@ -31,7 +32,7 @@ const STILL = 0.15;
 const MOVING = 2.5;
 const LONGEST_STILL_S = 4;
 
-export function check(file: string, { loop = true, fps: expectedFps = 60, pageVideos }: CheckOptions = {}): Report {
+export function check(file: string, { loop = true, fps: expectedFps = 60, pageVideos, exactFrames = false }: CheckOptions = {}): Report {
   const findings: Finding[] = [];
   const add = (name: string, status: Status, detail: string) => findings.push({ name, status, detail });
 
@@ -88,8 +89,10 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
     else videoRepeats++;
   }
   const at = (f: number) => `${(f / fps).toFixed(2)} s (frame ${f})`;
-  add('smoothness', hitches.length ? 'fail' : 'pass',
-    hitches.length ? `${hitches.length} doubled frame${hitches.length > 1 ? 's' : ''}: motion stalls for one frame at ${hitches.slice(0, 5).map(at).join(', ')}${hitches.length > 5 ? '…' : ''}` : `motion never stalls mid-move${videoRepeats ? ' (a video in the page shows at its own frame rate)' : ''}`);
+  add('smoothness', !hitches.length ? 'pass' : exactFrames ? 'warn' : 'fail',
+    hitches.length
+      ? `${hitches.length} doubled frame${hitches.length > 1 ? 's' : ''}: motion stalls for one frame at ${hitches.slice(0, 5).map(at).join(', ')}${hitches.length > 5 ? '…' : ''}${exactFrames ? '. Studio films every frame exactly, so the page itself stood still there (a picture popping in, content swapping): look at it on the contact sheet' : ''}`
+      : `motion never stalls mid-move${videoRepeats ? ' (a video in the page shows at its own frame rate)' : ''}`);
 
   let longest = { start: 0, length: 0 };
   for (let i = 0, run = 0; i < change.length; i++) {

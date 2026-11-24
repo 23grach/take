@@ -36,7 +36,7 @@ test('the script times each step from its start to the next, and adds the loop',
 });
 
 test('a rehearsal scales waits for the app back to the video pace, and shows holds at their real length', () => {
-  const s = timeline(take, [log(0, 0), log(1, 30, 40), log(2, 120), log(3, 150)], 180, { fps: 60, speed: 2 });
+  const s = timeline(take, [log(0, 0), log(1, 30, 40), log(2, 120), log(3, 150)], 180, { fps: 60, speed: 2, rehearsed: true });
   assert.deepEqual(s.lines.map((l) => +(l.length * 60).toFixed(3)), [120, 70, 30, 120]);
   assert.equal(s.estimated, true);
   assert.match(formatScript(s), /from the rehearsal/);

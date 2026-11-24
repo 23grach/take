@@ -3,6 +3,7 @@ export interface Clock {
   readonly frame: number;
   readonly speed?: number;
   tick(): Promise<void>;
+  resume?(): void;
 }
 
 export interface RealtimeClock extends Clock {
@@ -32,6 +33,24 @@ export function realtimeClock(fps = 60, speed = 1): RealtimeClock {
       const due = Math.floor(((performance.now() - start) * rate) / 1000);
       frame = Math.max(frame + 1, due);
       const wait = start + (frame * 1000) / rate - performance.now();
+      if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    },
+  };
+}
+
+export function wallPacedClock(advance: (ms: number) => Promise<void>, fps = 60): Clock {
+  let start: number | undefined;
+  let frame = 0;
+  return {
+    fps,
+    get frame() {
+      return frame;
+    },
+    async tick() {
+      start ??= performance.now();
+      await advance(1000 / fps);
+      frame++;
+      const wait = start + (frame * 1000) / fps - performance.now();
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     },
   };

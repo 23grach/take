@@ -1,4 +1,4 @@
-export function keepAboveSafariBar(bar: number): void {
+export function keepAboveSafariBar({ bar, endGap }: { bar: number; endGap: number }): void {
   type Lift = { by: number; base: string; inline: string; applied: string };
   const pinned = new Set<HTMLElement>();
   const lifted = new Map<HTMLElement, Lift>();
@@ -83,8 +83,18 @@ export function keepAboveSafariBar(bar: number): void {
   document.addEventListener('load', (e) => restyles(e.target as Node) && everything(), true);
   document.addEventListener('DOMContentLoaded', everything);
   addEventListener('load', everything);
+  const room = bar + endGap;
+  const roomAtEnd = () => {
+    const root = document.documentElement;
+    if (!root) return;
+    if (!document.getElementById('take-room-at-end')) root.append(Object.assign(document.createElement('style'), { id: 'take-room-at-end', textContent: `html[data-take-room]::after { content: ""; display: block; height: ${room}px; }` }));
+    const has = root.hasAttribute('data-take-room');
+    const scrolls = root.scrollHeight - (has ? room : 0) > innerHeight + 1;
+    if (scrolls !== has) root.toggleAttribute('data-take-room', scrolls);
+  };
   requestAnimationFrame(function keepLifting() {
     follow(pinned);
+    roomAtEnd();
     requestAnimationFrame(keepLifting);
   });
 }

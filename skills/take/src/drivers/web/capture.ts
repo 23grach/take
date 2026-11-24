@@ -165,7 +165,7 @@ export async function studio(
       const ms = Math.round((frame + 1) * dt) - Math.round(frame * dt);
       await page.clock.runFor(ms);
       const { boxes, played } = await stepPlaying(page, ms);
-      await sound?.moved(played, true);
+      await sound?.moved(played, true, ms);
       if (JSON.stringify(videos.at(-1)?.[1] ?? []) !== JSON.stringify(boxes)) videos.push([frame, boxes]);
       await page.evaluate(() => {
         const onTime = (a: Animation) => !!a.timeline && !('axis' in a.timeline);
@@ -205,7 +205,7 @@ export async function studio(
         await page.clock.runFor(Math.round(dt));
         checkDrawing(page);
         const { played } = await stepPlaying(page, Math.round(dt));
-        await sound?.moved(played, false);
+        await sound?.moved(played, false, Math.round(dt));
       }
     },
     async finish() {

@@ -16,7 +16,7 @@ Open `probe/storyboard.jpg`.
 
 Read the report from `take run` and open `out/<name>.contact.jpg`.
 
-- **Every check passes** (✓), with two exceptions you explain instead of fixing: a doubled frame that is the site's own behaviour (it repeats at the same moment every time: content that vanishes in one frame, a picture popping in), and a ⚠ that you've looked at and found harmless. Anything else ✗ is fixed and recorded again, never delivered.
+- **Every check passes** (✓), with two exceptions you explain instead of fixing: a doubled frame (⚠ in final videos) that is the site's own behaviour (it repeats at the same moment every time: content that vanishes in one frame, a picture popping in), and a ⚠ that you've looked at and found harmless. Anything else ✗ is fixed and recorded again, never delivered.
 - **Each step looks like its rehearsal** (`rehearsal` line). A ⚠ there puts the rehearsal picture next to the video frame on the contact sheet: a panel, menu or map missing from the video is a broken recording, so record again and, if it repeats, tell the user; live content that changed (a rotating banner, a new headline) is fine. This check sees large areas only: also look at the frames yourself.
 - **The frames along the top tell the story** in order, with no surprise screens (an error page, a login wall, an empty state).
 - **Nothing is cut off:** animations finish before the next step; toasts are readable.

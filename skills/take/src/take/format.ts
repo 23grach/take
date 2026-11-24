@@ -28,7 +28,7 @@ export type Step = Common &
     | { do: 'press'; key: string }
     | { do: 'scroll'; target: Target }
     | { do: 'scroll'; by: [number, number] }
-    | { do: 'wait'; for: Condition; timeout: number }
+    | { do: 'wait'; for: Condition; timeout: number; film?: false }
     | { do: 'hold'; ms: number }
   );
 
@@ -42,6 +42,7 @@ export const PHONE = {
   screen: [402, 874] as [number, number],
   statusBar: 54,
   safariBar: 82,
+  endGap: 8,
   keyboard: { top: 434, accessory: 472, clearance: 16, slide: 350 },
 };
 export const phonePage = (): [number, number] => [PHONE.screen[0], PHONE.screen[1] - PHONE.statusBar];
@@ -78,6 +79,15 @@ export function shownAddress(target: WebTarget): string {
   if (isLocalUrl(target.url)) return '';
   const u = new URL(target.url);
   return (u.host + u.pathname).replace(/\/$/, '');
+}
+
+export function followedAddress(shown: string, firstUrl: string, url: string): string {
+  const [first, now] = [new URL(firstUrl), new URL(url)];
+  const path = now.pathname.replace(/\/$/, '');
+  if (now.host !== first.host) return now.host + path;
+  if (now.pathname === first.pathname) return shown;
+  const domain = shown.split('/')[0];
+  return domain ? domain + path : '';
 }
 
 export interface Take {
@@ -246,10 +256,12 @@ export function validateTake(input: unknown): Result {
           fail(`${path}.by`, `must be [x, y] in pixels, e.g. [0, 600], got ${show(v.by)}`);
         break;
       case 'wait':
-        onlyKeys(v, path, [...common, 'for', 'timeout']);
+        onlyKeys(v, path, [...common, 'for', 'timeout', 'film']);
         if (!('for' in v)) fail(path, 'missing "for" (what to wait for)');
         else condition(v.for, `${path}.for`);
         out.timeout = positive(v, 'timeout', path, DEFAULTS.timeout);
+        if ('film' in v && v.film !== false) fail(`${path}.film`, `can only be false (wait without filming); leave it out to film the wait, got ${show(v.film)}`);
+        if (v.film === false && 'ms' in v) fail(path, '"ms" sets how long a step shows, and a wait with "film": false isn\'t shown; leave out "ms"');
         break;
       case 'hold':
         onlyKeys(v, path, common);

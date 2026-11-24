@@ -288,6 +288,32 @@ test('content scrolling inside a box rather than the page leaves the status bar 
   assert.deepEqual(bandAt(tops, 3).pieces, [{ top: 0, height: 54, color: WHITE }]);
 });
 
+test('a page that scrolls can rise 8 pt above Safari\'s bar at its end, as in iOS Safari; one that fits gets no extra room', async () => {
+  const { browser, context } = await launch({ viewport: { width: 402, height: 820 }, device: 'phone' });
+  try {
+    const page = await context.newPage();
+    const body = (height: number) => `<!doctype html><meta name="viewport" content="width=device-width"><style>body { margin: 0 } div { height: ${height}px }</style><div></div>`;
+    await page.route('http://long.test/', (route) => route.fulfill({ contentType: 'text/html', body: body(3000) }));
+    await page.route('http://short.test/', (route) => route.fulfill({ contentType: 'text/html', body: body(400) }));
+    const settled = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+    await page.goto('http://long.test/');
+    await settled();
+    await page.evaluate(() => scrollTo(0, 1e6));
+    assert.equal(await page.evaluate(() => document.querySelector('div')!.getBoundingClientRect().bottom), 820 - PHONE.safariBar - PHONE.endGap);
+    await page.goto('http://short.test/');
+    await settled();
+    assert.equal(await page.evaluate(() => document.documentElement.scrollHeight), 820);
+  } finally {
+    await browser.close();
+  }
+});
+
+test('at the end of the page the Safari bar opens again', () => {
+  const scroll = (frame: number, dy: number): Event => ({ frame, type: 'scroll', dx: 0, dy });
+  const events = [scroll(10, 30), scroll(11, 40), scroll(30, 50)];
+  assert.deepEqual(safariCollapses(events, look.safari.collapseAfter, [[30, true]]), [[10, true], [30, false]]);
+});
+
 test('elements pinned to the bottom of the page sit above Safari\'s bar, as in iOS Safari; full-height overlays stay put', async () => {
   const { browser, context } = await launch({ viewport: { width: 402, height: 820 }, device: 'phone' });
   try {

@@ -4,8 +4,9 @@ import { DEFAULTS, PHONE, shownAddress, type Condition, type Spot, type Step, ty
 import type { Clock } from './clock.ts';
 import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
 import { pageTop } from './page-top.ts';
+import { botCheck, botCheckMessage } from './bot-check.ts';
 import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
-import { describe, describeCondition, holds, locate } from './targets.ts';
+import { describe, describeCondition, describeMatches, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
 import { caretAt, type Caret } from './caret.ts';
 
@@ -56,12 +57,15 @@ function keyboardLift(field: Span, next?: Span): number {
   return Math.round(Math.min(ABOVE_KEYBOARD, Math.max(0, bottom - ABOVE_KEYBOARD)));
 }
 
+const offCameraWait = (s: Step | undefined) => s?.do === 'wait' && s.film === false;
+
 const BEFORE_NEXT_TAP = new Set<Step['do']>(['type', 'press', 'hold', 'wait']);
 
 export interface PerformOptions {
   onStep?: (log: StepLog, pointer: [number, number]) => Promise<void>;
   onFrame?: (log: EventLog) => void;
   watch?: boolean;
+  unfilmed?: Clock;
 }
 
 export async function performSetup(page: Page, take: Take, clock: Clock): Promise<boolean> {
@@ -75,7 +79,7 @@ export async function performSetup(page: Page, take: Take, clock: Clock): Promis
   return true;
 }
 
-export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true }: PerformOptions = {}): Promise<EventLog> {
+export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true, unfilmed }: PerformOptions = {}): Promise<EventLog> {
   const [vw, vh] = take.target.viewport;
   const phone = take.target.device === 'phone';
   const glass = phone ? await page.context().newCDPSession(page) : undefined;
@@ -90,6 +94,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const carets: [number, Caret | null][] = [];
   const keyboard: [number, KeyboardUp | null][] = [];
   const tops: [number, PageTop][] = [];
+  const ends: [number, boolean][] = [];
+  const urls: [number, string][] = [[clock.frame, page.url()]];
   let keyboardDisagrees = 0;
   let reachLift: number | null = null;
   const pageErrors: string[] = [];
@@ -112,7 +118,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps,
     marks,
     loop: take.loop,
-    ...(phone ? { keyboard, tops } : {}),
+    urls,
+    ...(phone ? { keyboard, tops, ends } : {}),
   };
   let current = 0;
   let waited = 0;
@@ -130,6 +137,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
     await clock.tick();
     if (phone && watch) await followTop(clock.frame - 1);
+    if (phone && watch) await followEnd(clock.frame - 1);
+    if (urls.at(-1)![1] !== page.url()) urls.push([clock.frame - 1, page.url()]);
     eventLog.frames = clock.frame;
     onFrame?.(eventLog);
     if (pageErrors.length)
@@ -156,6 +165,10 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     if ((await loc.count().catch(() => 0)) !== 1) return undefined;
     const b = await loc.boundingBox().catch(() => null);
     return b && b.y >= 0 && b.y + b.height <= vh ? [b.y, b.y + b.height] : undefined;
+  }
+  async function followEnd(frame: number) {
+    const atEnd = await page.evaluate(() => scrollY > 0 && scrollY + innerHeight >= document.documentElement.scrollHeight - 2).catch(() => false);
+    if (atEnd !== (ends.at(-1)?.[1] ?? false)) ends.push([frame, atEnd]);
   }
   async function followTop(frame: number) {
     const last = tops.at(-1)?.[1];
@@ -201,9 +214,12 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       const n = await loc.count();
       if (n === 1) return loc;
       if (clock.frame >= give) {
-        if (n === 0) throw new TakeError(current, `can't find ${describe(t)} (looked for ${PACING.find / 1000} s)`);
-        const names = await loc.evaluateAll((els) => els.slice(0, 3).map((e) => ((e as HTMLElement).innerText || e.getAttribute('aria-label') || e.tagName.toLowerCase()).trim().replace(/\s+/g, ' ').slice(0, 40)));
-        throw new TakeError(current, `${n} elements match ${describe(t)} (${names.map((x) => `"${x}"`).join(', ')}${n > 3 ? ', …' : ''}); make the target more specific (add "exact": true, or use a role and name)`);
+        if (n === 0) {
+          const sign = await botCheck(page);
+          throw new TakeError(current, sign ? botCheckMessage(`can't find ${describe(t)}`, sign) : `can't find ${describe(t)} (looked for ${PACING.find / 1000} s)`);
+        }
+        const matches = await describeMatches(page, loc, n, shown());
+        throw new TakeError(current, `${n} elements match ${describe(t)} (${matches.join(', ')}${n > matches.length ? ', …' : ''}); make the target more specific: the full name with "exact": true, or the "css" given for the one on screen`);
       }
       await idle();
     }
@@ -241,6 +257,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
     await loc.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
     await tick();
+    const give = clock.frame + limit(PACING.find);
+    while (!inView(await boxOf(loc, t))) {
+      if (clock.frame >= give) throw new TakeError(current, `${describe(t)} stays off screen (waited ${PACING.find / 1000} s for it to come into view)`);
+      await idle();
+    }
   }
 
   const whatIsAt = ([x, y]: Point) =>
@@ -281,15 +302,25 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   }
 
   async function reach(loc: Locator, t: Target): Promise<Box> {
-    await travel(loc, t);
+    let last = await travel(loc, t);
+    let since = clock.frame;
     await wait(PACING.settle);
     const give = clock.frame + limit(PACING.find);
+    let movingSince: number | undefined;
     for (;;) {
       const box = await boxOf(loc, t);
       const inside = pointer[0] >= box.x && pointer[0] <= box.x + box.width && pointer[1] >= box.y && pointer[1] <= box.y + box.height;
       if (!inside) {
-        await travel(loc, t);
+        last = await travel(loc, t);
+        since = clock.frame;
         await wait(PACING.settle);
+        continue;
+      }
+      const moving = Math.max(Math.abs(box.x - last.x), Math.abs(box.y - last.y)) > PACING.still.pxPerFrame * Math.max(1, clock.frame - since);
+      [last, since] = [box, clock.frame];
+      if (moving) movingSince ??= clock.frame;
+      if (moving && clock.frame < movingSince! + limit(PACING.still.longest)) {
+        await idle();
         continue;
       }
       const onTarget = await loc.evaluate((el, [x, y]) => {
@@ -372,19 +403,20 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     return box;
   }
 
-  async function scroll(dx: number, dy: number) {
-    if (!phone) return wheel([dx, dy], frames(scrollMs(Math.hypot(dx, dy))), ease, pointer);
+  async function scroll(dx: number, dy: number, room = 0) {
+    if (!phone) return wheel([dx, dy], Math.max(frames(scrollMs(Math.hypot(dx, dy))), room), ease, pointer);
     const { lift, reach } = PACING.swipe;
     const [lo, hi] = shown();
     let left: Point = [dx, dy];
-    for (let i = Math.max(1, Math.ceil((lift * Math.max(Math.abs(dx) / vw, Math.abs(dy) / (hi - lo))) / reach)); i > 0; i--) {
+    const strokes = Math.max(1, Math.ceil((lift * Math.max(Math.abs(dx) / vw, Math.abs(dy) / (hi - lo))) / reach));
+    for (let i = strokes; i > 0; i--) {
       const part: Point = [Math.round(left[0] / i), Math.round(left[1] / i)];
       left = [left[0] - part[0], left[1] - part[1]];
-      await swipe(part);
+      await swipe(part, Math.round(room / strokes));
     }
   }
 
-  async function swipe([dx, dy]: Point) {
+  async function swipe([dx, dy]: Point, room = 0) {
     const { lift, slower } = PACING.swipe;
     const across = (along: number, [lo, hi]: Span, now: number) => {
       const size = hi - lo;
@@ -393,23 +425,32 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     const start: Point = [across(dx, [0, vw], pointer[0]), across(dy, shown(), pointer[1])];
     await moveTo(async () => start);
     await wait(PACING.settle);
-    const n = frames(scrollMs(Math.hypot(dx, dy)) * slower);
+    const n = Math.max(frames(scrollMs(Math.hypot(dx, dy)) * slower), room);
     const held = Math.max(1, Math.round(n * lift));
     contact('down');
+    let lifted = false;
     await wheel([dx, dy], n, swipeProgress, start, (k, p) => {
-      if (k > held) return;
+      if (lifted) return;
       pointer = [start[0] - dx * p, start[1] - dy * p];
-      if (k === held) contact('up');
+      if (k >= held) [lifted] = [true, contact('up')];
     });
   }
+
+  const atLeastAPixel = (total: number, due: number, done: number) => {
+    if (phone || !done) return Math.round(due);
+    const way = Math.sign(total);
+    const left = Math.abs(total - done);
+    return left < 0.5 ? 0 : way * Math.min(Math.round(left), Math.max(1, Math.round(way * due)));
+  };
 
   async function wheel([dx, dy]: Point, n: number, progress: (t: number) => number, at: Point, each?: (k: number, p: number) => void) {
     let done: Point = [0, 0];
     let waitForMove = true;
-    for (let k = 1; k <= n; k++) {
+    const f0 = clock.frame;
+    for (let k = 1; ; k = Math.min(n, clock.frame - f0 + 1)) {
       const p = progress(k / n);
       each?.(k, p);
-      const step: Point = [Math.round(dx * p - done[0]), Math.round(dy * p - done[1])];
+      const step: Point = [atLeastAPixel(dx, dx * p - done[0], done[0]), atLeastAPixel(dy, dy * p - done[1], done[1])];
       if (step[0] || step[1]) {
         const before = waitForMove ? await scrolledAt(at) : undefined;
         if (phone) await glass!.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: at[0], y: at[1], deltaX: step[0], deltaY: step[1] });
@@ -419,6 +460,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         done = [done[0] + step[0], done[1] + step[1]];
       }
       await tick();
+      if (k === n) return;
     }
   }
 
@@ -441,10 +483,27 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     return false;
   }
 
+  async function offCamera(c: Condition, timeout: number) {
+    unfilmed!.resume?.();
+    const give = unfilmed!.frame + frames(timeout * (unfilmed!.speed ?? 1));
+    while (!(await holds(page, c))) {
+      if (unfilmed!.frame >= give) {
+        const sign = await botCheck(page);
+        const what = `waited ${timeout / 1000} s, off camera, for ${describeCondition(c)}`;
+        throw new TakeError(current, sign ? botCheckMessage(what, sign) : what);
+      }
+      await unfilmed!.tick();
+    }
+    clock.resume?.();
+  }
+
   async function until(c: Condition, timeout: number): Promise<Box | undefined> {
     const give = clock.frame + limit(timeout);
     while (!(await holds(page, c))) {
-      if (clock.frame >= give) throw new TakeError(current, `waited ${timeout / 1000} s for ${describeCondition(c)}`);
+      if (clock.frame >= give) {
+        const sign = await botCheck(page);
+        throw new TakeError(current, sign ? botCheckMessage(`waited ${timeout / 1000} s for ${describeCondition(c)}`, sign) : `waited ${timeout / 1000} s for ${describeCondition(c)}`);
+      }
       await idle();
     }
     if ('visible' in c) {
@@ -472,6 +531,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         if (s.target) log.target = await click(await find(s.target), s.target);
         if (phone && watch) await keyboardUp(s.target);
         if (s.target) await wait(PACING.settle);
+        if ((await page.evaluate(focusedField).catch(() => null)) === null)
+          log.note = 'no text field had focus when typing started, so the keys went to the page itself (an app may take them as shortcuts): check the picture, and click or open the field first';
         const f0 = clock.frame;
         const chars = [...s.text].length;
         let cps = s.cps;
@@ -497,24 +558,27 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         });
         await tick();
         break;
-      case 'scroll':
+      case 'scroll': {
+        const room = length === undefined ? 0 : Math.max(0, length - since(log.start) - frames(PACING.gap));
         if ('by' in s) {
           const at = () => page.evaluate(() => [scrollX, scrollY]).catch(() => [0, 0]);
           const before = await at();
-          await scroll(...s.by);
+          await scroll(...s.by, room);
           const after = await at();
           if (before[0] === after[0] && before[1] === after[1])
             log.note = "the page didn't scroll (fine if something under the pointer was meant to, like a map or a list; otherwise the page may be locked, e.g. by an open menu)";
         } else {
           const loc = await find(s.target);
           const box = await boxOf(loc, s.target);
-          if (!inView(box)) await scroll(0, toMiddle(box));
+          if (!inView(box)) await scroll(0, toMiddle(box), room);
           else log.note = `nothing scrolled: ${describe(s.target)} is already on screen; scroll "by" a distance to move the page`;
           log.target = await boxOf(loc, s.target);
         }
         break;
+      }
       case 'wait':
-        log.waitedFor = await until(s.for, s.timeout);
+        if (s.film === false && unfilmed) await offCamera(s.for, s.timeout);
+        else log.waitedFor = await until(s.for, s.timeout);
         break;
       case 'hold':
         await wait(s.ms);
@@ -542,7 +606,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     steps.push(log);
     await onStep?.(log, pointer);
     if (length !== undefined) while (since(log.start) < length) await tick();
-    else if (s.do !== 'hold' && i < take.steps.length - 1) await wait(PACING.gap);
+    else if (s.do !== 'hold' && !offCameraWait(s) && !offCameraWait(take.steps[i + 1]) && i < take.steps.length - 1) await wait(PACING.gap);
   }
   page.off('pageerror', onError);
   fillSkipped(path);

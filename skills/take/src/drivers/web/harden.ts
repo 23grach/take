@@ -97,7 +97,7 @@ const SAFARI_INIT_SCRIPT = `(() => {
 
 export async function actLikeIPhone(context: BrowserContext): Promise<void> {
   await context.addInitScript(SAFARI_INIT_SCRIPT);
-  await context.addInitScript(keepAboveSafariBar, PHONE.safariBar);
+  await context.addInitScript(keepAboveSafariBar, { bar: PHONE.safariBar, endGap: PHONE.endGap });
 }
 
 export async function hardenClientHints(

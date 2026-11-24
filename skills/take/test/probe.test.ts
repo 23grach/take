@@ -134,6 +134,12 @@ test('on a long page the outline keeps what is on screen and every heading', () 
   assert.equal(r.leftOut, 3);
 });
 
+test('on a long page, a name that adds hidden text to what is shown still counts as on screen', () => {
+  const outline = ['- navigation "Repository":', '  - link "Code"', '  - link "Issues (871)"', '  - link "Security and quality (10)"', '- link "Far below"'].join('\n');
+  const r = shortOutline(outline, { text: 'Code Issues 871 Security and quality 10', pieces: ['Code', 'Issues\n871 (871)', 'Security and quality\n10 (10)'] });
+  assert.equal(r.outline, ['- navigation "Repository":', '  - link "Code"', '  - link "Issues (871)"', '  - link "Security and quality (10)"'].join('\n'));
+});
+
 test('probe clears only its own files from --out, never the take next to them', async () => {
   const { clearProbe } = await import('../src/probe/probe.ts');
   const dir = path.join(tmp, 'own-folder');
@@ -141,6 +147,29 @@ test('probe clears only its own files from --out, never the take next to them', 
   for (const f of ['take.json', 'scenario.md', 'step-01.png', 'step-01.outline.yml', 'probe.json', 'storyboard.jpg']) fs.writeFileSync(path.join(dir, f), 'x');
   clearProbe(dir);
   assert.deepEqual(fs.readdirSync(dir).sort(), ['scenario.md', 'take.json']);
+});
+
+test('a failed probe points to the storyboard of the last probe that passed', async () => {
+  const { keepPassing } = await import('../src/probe/storyboard.ts');
+  const dir = path.join(tmp, 'passing');
+  fs.mkdirSync(dir);
+  const sheet = path.join(dir, 'storyboard.jpg');
+  fs.writeFileSync(sheet, 'good');
+  assert.equal(keepPassing(true, sheet), undefined);
+  fs.writeFileSync(sheet, 'failed');
+  assert.equal(keepPassing(false, sheet), path.join(dir, 'storyboard.passed.jpg'));
+  assert.equal(fs.readFileSync(path.join(dir, 'storyboard.passed.jpg'), 'utf8'), 'good');
+});
+
+test('a phone storyboard shows a fingertip where steps touched, never a desktop cursor', async () => {
+  const { storyboardHtml } = await import('../src/probe/storyboard.ts');
+  const dir = path.join(tmp, 'phone-board');
+  fs.mkdirSync(dir);
+  fs.copyFileSync(path.join(tmp, 'ok', 'step-00.png'), path.join(dir, 'step-00.png'));
+  const shot = (step: number, label: string) => ({ step, label, at: step, file: 'step-00.png', outline: '', pointer: [100, 200] as [number, number], cursor: 'default' as const });
+  const html = storyboardHtml({ ok: true, title: 'p', viewport: [402, 820], shots: [shot(0, 'First screen'), shot(1, 'Hold 1 s'), shot(2, 'Click button "Buy"')], seconds: 1, phone: true }, dir, 'default');
+  assert.equal(html.match(/class="finger"/g)?.length, 1);
+  assert.doesNotMatch(html, /class="cursor"/);
 });
 
 test('a rehearsal cuts the opening and closing holds short, and keeps the ones between steps', async () => {
@@ -166,9 +195,16 @@ test('buttons with no name are listed with a CSS target and where they are', asy
       other.style.cssText = 'position:fixed;bottom:10px;left:10px';
       document.body.append(panel, other);
     });
+    await page.evaluate(() => {
+      const menu = Object.assign(document.createElement('nav'), { className: 'menu' });
+      menu.style.cssText = 'position:fixed;top:200px;left:200px;opacity:0';
+      menu.innerHTML = '<button class="icon hidden-close"><svg width="16" height="16"></svg></button>';
+      document.body.append(menu);
+    });
     const listed = await unnamedHandles(page);
     const targets = [...listed.matchAll(/\{ "css": (".*?") \}/g)].map((m) => JSON.parse(m[1]) as string);
     assert.equal(targets.length, 2, listed);
+    assert.doesNotMatch(listed, /hidden-close/, 'a button in a see-through menu is not on screen');
     for (const css of targets) assert.equal(await page.locator(css).count(), 1, css);
     assert.match(listed, /button at \d+, \d+ \(top right/);
   } finally {
