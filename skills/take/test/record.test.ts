@@ -283,6 +283,36 @@ test('setup steps close a banner before filming, and are not filmed', async () =
   }
 });
 
+test('setup runs like a real browser: a late banner slides in, is clicked once still, and animates out', async () => {
+  const page = `<!doctype html><style>
+      @keyframes up { from { transform: translateY(50px) } } @keyframes down { to { transform: translateY(160px) } }
+      #banner { position: fixed; right: 20px; bottom: 20px; padding: 20px; background: #eee; animation: up 2s linear .3s both }
+      #banner.out { animation: down .4s ease-in both }
+    </style><button style="margin:200px">Go</button>
+    <script>fetch('/banner').then((r) => r.text()).then((html) => {
+      document.body.insertAdjacentHTML('beforeend', html);
+      reject.onclick = () => { banner.classList.add('out'); banner.onanimationend = () => banner.remove(); };
+    })</script>`;
+  const server = http.createServer((req, res) => {
+    if (req.url === '/banner') return void setTimeout(() => res.writeHead(200, { 'content-type': 'text/html' }).end('<div id="banner"><button id="reject">Reject all</button></div>'), 1500);
+    res.writeHead(200, { 'content-type': 'text/html' }).end(page);
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  try {
+    const url = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
+    const r = validateTake({
+      version: 0, title: 'Late banner', target: { kind: 'web', url, viewport: [800, 600], scale: 1 }, loop: 'none',
+      setup: [{ do: 'click', target: { role: 'button', name: 'Reject all' } }, { do: 'wait', for: { hidden: { role: 'button', name: 'Reject all' } } }],
+      steps: [{ do: 'click', target: { role: 'button', name: 'Go' } }],
+    });
+    assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
+    const { events } = await record(r.take, { mode: 'studio', out: path.join(tmp, 'late-banner') });
+    assert.equal(events.events.filter((e) => e.type === 'down').length, 1);
+  } finally {
+    server.close();
+  }
+});
+
 function boxLeft(out: string, capture: { size: [number, number]; frames: string[] }): number {
   const [w, h] = capture.size;
   const rgb = execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', path.join(out, capture.frames.at(-1)!), '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], { maxBuffer: 2 ** 30 });

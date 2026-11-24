@@ -18,7 +18,7 @@ The CLI lives in this skill's base directory, the folder that holds this `SKILL.
 | `take logout <name>` | Forgets a saved login. |
 | `take validate takes/<name>/take.json` | Checks the file's shape and explains every problem. |
 | `take probe takes/<name>/take.json` | Plays the take in the app without recording, twice as fast as the video (the opening and closing holds last 0.5 s here; times on the storyboard are rough). `--slow` plays at the video's pace: use it when a step fails only because the app hadn't caught up yet. When every step passes it ends with the timecoded script: each step's start and length in the video, the loop and the total. Writes `probe/step-00.png` + `step-00.outline.yml` (the first screen, before any step), then `step-NN.*` after step NN, `probe.json` and `probe/storyboard.jpg`. A failing step stops it: the reason and that screen's outline are printed, the reason is stored as `error` in `probe.json` and shown in red on the storyboard. A take of only holds also prints the first screen's outline. |
-| `take run takes/<name>/take.json` | Records, composes and checks: `out/<name>.mp4`, `out/<name>.check.json`, `out/<name>.contact.jpg`. Exit code 1 if the check fails. |
+| `take run takes/<name>/take.json` | Records, composes and checks: `out/<name>.mp4`, `out/<name>.check.json`, `out/<name>.contact.jpg`. Exit code 1 if the check fails. If a step or `setup` fails while recording, it saves the screen it stopped on as `failed/screen.png` + `failed/screen.outline.yml` (removed on the next run). |
 | `take compose takes/<name>/capture --address …` | Re-composes without re-recording (address, theme). |
 
 Reference, read when you need it: [docs/scenario-format.md](docs/scenario-format.md) (what the user writes), [docs/take-format.md](docs/take-format.md) (what you write), [docs/pacing.md](docs/pacing.md) (how to turn one into the other), [docs/review-checklist.md](docs/review-checklist.md) (what to look for before showing anything).
@@ -84,7 +84,7 @@ The video carries the page's own sound (click sounds, chimes, a video's soundtra
 ### 6. Check
 
 Read the report `take run` prints (it ends with the script as recorded: lengths the user set should match) and look at `out/<name>.contact.jpg` against the second part of the review checklist.
-- A step failed during recording (the page behaved differently from the probe): probe again, fix, run again.
+- A step failed during recording (the page behaved differently from the probe): look at `failed/screen.png` and its outline, probe again, fix, run again.
 - `rehearsal` ⚠: a step looks different from its rehearsal picture. The contact sheet shows the two side by side. Something missing from the video (a panel, a menu, map tiles) means the recording went wrong: run once more, and if it repeats tell the user. Live content that changed is fine.
 - A doubled frame (`smoothness` ✗): look at that moment on the contact sheet first. If it's the page's own behaviour (content vanishing in one frame, a picture popping in, a video in the page), recording again gives the same result: deliver and tell the user what it is. Run once more only when it looks like a recording glitch.
 - Any other ✗: the report says what and where; fix the take and run again.

@@ -50,6 +50,10 @@ test('run stops with the failing step when the app does not match the take', asy
   assert.equal(r.ok, false);
   assert.match(r.error ?? '', /^step 1: .*Delete everything/);
   assert.equal(r.video, undefined);
+  const failed = path.join(path.dirname(file), 'failed');
+  assert.match(r.error ?? '', /the screen it stopped on: .*failed\/screen\.png/);
+  assert.ok(fs.statSync(path.join(failed, 'screen.png')).size > 1000);
+  assert.match(fs.readFileSync(path.join(failed, 'screen.outline.yml'), 'utf8'), /button "New project"/);
 });
 
 test('run says so when the app is not running', async () => {

@@ -5,8 +5,9 @@ import type { Take } from '../../take/format.ts';
 import { openTake, untilReady } from './browser.ts';
 import { UNTHROTTLED } from '../../browser-binary.ts';
 import { freezePage, live, NeedsFrameLimit, picture, studio, type CaptureInfo, type Mode, type Recorder } from './capture.ts';
-import { perform, performSetup } from './driver.ts';
-import { realtimeClock } from './clock.ts';
+import { perform, performSetup, TakeError } from './driver.ts';
+import { pageOutline } from '../../probe/probe.ts';
+import { realtimeClock, wallPacedClock } from './clock.ts';
 import { hideCaret } from './caret.ts';
 import type { EventLog } from './events.ts';
 import { catchSound, type SoundCatcher } from './sound.ts';
@@ -22,6 +23,7 @@ export interface RecordOptions {
   commit?: boolean;
   signal?: AbortSignal;
   unthrottled?: boolean;
+  failedScreen?: string;
 }
 
 const CAPTURE_FILES = ['frames', 'capture.json', 'events.json', 'sound', 'sound.json'];
@@ -46,7 +48,7 @@ export interface Recording {
   warnings: string[];
 }
 
-export async function record(take: Take, { mode = 'studio', out: final, headed = false, onFrame, commit = true, signal, unthrottled = true }: RecordOptions): Promise<Recording> {
+export async function record(take: Take, { mode = 'studio', out: final, headed = false, onFrame, commit = true, signal, unthrottled = true, failedScreen }: RecordOptions): Promise<Recording> {
   const out = stagingDir(final);
   const fresh = () => {
     discardRecording(final);
@@ -56,10 +58,10 @@ export async function record(take: Take, { mode = 'studio', out: final, headed =
   try {
     let reported = false;
     const report = onFrame && ((log: EventLog, frames: number) => ((reported = true), onFrame(log, frames)));
-    const result = await recordInto(take, { mode, out, headed, onFrame: report, signal, unthrottled }).catch((e) => {
+    const result = await recordInto(take, { mode, out, headed, onFrame: report, signal, unthrottled, failedScreen }).catch((e) => {
       if (!(e instanceof NeedsFrameLimit) || reported) throw e;
       fresh();
-      return recordInto(take, { mode, out, headed, onFrame: report, signal, unthrottled: false });
+      return recordInto(take, { mode, out, headed, onFrame: report, signal, unthrottled: false, failedScreen });
     });
     if (commit) commitCapture(final);
     return result;
@@ -69,7 +71,7 @@ export async function record(take: Take, { mode = 'studio', out: final, headed =
   }
 }
 
-async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unthrottled }: Required<Pick<RecordOptions, 'mode' | 'out' | 'headed' | 'unthrottled'>> & Pick<RecordOptions, 'onFrame' | 'signal'>): Promise<Recording> {
+async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unthrottled, failedScreen }: Required<Pick<RecordOptions, 'mode' | 'out' | 'headed' | 'unthrottled'>> & Pick<RecordOptions, 'onFrame' | 'signal' | 'failedScreen'>): Promise<Recording> {
   const [w, h] = take.target.viewport;
   const size: [number, number] = [Math.round(w * take.target.scale), Math.round(h * take.target.scale)];
   let cdp: CDPSession | undefined;
@@ -88,14 +90,13 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
     await hideCaret(page);
     const recorder: Recorder = mode === 'studio' ? await studio(page, out, cdp!, take.target.viewport, take.target.scale, { mobile: take.target.device === 'phone', sound }) : await live(page, out, size);
     await recorder.warmup(WARMUP_MS);
-    await untilReady(page, take.ready, async (ms) => {
+    const drawn = async (ms: number) => {
       await recorder.warmup(ms);
-      const shot = page.screenshot({ clip: { x: 0, y: 0, width: 1, height: 1 } });
+      const shot = page.screenshot({ clip: { x: 0, y: 0, width: 1, height: 1 } }).catch(() => null);
       await (studioMode ? picture(page, shot) : shot);
-    });
-    let unfilmed = 0;
-    const setupClock = { fps: 60, get frame() { return unfilmed; }, async tick() { await recorder.warmup(1000 / 60); unfilmed++; } };
-    if (await performSetup(page, take, studioMode ? setupClock : realtimeClock())) await recorder.warmup(SETTLE_AFTER_SETUP_MS);
+    };
+    await untilReady(page, take.ready, drawn);
+    if (await performSetup(page, take, studioMode ? wallPacedClock(drawn) : realtimeClock())) await recorder.warmup(SETTLE_AFTER_SETUP_MS);
     await sound?.start();
     const t0 = performance.now();
     let reported = Promise.resolve();
@@ -114,7 +115,19 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
     fs.writeFileSync(path.join(out, 'capture.json'), JSON.stringify(capture, null, 1));
     fs.writeFileSync(path.join(out, 'events.json'), JSON.stringify(events));
     return { capture, events, warnings };
+  } catch (e) {
+    if (e instanceof TakeError && failedScreen) await saveScreen(page, failedScreen);
+    throw e;
   } finally {
     await browser.close();
   }
+}
+
+export const FAILED_SCREEN = 'screen.png';
+export const FAILED_OUTLINE = 'screen.outline.yml';
+
+async function saveScreen(page: Page, folder: string) {
+  fs.mkdirSync(folder, { recursive: true });
+  await page.screenshot({ path: path.join(folder, FAILED_SCREEN), timeout: 5000 }).catch(() => {});
+  fs.writeFileSync(path.join(folder, FAILED_OUTLINE), await pageOutline(page));
 }

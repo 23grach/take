@@ -241,6 +241,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     }
     await loc.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {});
     await tick();
+    const give = clock.frame + limit(PACING.find);
+    while (!inView(await boxOf(loc, t))) {
+      if (clock.frame >= give) throw new TakeError(current, `${describe(t)} stays off screen (waited ${PACING.find / 1000} s for it to come into view)`);
+      await idle();
+    }
   }
 
   const whatIsAt = ([x, y]: Point) =>
@@ -281,15 +286,25 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   }
 
   async function reach(loc: Locator, t: Target): Promise<Box> {
-    await travel(loc, t);
+    let last = await travel(loc, t);
+    let since = clock.frame;
     await wait(PACING.settle);
     const give = clock.frame + limit(PACING.find);
+    let movingSince: number | undefined;
     for (;;) {
       const box = await boxOf(loc, t);
       const inside = pointer[0] >= box.x && pointer[0] <= box.x + box.width && pointer[1] >= box.y && pointer[1] <= box.y + box.height;
       if (!inside) {
-        await travel(loc, t);
+        last = await travel(loc, t);
+        since = clock.frame;
         await wait(PACING.settle);
+        continue;
+      }
+      const moving = Math.max(Math.abs(box.x - last.x), Math.abs(box.y - last.y)) > PACING.still.pxPerFrame * Math.max(1, clock.frame - since);
+      [last, since] = [box, clock.frame];
+      if (moving) movingSince ??= clock.frame;
+      if (moving && clock.frame < movingSince! + limit(PACING.still.longest)) {
+        await idle();
         continue;
       }
       const onTarget = await loc.evaluate((el, [x, y]) => {

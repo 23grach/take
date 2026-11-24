@@ -13,7 +13,7 @@ import { loadTheme } from '../compose/compose.ts';
 import { timeline, type Script } from './script.ts';
 import { LONG_OUTLINE, onScreen, shortOutline, SHORT_LENGTH } from './outline.ts';
 
-async function pageOutline(page: Page): Promise<string> {
+export async function pageOutline(page: Page): Promise<string> {
   let tree: string;
   try {
     tree = await page.locator('body').ariaSnapshot();
