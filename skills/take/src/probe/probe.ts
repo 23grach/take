@@ -83,7 +83,7 @@ function handlesInPage(els: Element[], { shared, vw, vh }: { shared: string[]; v
   const unnamed: string[] = [];
   for (const el of els) {
     const r = el.getBoundingClientRect();
-    if (!(r.width > 0 && r.height > 0) || getComputedStyle(el).visibility === 'hidden') continue;
+    if (!(r.width > 0 && r.height > 0) || !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
     const role = roleOf(el);
     const name = nameOf(el);
     if (!name && (role === 'button' || role === 'link')) {

@@ -184,9 +184,16 @@ test('buttons with no name are listed with a CSS target and where they are', asy
       other.style.cssText = 'position:fixed;bottom:10px;left:10px';
       document.body.append(panel, other);
     });
+    await page.evaluate(() => {
+      const menu = Object.assign(document.createElement('nav'), { className: 'menu' });
+      menu.style.cssText = 'position:fixed;top:200px;left:200px;opacity:0';
+      menu.innerHTML = '<button class="icon hidden-close"><svg width="16" height="16"></svg></button>';
+      document.body.append(menu);
+    });
     const listed = await unnamedHandles(page);
     const targets = [...listed.matchAll(/\{ "css": (".*?") \}/g)].map((m) => JSON.parse(m[1]) as string);
     assert.equal(targets.length, 2, listed);
+    assert.doesNotMatch(listed, /hidden-close/, 'a button in a see-through menu is not on screen');
     for (const css of targets) assert.equal(await page.locator(css).count(), 1, css);
     assert.match(listed, /button at \d+, \d+ \(top right/);
   } finally {

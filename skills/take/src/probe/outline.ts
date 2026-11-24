@@ -159,6 +159,7 @@ export async function onScreen(page: Page): Promise<OnScreen> {
       const vw = innerWidth;
       const vh = innerHeight;
       const shows = (r: DOMRect) => r.width > 0 && r.height > 0 && r.bottom > 0 && r.right > 0 && r.top < vh && r.left < vw;
+      const seen = (el: Element | null) => !el || el.checkVisibility({ opacityProperty: true, visibilityProperty: true });
       const text: string[] = [];
       const pieces: string[] = [];
       const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
@@ -166,10 +167,10 @@ export async function onScreen(page: Page): Promise<OnScreen> {
       for (let t = walker.nextNode(); t; t = walker.nextNode()) {
         if (!t.textContent?.trim()) continue;
         range.selectNodeContents(t);
-        if (shows(range.getBoundingClientRect())) text.push(t.textContent);
+        if (shows(range.getBoundingClientRect()) && seen(t.parentElement)) text.push(t.textContent);
       }
       for (const el of document.querySelectorAll('a, button, input, select, textarea, summary, label, h1, h2, h3, h4, h5, h6, [role], [aria-label], [alt], [title], [placeholder]')) {
-        if (!shows(el.getBoundingClientRect())) continue;
+        if (!shows(el.getBoundingClientRect()) || !seen(el)) continue;
         pieces.push((el as HTMLElement).innerText ?? '');
         for (const a of ['aria-label', 'alt', 'title', 'placeholder', 'value']) {
           const v = el.getAttribute(a);
