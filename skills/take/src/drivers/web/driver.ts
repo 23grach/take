@@ -1,6 +1,6 @@
 import { ownError } from './page-errors.ts';
 import type { Locator, Page } from 'playwright';
-import { DEFAULTS, PHONE, shownAddress, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
+import { DEFAULTS, PHONE, shownAddress, showsNoCursor, type Appearance, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
 import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
 import { pageTop } from './page-top.ts';
@@ -96,6 +96,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   const tops: [number, PageTop][] = [];
   const ends: [number, boolean][] = [];
   const urls: [number, string][] = [[clock.frame, page.url()]];
+  const appearances: [number, Appearance][] = [];
   let keyboardDisagrees = 0;
   let reachLift: number | null = null;
   const pageErrors: string[] = [];
@@ -120,6 +121,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     loop: take.loop,
     urls,
     ...(phone ? { keyboard, tops, ends } : {}),
+    ...(take.steps.some((s) => s.do === 'appearance') ? { appearances } : {}),
+    ...(showsNoCursor(take) ? { noCursor: true as const } : {}),
   };
   let current = 0;
   let waited = 0;
@@ -582,6 +585,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         break;
       case 'hold':
         await wait(s.ms);
+        break;
+      case 'appearance':
+        await page.emulateMedia({ colorScheme: s.to });
+        appearances.push([clock.frame, s.to]);
+        await tick();
         break;
     }
     if (s.waitFor) log.waitedFor = await until(s.waitFor, DEFAULTS.timeout);

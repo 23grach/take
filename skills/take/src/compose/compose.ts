@@ -132,6 +132,20 @@ export function loopProgress(log: EventLog, theme: Theme, f: number): number {
   return ease((f - log.frames + 1) / (theme.loop.frames + 1));
 }
 
+export function darknessAt(log: EventLog, theme: Theme, start: Appearance, f: number): number {
+  const level = (a: Appearance) => (a === 'dark' ? 1 : 0);
+  const changes = log.appearances ?? [];
+  const g = Math.min(f, log.frames - 1);
+  let dark = level(start);
+  for (let i = 0; i < changes.length && changes[i][0] <= g; i++) {
+    const [from, to] = changes[i];
+    const next = changes[i + 1]?.[0];
+    const until = next !== undefined && next <= g ? next : g;
+    dark += (level(to) - dark) * ease(Math.min(1, (until - from) / theme.appearance.frames));
+  }
+  return dark + (level(start) - dark) * loopProgress(log, theme, f);
+}
+
 export function addressAt(log: EventLog, theme: Theme, shown: string, f: number): string {
   const urls = log.urls ?? [];
   if (urls.length < 2 || loopProgress(log, theme, f) > 0.5) return shown;
@@ -171,6 +185,7 @@ export function stageCursors(log: EventLog, art: ArtSet) {
 
 const opacityCache = new WeakMap<EventLog, { values: number[]; hiding: boolean }>();
 export function opacityAt(log: EventLog, theme: Theme, f: number): number {
+  if (log.noCursor) return 0;
   let c = opacityCache.get(log);
   if (!c) opacityCache.set(log, (c = { values: [], hiding: false }));
   const step = 1 / Math.max(1, theme.cursor.hideFade);
@@ -234,6 +249,7 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
   let recorded = 0;
   let ended = true;
   let theme: Theme;
+  let start: Appearance;
   try {
     if (follow) {
       ({ log, frames: recorded, ended } = await follow.wait(1));
@@ -246,7 +262,8 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
       log.device ??= 'desktop';
       if (log.device === 'phone' && !log.tops) throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
     }
-    theme = themeFor(base, appearance ?? pageAppearance(path.join(capture, info.frames[0] ?? frameFile(0))));
+    start = appearance ?? pageAppearance(path.join(capture, info.frames[0] ?? frameFile(0)));
+    theme = themeFor(base, start);
   } catch (e) {
     await Promise.allSettled(launches.map((b) => b.then((b) => b.close())));
     throw e;
@@ -257,7 +274,9 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
   const { cursors, keyOf } = stageCursors(log, art);
   const html = phone
     ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport, shown)
-    : stageHtml(theme, shown, layout(theme, log.viewport), art, themeDir);
+    : log.appearances && base.dark
+      ? stageHtml(base, shown, layout(base, log.viewport), art, themeDir, themeFor(base, 'dark'))
+      : stageHtml(theme, shown, layout(theme, log.viewport), art, themeDir);
   const staged = new Set(Object.keys(art));
   const first = range?.[0] ?? 0;
   const ahead = phone ? Math.max(phone.finger.lead, KEYBOARD_SLIDE) : 0;
@@ -308,7 +327,7 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
         const { src, hotspot } = cursors[cursor];
         onEvery((page) => page.evaluate((c) => (window as unknown as { addCursor: (c: unknown) => Promise<void> }).addCursor(c), { key: cursor, src, hotspot }));
       }
-      return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor }, address: addressAt(log, theme, shown, f) };
+      return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor }, address: addressAt(log, theme, shown, f), dark: darknessAt(log, theme, start, f) };
     };
     let tops: PageTop[] = [];
     const bandOf = (g: number) => {

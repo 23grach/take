@@ -30,6 +30,7 @@ export type Step = Common &
     | { do: 'scroll'; by: [number, number] }
     | { do: 'wait'; for: Condition; timeout: number; film?: false }
     | { do: 'hold'; ms: number }
+    | { do: 'appearance'; to: Appearance }
   );
 
 export const DEVICES = ['desktop', 'phone'] as const;
@@ -102,6 +103,9 @@ export interface Take {
   sound: boolean;
 }
 
+export const showsNoCursor = (take: Take) =>
+  take.target.device === 'desktop' && !take.steps.some((s) => ['click', 'hover', 'drag', 'scroll'].includes(s.do) || (s.do === 'type' && !!s.target));
+
 export const DEFAULTS = {
   viewport: [1440, 900] as [number, number],
   scale: 1.5 as const,
@@ -115,7 +119,7 @@ export const DEFAULTS = {
 export type Result = { ok: true; take: Take } | { ok: false; errors: string[] };
 
 const TARGET_KINDS = ['role', 'label', 'text', 'placeholder', 'css'] as const;
-const ACTIONS = ['click', 'hover', 'drag', 'type', 'press', 'scroll', 'wait', 'hold'] as const;
+const ACTIONS = ['click', 'hover', 'drag', 'type', 'press', 'scroll', 'wait', 'hold', 'appearance'] as const;
 const LOOPS = ['crossfade-to-start', 'none'] as const;
 
 type Obj = Record<string, unknown>;
@@ -267,6 +271,11 @@ export function validateTake(input: unknown): Result {
         onlyKeys(v, path, common);
         positive(v, 'ms', path);
         break;
+      case 'appearance':
+        onlyKeys(v, path, [...common, 'to']);
+        if (!('to' in v)) fail(path, `missing "to" (${APPEARANCES.map((a) => `"${a}"`).join(' or ')}: the mode the computer switches to)`);
+        else if (!APPEARANCES.includes(v.to as Appearance)) fail(`${path}.to`, `must be ${APPEARANCES.map((a) => `"${a}"`).join(' or ')}, got ${show(v.to)}`);
+        break;
     }
     return out as unknown as Step;
   }
@@ -340,7 +349,11 @@ export function validateTake(input: unknown): Result {
 
   if (web?.device === 'phone')
     for (const [list, name] of [[setup, 'setup'], [steps, 'steps']] as const)
-      list.forEach((s, i) => s.do === 'hover' && fail(`${name}[${i}].do`, 'a phone has no hover: tap the element ("click") or leave the step out'));
+      list.forEach((s, i) => {
+        if (s.do === 'hover') fail(`${name}[${i}].do`, 'a phone has no hover: tap the element ("click") or leave the step out');
+        if (s.do === 'appearance' && name === 'steps') fail(`${name}[${i}].do`, 'switching light and dark mid-video works on desktop only for now; on a phone, set target.appearance for the whole video');
+      });
+  setup.forEach((s, i) => s.do === 'appearance' && fail(`setup[${i}].do`, 'setup isn\'t filmed, so a switch there only changes how the video starts: set target.appearance instead'));
 
   if (web && Array.isArray(web.viewport)) {
     const [w, h] = web.viewport;

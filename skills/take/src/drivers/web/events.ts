@@ -1,6 +1,6 @@
 import type { Cursor } from './cursor.ts';
 import type { Caret } from './caret.ts';
-import type { Device } from '../../take/format.ts';
+import type { Appearance, Device } from '../../take/format.ts';
 
 export interface Box {
   x: number;
@@ -61,4 +61,6 @@ export interface EventLog {
   tops?: [number, PageTop][];
   urls?: [number, string][];
   ends?: [number, boolean][];
+  appearances?: [number, Appearance][];
+  noCursor?: true;
 }

@@ -120,6 +120,23 @@ async function failure(steps: unknown[]): Promise<string> {
   return err.message;
 }
 
+test('an appearance step tells the page the computer switched mode, and logs the frame; a take that never points hides the cursor', async () => {
+  const take = takeOf([{ do: 'appearance', to: 'dark' }, { do: 'hold', ms: 100 }, { do: 'appearance', to: 'light' }, { do: 'hold', ms: 100 }]);
+  const page = await open(take);
+  await page.evaluate(() => {
+    const w = window as unknown as { seen: boolean[] };
+    w.seen = [];
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => w.seen.push(e.matches));
+  });
+  const log = await perform(page, take, realtimeClock(), { watch: false });
+  const seen = await page.evaluate(() => (window as unknown as { seen: boolean[] }).seen);
+  assert.deepEqual(log.appearances?.map(([, to]) => to), ['dark', 'light']);
+  assert.ok(log.appearances![0][0] < log.appearances![1][0]);
+  assert.deepEqual(seen, [true, false]);
+  assert.equal(log.noCursor, true);
+  assert.equal((await perform(page, takeOf([{ do: 'hover', target: [10, 10] }]), fastClock(), { watch: false })).noCursor, undefined);
+});
+
 test('says when a target is not on the page', async () => {
   assert.equal(await failure([{ do: 'click', target: { text: 'Archive' } }]), 'step 1: can\'t find text "Archive" (looked for 1.5 s)');
 });

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { compose, composeWorkers, following, footageAt, loadTheme, loopProgress, overlayAt, pageAppearance, totalFrames } from '../src/compose/compose.ts';
+import { compose, composeWorkers, cursorOpacity, darknessAt, following, footageAt, loadTheme, loopProgress, overlayAt, pageAppearance, totalFrames } from '../src/compose/compose.ts';
 import type { CaptureInfo } from '../src/drivers/web/capture.ts';
 import { layout, themeFor } from '../src/compose/stage.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
@@ -52,6 +52,28 @@ test('the opening frame decides whether the site is light or dark', () => {
   assert.equal(pageAppearance(frame('light.jpg', '0xf7f7f8')), 'light');
   assert.equal(pageAppearance(frame('dark.jpg', '0x15171c')), 'dark');
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+test('the window fades to dark with the page, back to light, and to the opening look over the loop', () => {
+  const N = theme.appearance.frames;
+  const l = { ...log(300), appearances: [[50, 'dark'], [150, 'light']] } as EventLog;
+  const at = (f: number) => darknessAt(l, theme, 'light', f);
+  assert.equal(at(49), 0);
+  assert.equal(at(50), 0);
+  assert.ok(at(50 + N / 2) > 0.2 && at(50 + N / 2) < 1);
+  assert.equal(at(50 + N), 1);
+  assert.equal(at(149), 1);
+  assert.equal(at(150 + N), 0);
+  const ending = { ...log(300), appearances: [[100, 'dark']] } as EventLog;
+  assert.equal(darknessAt(ending, theme, 'light', 299), 1);
+  assert.ok(darknessAt(ending, theme, 'light', totalFrames(ending, theme) - 1) < 0.01);
+  assert.equal(darknessAt(log(300), theme, 'dark', 120), 1);
+});
+
+test('a take that never uses the pointer shows no cursor at all', () => {
+  const l = { ...log(100), noCursor: true } as EventLog;
+  assert.ok(cursorOpacity(l, theme).every((o) => o === 0));
+  assert.ok(cursorOpacity(log(100), theme).some((o) => o > 0));
 });
 
 test('the cursor follows the log and shrinks while pressed', () => {

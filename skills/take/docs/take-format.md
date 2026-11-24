@@ -56,8 +56,9 @@ Every step has `do`. Any step may also have `mark` (a unique name for that momen
 | `scroll` | `target` or `by: [x, y]` | Scrolls an element into view, or by a distance in pixels. An element already on screen isn't scrolled to, and the probe says so (`⚠ nothing scrolled`); use `by` to move the page anyway. A `by` scroll goes to whatever is under the cursor, so it also zooms a map or scrolls a list there; the probe notes when the page itself didn't move. |
 | `wait` | `for`, `timeout`? = 10000, `film`? | Waits for a condition. The take fails if it isn't met within `timeout` ms. With `"film": false` the page keeps running but nothing is filmed until the condition holds, and the step before it gets no pause after it: the video cuts straight from that step to what the page shows next. For something the viewer shouldn't sit through, like a video ad before the real video. Final videos only; a `--mode live` draft films the wait. |
 | `hold` | `ms` | Nothing happens for `ms` milliseconds, so the viewer can take it in. |
+| `appearance` | `to` | The computer switches to `"light"` or `"dark"` mode, as if the person changed it in system settings: a site that follows the system mode changes, with its own animation if it has one. The window and background fade to the new mode over 0.7 s. The cursor doesn't move. Give the step an `ms` long enough for the site's animation, e.g. `2500`. The video starts in `target.appearance` (set it, so the start is certain); the loop fades back to it. Desktop only, and not in `setup`. |
 
-How the cursor moves, and the pauses between steps, are decided by the driver, not written into the take, unless a step is given a length.
+How the cursor moves, and the pauses between steps, are decided by the driver, not written into the take, unless a step is given a length. A desktop take with no `click`, `hover`, `drag`, `scroll` or `type` into a target never uses the pointer, so its video shows no cursor at all.
 
 ## Timing
 

@@ -39,7 +39,7 @@ export function storyboardHtml(result: ProbeResult, dir: string, themeName: stri
     const touched = s.step > 0 && !/^Hold /.test(s.label);
     const cursor = result.phone
       ? touched ? `<div class="finger" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px"></div>` : ''
-      : c ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px;transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
+      : c && !result.noCursor ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px;transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
     return `<figure class="${s.error ? 'failed' : ''}">
       <div class="shot"><img src="${data(path.join(dir, s.file), 'image/png')}">${s.target ? box(s.target, 'target') : ''}${s.waitedFor ? box(s.waitedFor, 'waited') : ''}${cursor}</div>
       <figcaption><b>${s.step === 0 ? 'Start' : s.step}</b><span>${esc(s.label)}${s.error ? `<em>${esc(s.error)}</em>` : ''}</span><i>${s.at.toFixed(1)} s</i></figcaption>

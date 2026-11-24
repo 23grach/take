@@ -60,6 +60,17 @@ test('"target.appearance" picks light or dark, and follows the site when left ou
   assert.deepEqual(errorsOf({ ...minimal(), target: { ...minimal().target, appearance: 'night' } }), ['target.appearance: must be "light" or "dark", or left out to follow the site, got "night"']);
 });
 
+test('an "appearance" step switches the computer to light or dark mid-video, on desktop, in the filmed steps', () => {
+  const steps = (step: unknown) => ({ ...minimal(), steps: [step] });
+  assert.ok(validateTake(steps({ do: 'appearance', to: 'dark' })).ok);
+  assert.deepEqual(errorsOf(steps({ do: 'appearance', to: 'night' })), ['steps[0].to: must be "light" or "dark", got "night"']);
+  assert.deepEqual(errorsOf(steps({ do: 'appearance' })), ['steps[0]: missing "to" ("light" or "dark": the mode the computer switches to)']);
+  assert.deepEqual(errorsOf({ ...steps({ do: 'appearance', to: 'dark' }), target: { kind: 'web', url: 'http://localhost:3000/', device: 'phone' } }),
+    ['steps[0].do: switching light and dark mid-video works on desktop only for now; on a phone, set target.appearance for the whole video']);
+  assert.deepEqual(errorsOf({ ...minimal(), setup: [{ do: 'appearance', to: 'dark' }] }),
+    ['setup[0].do: setup isn\'t filmed, so a switch there only changes how the video starts: set target.appearance instead']);
+});
+
 test('typos get a suggestion', () => {
   const take = minimal();
   (take.steps[0] as Record<string, unknown>).taget = take.steps[0].target;

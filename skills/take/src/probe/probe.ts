@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Page } from 'playwright';
-import type { Spot, Step, Take } from '../take/format.ts';
+import { showsNoCursor, type Spot, type Step, type Take } from '../take/format.ts';
 import { openTake, untilReady } from '../drivers/web/browser.ts';
 import { realtimeClock } from '../drivers/web/clock.ts';
 import { perform, performSetup, TakeError } from '../drivers/web/driver.ts';
@@ -135,6 +135,7 @@ export interface ProbeResult {
   script?: Script;
   visibleWindow?: true;
   phone?: true;
+  noCursor?: true;
 }
 
 export function describeStep(s: Step): string {
@@ -148,6 +149,7 @@ export function describeStep(s: Step): string {
     case 'scroll': text = 'target' in s ? `Scroll to ${describe(s.target)}` : `Scroll by ${s.by.join(', ')} px`; break;
     case 'wait': text = `Wait for ${describeCondition(s.for)}${s.film === false ? ', not filmed' : ''}`; break;
     case 'hold': text = `Hold ${+(s.ms / 1000).toFixed(2)} s`; break;
+    case 'appearance': text = `Switch the computer to ${s.to} mode`; break;
   }
   return s.waitFor ? `${text}, then wait for ${describeCondition(s.waitFor)}` : text;
 }
@@ -246,7 +248,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   } finally {
     await browser.close();
   }
-  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(script ? { script } : {}), ...(take.target.device === 'phone' ? { phone: true as const } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
+  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(script ? { script } : {}), ...(take.target.device === 'phone' ? { phone: true as const } : {}), ...(showsNoCursor(take) ? { noCursor: true as const } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
   fs.writeFileSync(path.join(out, 'probe.json'), JSON.stringify(result, null, 1));
   return result;
 }
