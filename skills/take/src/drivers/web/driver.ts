@@ -5,7 +5,7 @@ import type { Clock } from './clock.ts';
 import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
 import { pageTop } from './page-top.ts';
 import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
-import { describe, describeCondition, holds, locate } from './targets.ts';
+import { describe, describeCondition, describeMatches, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
 import { caretAt, type Caret } from './caret.ts';
 
@@ -202,8 +202,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
       if (n === 1) return loc;
       if (clock.frame >= give) {
         if (n === 0) throw new TakeError(current, `can't find ${describe(t)} (looked for ${PACING.find / 1000} s)`);
-        const names = await loc.evaluateAll((els) => els.slice(0, 3).map((e) => ((e as HTMLElement).innerText || e.getAttribute('aria-label') || e.tagName.toLowerCase()).trim().replace(/\s+/g, ' ').slice(0, 40)));
-        throw new TakeError(current, `${n} elements match ${describe(t)} (${names.map((x) => `"${x}"`).join(', ')}${n > 3 ? ', …' : ''}); make the target more specific (add "exact": true, or use a role and name)`);
+        const matches = await describeMatches(page, loc, n, shown());
+        throw new TakeError(current, `${n} elements match ${describe(t)} (${matches.join(', ')}${n > matches.length ? ', …' : ''}); make the target more specific: the full name with "exact": true, or the "css" given for the one on screen`);
       }
       await idle();
     }

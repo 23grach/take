@@ -92,7 +92,7 @@ test('says when a target is not on the page', async () => {
 });
 
 test('says when a target matches more than one element', async () => {
-  assert.match(await failure([{ do: 'hover', target: { role: 'heading', name: 'r' } }]), /^step 1: 4 elements match heading "r" \("Projects", "Brand refresh", "Onboarding flow", …\); make the target more specific/);
+  assert.match(await failure([{ do: 'hover', target: { role: 'heading', name: 'r' } }]), /^step 1: 4 elements match heading "r" \("Projects" on screen: \{ "css": ".heading div > h1" \}, "Brand refresh" on screen: .*, "Pricing page" on screen: .*\); make the target more specific/);
 });
 
 test('says when a target is covered or disabled', async () => {

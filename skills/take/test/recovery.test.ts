@@ -30,6 +30,7 @@ const PAGES: Record<string, string> = {
     addEventListener('mousemove', () => { const t = setInterval(draw, 120); setTimeout(() => clearInterval(t), 500); }, { once: true });`),
   '/blocked': page('<div style="padding-top: 80px"><button>Save</button></div><div id="toast" aria-label="Cookie banner">We use cookies</div>'),
   '/twins': page('<button>Create</button><button>Create project</button>'),
+  '/counted': page('<nav><a href="/issues" onclick="event.preventDefault()">Issues <span aria-hidden="true">871</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">(871)</span></a></nav><div style="height:2000px"></div><a href="/good">Good first issues</a>'),
   '/throws': page('<button onclick="null.x">Break</button>'),
   '/load-error': page('<p>Hi</p>', `undefinedFunction();`),
 };
@@ -110,8 +111,15 @@ test('says what is in the way when something stays on top', async () => {
 test('names the matches when a target is ambiguous', async () => {
   assert.equal(
     await failure('/twins', [{ do: 'click', target: { role: 'button', name: 'Create' } }]),
-    'step 1: 2 elements match button "Create" ("Create", "Create project"); make the target more specific (add "exact": true, or use a role and name)',
+    'step 1: 2 elements match button "Create" ("Create" on screen: { "css": "body > button:nth-of-type(1)" }, "Create project" on screen: { "css": "body > button:nth-of-type(2)" }); make the target more specific: the full name with "exact": true, or the "css" given for the one on screen',
   );
+});
+
+test('an ambiguous name is listed as the page names it, with a CSS target for the one on screen that works', async () => {
+  const message = await failure('/counted', [{ do: 'click', target: { role: 'link', name: 'Issues' } }]);
+  assert.match(message, /^step 1: 2 elements match link "Issues" \("Issues \(871\)" on screen: \{ "css": "a\[href=\\"\/issues\\"\]" \}, "Good first issues"\)/);
+  await play('/counted', [{ do: 'click', target: { role: 'link', name: 'Issues (871)', exact: true } }]);
+  await play('/counted', [{ do: 'click', target: { css: 'a[href="/issues"]' } }]);
 });
 
 test('stops with a clear message when the app throws', async () => {

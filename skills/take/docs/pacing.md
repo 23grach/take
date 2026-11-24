@@ -58,7 +58,7 @@ Pick from the page outline `take probe` writes after each step (`probe/step-NN.o
 4. `text`, for things that aren't controls (a card title, a menu item without a role).
 5. `css` only as a last resort; it breaks when the app's code changes. When the outline itself offers one (at its end: elements with no name, or several with the same name), use that.
 
-Add `"exact": true` when the name is part of another name on the page (`Create` vs `Create project`, `Save` vs `Save as…`). A target must match exactly one visible element; the probe says when it doesn't.
+Add `"exact": true` when the name is part of another name on the page (`Create` vs `Create project`, `Save` vs `Save as…`). A target must match exactly one visible element; the probe says when it doesn't. A name can hold text the screen doesn't show, for screen readers (a tab showing "Issues 871" can be named `Issues (871)`): the outline shows the name to use. Avoid names with live counts; target those by `css`.
 
 ## Length
 

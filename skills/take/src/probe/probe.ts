@@ -8,6 +8,7 @@ import { perform, performSetup, TakeError } from '../drivers/web/driver.ts';
 import { cursorReader, type Cursor } from '../drivers/web/cursor.ts';
 import type { Box } from '../drivers/web/events.ts';
 import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
+import { installCssHandles } from '../drivers/web/css-handle.ts';
 import { PACING } from '../drivers/web/pacing.ts';
 import { loadTheme } from '../compose/compose.ts';
 import { timeline, type Script } from './script.ts';
@@ -40,6 +41,7 @@ export async function targetHandles(page: Page, outline: string): Promise<string
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   const shared = [...counts].filter(([, n]) => n > 1).map(([k]) => k);
+  await installCssHandles(page);
   const found = await page
     .locator(CONTROLS)
     .evaluateAll(handlesInPage, { shared, vw: vp.width, vh: vp.height })
@@ -53,42 +55,7 @@ export async function targetHandles(page: Page, outline: string): Promise<string
 const CONTROLS = 'a[href], button, input, select, textarea, summary, [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], [role=radio], [role=switch], [role=combobox], [role=searchbox], [role=textbox]';
 
 function handlesInPage(els: Element[], { shared, vw, vh }: { shared: string[]; vw: number; vh: number }) {
-  function uniqueSelector(el: Element): string | null {
-    const one = (sel: string) => {
-      try {
-        return document.querySelectorAll(sel).length === 1;
-      } catch {
-        return false;
-      }
-    };
-    const own = (e: Element): string[] => {
-      const tag = e.tagName.toLowerCase();
-      const out: string[] = [];
-      for (const a of ['data-testid', 'data-test', 'data-qa', 'aria-controls', 'title', 'name'])
-        if (e.getAttribute(a)) out.push(`${tag}[${a}=${JSON.stringify(e.getAttribute(a))}]`);
-      if (e.id && !/\d{3,}|:/.test(e.id)) out.push(`#${CSS.escape(e.id)}`);
-      const classes = [...e.classList].filter((c) => !/^(is-|has-)|\d{4,}/.test(c)).map((c) => `.${CSS.escape(c)}`);
-      for (const c of classes) out.push(c, `${tag}${c}`);
-      for (let i = 0; i < classes.length; i++) for (let j = i + 1; j < classes.length; j++) out.push(`${tag}${classes[i]}${classes[j]}`);
-      return out;
-    };
-    for (const sel of own(el)) if (one(sel)) return sel;
-    let path = el.tagName.toLowerCase() + (el.classList[0] ? `.${CSS.escape(el.classList[0])}` : '');
-    for (let p = el.parentElement, depth = 0; p && p !== document.body && depth < 4; p = p.parentElement, depth++) {
-      for (const sel of own(p)) if (one(sel) && one(`${sel} ${path}`)) return `${sel} ${path}`;
-      path = `${p.tagName.toLowerCase()}${p.classList[0] ? `.${CSS.escape(p.classList[0])}` : ''} > ${path}`;
-    }
-    const nth = (e: Element) => `${e.tagName.toLowerCase()}:nth-of-type(${[...(e.parentElement?.children ?? [])].filter((x) => x.tagName === e.tagName).indexOf(e) + 1})`;
-    let chain = nth(el);
-    for (let p = el.parentElement, depth = 0; p && depth < 6; p = p.parentElement, depth++) {
-      const named = p === document.body ? 'body' : own(p).find(one);
-      if (named && one(`${named} > ${chain}`)) return `${named} > ${chain}`;
-      if (p === document.body) break;
-      chain = `${nth(p)} > ${chain}`;
-    }
-    return null;
-  }
-
+  const uniqueSelector = (globalThis as unknown as { __takeUniqueSelector: (el: Element) => string | null }).__takeUniqueSelector;
   const roleOf = (el: Element) => {
     const r = el.getAttribute('role');
     if (r) return r;

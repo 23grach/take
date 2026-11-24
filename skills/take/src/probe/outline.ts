@@ -40,13 +40,13 @@ export function shortOutline(outline: string, onScreen?: OnScreen): { outline: s
 const SHORT_LABEL = 15;
 
 function shownOn({ text, pieces }: OnScreen): (n: Node) => boolean {
-  const seenText = normal(text);
-  const seenPieces = new Set(pieces.map(normal));
+  const seenText = loose(text);
+  const seenPieces = [...new Set(pieces.map(loose))];
   return (n) => {
     if (n.kind === 'heading') return true;
-    const label = normal(n.label);
-    if (label.length < SHORT_LABEL) return n.kind === 'element' && seenPieces.has(label);
-    return seenText.includes(label.slice(0, 30));
+    const label = loose(n.label);
+    if (normal(n.label).length < SHORT_LABEL) return n.kind === 'element' && !!label && seenPieces.some((p) => p.startsWith(label));
+    return seenText.includes(loose(n.label).slice(0, 24));
   };
 }
 
@@ -133,6 +133,7 @@ function quoteValue(v: string): string {
 
 const short = (s: string) => (s.length > SHORT_LENGTH ? `${s.slice(0, SHORT_LENGTH).trimEnd()}…` : s);
 const normal = (s: string) => s.replace(/[\s⁠]+/g, ' ').trim().toLowerCase();
+const loose = (s: string) => s.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
 
 function keepOnScreen(nodes: Node[], onScreen: (n: Node) => boolean): Node[] {
   const kept = nodes.map((n) => {

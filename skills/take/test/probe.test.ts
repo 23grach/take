@@ -134,6 +134,12 @@ test('on a long page the outline keeps what is on screen and every heading', () 
   assert.equal(r.leftOut, 3);
 });
 
+test('on a long page, a name that adds hidden text to what is shown still counts as on screen', () => {
+  const outline = ['- navigation "Repository":', '  - link "Code"', '  - link "Issues (871)"', '  - link "Security and quality (10)"', '- link "Far below"'].join('\n');
+  const r = shortOutline(outline, { text: 'Code Issues 871 Security and quality 10', pieces: ['Code', 'Issues\n871 (871)', 'Security and quality\n10 (10)'] });
+  assert.equal(r.outline, ['- navigation "Repository":', '  - link "Code"', '  - link "Issues (871)"', '  - link "Security and quality (10)"'].join('\n'));
+});
+
 test('probe clears only its own files from --out, never the take next to them', async () => {
   const { clearProbe } = await import('../src/probe/probe.ts');
   const dir = path.join(tmp, 'own-folder');
