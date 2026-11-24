@@ -59,7 +59,7 @@ Every turn re-reads the whole conversation, so turns are what a rehearsal costs.
    - `is covered by …` — something stays on top: a cookie banner or welcome pop-up goes in `setup`; a dialog the story opened needs a step that closes it.
    - `stayed disabled` — a step before it didn't do what the app needs (a required field is still empty).
    - `the app threw an error` / `opening the app: …` — the app itself is broken or not running; tell the user, don't work around it. (Errors from other sites' scripts on the page, like a bot-check widget or an ad, are already ignored.)
-   - `⚠ nothing scrolled` / `⚠ the page didn't scroll` under a step — the step passed but may not do what you meant; look at its picture.
+   - `⚠ nothing scrolled` / `⚠ the page didn't scroll` / `⚠ no text field had focus` under a step — the step passed but may not do what you meant; look at its picture. A ✓ only means the step ran and its wait held: on canvases and pages that react to every key, check each step's picture does what the scenario says.
    - `⚠ the site refused Take's hidden browser` — Take opened it in a visible window instead, by itself. Tell the user a browser window will appear while you probe and record, and not to click in it or close it.
    - `answered with error 403` even so, or the user says the sign-in captcha keeps coming back or tabs keep flashing in the sign-in window — the site is challenging Take's browser. Do **not** type secrets or solve the captcha yourself. Ask the user to clear the challenge **once** in the `take login` window (they sign in / pass the check, then close it), then probe again with `target.login`. If that still fails after one clear try, say so plainly and stop — don't attach to their everyday Chrome or control their Mac.
 

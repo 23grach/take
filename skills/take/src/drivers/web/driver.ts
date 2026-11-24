@@ -497,6 +497,8 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
         if (s.target) log.target = await click(await find(s.target), s.target);
         if (phone && watch) await keyboardUp(s.target);
         if (s.target) await wait(PACING.settle);
+        if ((await page.evaluate(focusedField).catch(() => null)) === null)
+          log.note = 'no text field had focus when typing started, so the keys went to the page itself (an app may take them as shortcuts): check the picture, and click or open the field first';
         const f0 = clock.frame;
         const chars = [...s.text].length;
         let cps = s.cps;

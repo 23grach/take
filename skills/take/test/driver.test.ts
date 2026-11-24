@@ -75,6 +75,13 @@ test('a scroll lasts its own length even when a slow page makes the clock skip f
   assert.equal(await page.evaluate(() => scrollY), 300);
 });
 
+test('typing with no text field focused says so', async () => {
+  const take = takeOf([{ do: 'type', text: 'ab', cps: 30 }]);
+  const page = await open(take);
+  const log = await perform(page, take, fastClock(), { watch: false });
+  assert.match(log.steps[0].note ?? '', /no text field had focus/);
+});
+
 test('a step given a length lasts exactly that long, and typing fits into it', async () => {
   const take = takeOf([
     { ...openDialog, ms: 3000 },
