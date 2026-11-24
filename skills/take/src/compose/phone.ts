@@ -16,12 +16,51 @@ export interface PhoneTheme {
   statusBar: { time: string; font: string; wifi: string; battery: string };
   ink: InkRule;
   edge: { blur: number; depth: number; steps: number };
-  safari: { morph: number; collapseAfter: number; blur: number; font: string; pillFont: string; pillPadding: number; pillWidth: number };
+  safari: { morph: number; collapseAfter: number; font: string; pillFont: string; pillPadding: number; pillWidth: number };
+  glass: GlassLook;
   keyboard: { pressFrames: number; lead: number; blur: number; letterFont: string; labelFont: string; suggestionFont: string; calloutFont: string };
   icons: Record<string, string>;
   light: Colors;
   dark: Colors;
   finger: { size: number; lead: number; lift: number; from: number; liftTo: number; fill: string; border: string; shadow: string };
+}
+
+interface GlassTone {
+  gain: number;
+  lift: number;
+  chroma: number;
+  over: string;
+  fill: string[];
+  ring: { width: number; top: string; side: string };
+  specular: { width: number; color: string; reach: number };
+}
+
+interface GlassLook {
+  blur: number;
+  bevel: number;
+  curve: number;
+  light: GlassTone;
+  dark: GlassTone;
+}
+
+const channels = (color: string): number[] => {
+  const hex = /^#([0-9a-f]{6})$/i.exec(color);
+  if (hex) return [0, 2, 4].map((i) => parseInt(hex[1].slice(i, i + 2), 16)).concat(1);
+  const [r, g, b, a = '1'] = color.match(/[\d.]+/g) ?? [];
+  return [Number(r), Number(g), Number(b), Number(a)];
+};
+const grey = (color: string) => { const [r, g, b] = channels(color); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const alpha = (color: string) => channels(color)[3];
+
+export function glassTone({ gain, lift, chroma, over, fill, ring, specular }: GlassTone) {
+  const stops = fill.map((stop) => [parseFloat(stop.slice(stop.lastIndexOf(' ') + 1)) / 100, grey(stop.slice(0, stop.lastIndexOf(' ')))]);
+  const seen = gain * grey(over) + lift * 255;
+  return {
+    gain, lift, chroma,
+    glow: stops.map(([at, g]) => [at, g - seen]),
+    ring: { width: ring.width, top: alpha(ring.top), side: alpha(ring.side) },
+    specular: { width: specular.width, strength: alpha(specular.color), reach: specular.reach },
+  };
 }
 
 export interface PhoneLayout {
@@ -328,10 +367,8 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   .levels svg { display: block; }
   .icon { position: absolute; display: block; line-height: 0; font-style: normal; }
   .icon svg { display: block; }
-  .glass { position: absolute; border-radius: 24px; backdrop-filter: blur(${safari.blur}px); background: var(--glass-fill);
-    box-shadow: 0 2px 40px var(--glass-shadow), 1.25px 0 0 -0.75px var(--glass-ring), -1.25px 0 0 -0.75px var(--glass-ring), 0 0 0 0.5px var(--glass-ring-outer), 0 8px 15px var(--glass-drop); }
-  .glass::after { content: ""; position: absolute; inset: 0; border-radius: inherit;
-    box-shadow: inset 0 0 0 0.5px var(--glass-border), inset 0 0.5px 0 var(--glass-inset-dark), inset 0 1.5px 1px var(--glass-inset-light); }
+  .glass { position: absolute; border-radius: 24px; box-shadow: 0 6px 10px -3px var(--glass-shadow); }
+  .lens { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
   .button { width: 48px; height: 48px; top: ${sh - PHONE.safariBar}px; color: var(--glyph); }
   #back { left: 34px; } #tabs { left: 320px; }
   .glass > .icon { top: 50%; translate: 0 -50%; }
@@ -491,6 +528,112 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
       + 'H' + (L + r) + 'Q' + L + ' ' + Hh + ' ' + L + ' ' + (Hh - r) + 'V' + lift
       + 'C' + L + ' ' + (T + neck * 0.45) + ' 0 ' + (T + neck * 0.55) + ' 0 ' + T + 'V' + top + 'Q0 0 ' + top + ' 0Z';
   };
+  const glassLook = ${JSON.stringify({ ...phone.glass, light: glassTone(phone.glass.light), dark: glassTone(phone.glass.dark) })};
+  const glasses = [back, tabs, field, $('accessory')].map((el) => {
+    const canvas = document.createElement('canvas');
+    canvas.className = 'lens';
+    el.prepend(canvas);
+    return { el, canvas };
+  });
+  const surface = () => document.createElement('canvas').getContext('2d', { willReadFrequently: true });
+  const [under, soft] = [surface(), surface()];
+  const sized = (ctx, w, h) => {
+    if (ctx.canvas.width !== w || ctx.canvas.height !== h) Object.assign(ctx.canvas, { width: w, height: h });
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    return ctx;
+  };
+  const backdrop = (x, y, w, h, res, view) => {
+    const ctx = sized(under, Math.ceil(w * res), Math.ceil(h * res));
+    ctx.setTransform(res, 0, 0, res, -x * res, -y * res);
+    const top = ${PHONE.statusBar} - view.lift;
+    ctx.drawImage(shot, 0, top, ${page[0]}, ${page[1]});
+    if (view.fade > 0) {
+      ctx.globalAlpha = view.fade;
+      ctx.drawImage(fade, 0, top, ${page[0]}, ${page[1]});
+    }
+    if (view.caret && view.caret.opacity > 0) {
+      ctx.globalAlpha = view.caret.opacity;
+      ctx.fillStyle = view.caret.color;
+      ctx.fillRect(view.caret.x, top + view.caret.y, ${theme.caret.width}, view.caret.height);
+    }
+    ctx.globalAlpha = 1;
+    const out = sized(soft, under.canvas.width, under.canvas.height);
+    out.filter = 'blur(' + glassLook.blur * res + 'px)';
+    out.drawImage(under.canvas, 0, 0);
+    out.filter = 'none';
+    return out.getImageData(0, 0, out.canvas.width, out.canvas.height);
+  };
+  const glowAt = (glow, y) => {
+    const next = glow.findIndex(([at]) => at >= y);
+    if (next <= 0) return next === 0 ? glow[0][1] : glow.at(-1)[1];
+    const [[a, ga], [b, gb]] = [glow[next - 1], glow[next]];
+    return ga + (gb - ga) * (y - a) / (b - a);
+  };
+  const edgeAt = (look, y) => {
+    const { ring, specular: spec } = look;
+    const fade = y < spec.reach ? 1 - y / spec.reach : y > 1 - spec.reach ? (y - 1 + spec.reach) / spec.reach : 0;
+    return { glow: glowAt(look.glow, y), ring: ring.top + (ring.side - ring.top) * (1 - Math.abs(2 * y - 1)), shine: spec.strength * fade, ringWidth: ring.width, shineWidth: spec.width };
+  };
+  const toneAt = (dark, y) => {
+    const [l, d] = [edgeAt(glassLook.light, y), edgeAt(glassLook.dark, y)];
+    return Object.fromEntries(Object.keys(l).map((name) => [name, lerp(l[name], d[name], dark)]));
+  };
+  const lens = ({ el, canvas }, view) => {
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const box = el.getBoundingClientRect(), frame = screen.getBoundingClientRect();
+    if (!w || !h || !box.width || getComputedStyle(el).opacity === '0' || getComputedStyle(el).visibility === 'hidden') return;
+    const grow = box.width / (w * k);
+    const [x0, y0] = [(box.left - frame.left) / k, (box.top - frame.top) / k];
+    const res = k * devicePixelRatio, local = res * grow;
+    const [cw, ch] = [Math.max(1, Math.round(w * local)), Math.max(1, Math.round(h * local))];
+    if (canvas.width !== cw || canvas.height !== ch) Object.assign(canvas, { width: cw, height: ch });
+    const r = Math.min(w / 2, h / 2, parseFloat(getComputedStyle(el).borderRadius) || 0);
+    const bevel = glassLook.bevel * Math.min(w, h) / 2;
+    const reach = 3 * glassLook.blur * grow;
+    const [ax, ay] = [Math.max(0, x0 - reach), Math.max(0, y0 - reach)];
+    const [bx, by] = [Math.min(${sw}, x0 + w * grow + reach), Math.min(${sh}, y0 + h * grow + reach)];
+    const img = backdrop(ax, ay, bx - ax, by - ay, res, view), data = img.data, [iw, ih] = [img.width, img.height];
+    const color = [0, 0, 0];
+    const sample = (sx, sy) => {
+      const fx = Math.min(iw - 1.001, Math.max(0, (sx - ax) * res - 0.5)), fy = Math.min(ih - 1.001, Math.max(0, (sy - ay) * res - 0.5));
+      const ix = fx | 0, iy = fy | 0, tx = fx - ix, ty = fy - iy;
+      const p = 4 * (iy * iw + ix), q = p + 4 * iw;
+      for (let c = 0; c < 3; c++) color[c] = (data[p + c] * (1 - tx) + data[p + 4 + c] * tx) * (1 - ty) + (data[q + c] * (1 - tx) + data[q + 4 + c] * tx) * ty;
+    };
+    const [gain, raise, chroma] = ['gain', 'lift', 'chroma'].map((name) => lerp(glassLook.light[name], glassLook.dark[name], view.dark));
+    const rows = Array.from({ length: ch }, (_, j) => toneAt(view.dark, (j + 0.5) / ch));
+    const half = 0.5 / local;
+    const band = (depth, from, to) => Math.max(0, Math.min(to, depth + half) - Math.max(from, depth - half)) * local;
+    const pixels = new ImageData(cw, ch), px = pixels.data;
+    const [hw, hh] = [w / 2, h / 2];
+    for (let j = 0; j < ch; j++) {
+      for (let i = 0; i < cw; i++) {
+        const u = (i + 0.5) / local - hw, v = (j + 0.5) / local - hh;
+        const qx = Math.abs(u) - (hw - r), qy = Math.abs(v) - (hh - r);
+        const ox = Math.max(qx, 0), oy = Math.max(qy, 0), outer = Math.hypot(ox, oy);
+        const depth = r - outer - Math.min(Math.max(qx, qy), 0);
+        const cover = clamp(0.5 + depth * local);
+        if (cover <= 0) continue;
+        let nx = 0, ny = 0;
+        if (outer > 0) [nx, ny] = [(ox / outer) * Math.sign(u), (oy / outer) * Math.sign(v)];
+        else if (qx > qy) nx = Math.sign(u) || 1;
+        else ny = Math.sign(v) || 1;
+        const inner = Math.max(0, depth), shift = inner < bevel ? inner - bevel * (inner / bevel) ** glassLook.curve : 0;
+        sample(x0 + (u + hw + nx * shift) * grow, y0 + (v + hh + ny * shift) * grow);
+        const luma = 0.2126 * color[0] + 0.7152 * color[1] + 0.0722 * color[2];
+        const row = rows[j], bright = gain * luma + raise * 255 + row.glow;
+        const ring = row.ring * band(depth, 0, row.ringWidth), shine = row.shine * band(depth, row.ringWidth, row.ringWidth + row.shineWidth);
+        const o = 4 * (j * cw + i);
+        for (let c = 0; c < 3; c++) {
+          const value = bright + chroma * (color[c] - luma);
+          px[o + c] = (value + (255 - value) * shine) * (1 - ring);
+        }
+        px[o + 3] = 255 * cover;
+      }
+    }
+    canvas.getContext('2d').putImageData(pixels, 0, 0);
+  };
   window.render = async ({ footage, caret: c, finger: t, dark, lift, bar, keyboard: kb }) => {
     const s = ${band / PHONE.statusBar} * devicePixelRatio;
     await Promise.all([show(shot, footage.src), paint(fit(band), footage.band, s)]);
@@ -541,6 +684,8 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
     }
     finger.style.visibility = t ? 'visible' : 'hidden';
     if (t) Object.assign(finger.style, { opacity: t.opacity, transform: 'translate(' + t.x + 'px,' + (t.y - lift) + 'px) scale(' + t.scale + ')' });
+    const view = { lift, dark, fade: footage.fade ? footage.fade.opacity : 0, caret: c };
+    for (const glass of glasses) lens(glass, view);
   };
 </script>`;
 }
