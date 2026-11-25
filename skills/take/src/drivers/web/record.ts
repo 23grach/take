@@ -11,6 +11,8 @@ import { realtimeClock, wallPacedClock } from './clock.ts';
 import { hideCaret } from './caret.ts';
 import type { EventLog } from './events.ts';
 import { catchSound, type SoundCatcher } from './sound.ts';
+import { isolate } from './focus.ts';
+import { focusLook } from '../../compose/compose.ts';
 
 const WARMUP_MS = 1000;
 const SETTLE_AFTER_SETUP_MS = 600;
@@ -97,12 +99,16 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
     };
     if (await performSetup(page, take, studioMode ? wallPacedClock(drawn) : realtimeClock())) await recorder.warmup(SETTLE_AFTER_SETUP_MS);
     await untilReady(page, take.ready, drawn);
+    const look = take.target.focus && focusLook(take.theme);
+    const focus = look && (await isolate(page, take.target.focus!, take.target.viewport, look));
+    if (focus) await recorder.crop?.(focus, look.light.size[0]);
     await sound?.start();
     const t0 = performance.now();
     let reported = Promise.resolve();
     const saved = recorder.saved;
     const events = await perform(page, take, recorder.clock, {
       ...(studioMode ? { unfilmed: wallPacedClock(drawn) } : {}),
+      ...(focus ? { focus } : {}),
       onFrame: onFrame && saved && ((log) => {
         const n = log.frames;
         reported = reported.then(() => saved(n - 1)).then(() => onFrame(log, n));
@@ -112,7 +118,7 @@ async function recordInto(take: Take, { mode, out, headed, onFrame, signal, unth
     const info = await recorder.finish();
     const warnings = (await sound?.finish(out)) ?? [];
     if (recorder.videos?.length) events.videos = recorder.videos;
-    const capture: CaptureInfo = { version: 0, ...info, size, theme: take.theme, ...(take.target.appearance ? { appearance: take.target.appearance } : {}), renderSeconds: +((performance.now() - t0) / 1000).toFixed(2), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
+    const capture: CaptureInfo = { version: 0, ...info, size: info.shows && look ? look.light.size : size, theme: take.theme, ...(take.target.appearance ? { appearance: take.target.appearance } : {}), renderSeconds: +((performance.now() - t0) / 1000).toFixed(2), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
     fs.writeFileSync(path.join(out, 'capture.json'), JSON.stringify(capture, null, 1));
     fs.writeFileSync(path.join(out, 'events.json'), JSON.stringify(events));
     return { capture, events, warnings };

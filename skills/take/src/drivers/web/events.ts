@@ -63,4 +63,5 @@ export interface EventLog {
   ends?: [number, boolean][];
   appearances?: [number, Appearance][];
   noCursor?: true;
+  focus?: Box;
 }

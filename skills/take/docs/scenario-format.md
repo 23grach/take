@@ -34,6 +34,7 @@ Only **Title**, **App** and **Steps** are needed. For anything else left out, th
 | `App:` | — | Where the app runs, and how to start it if it isn't running. The page the video starts on. |
 | `Address:` | the app's domain, or empty for a local app | What the window's address bar shows, e.g. `boards.app`. Write the product's real domain; the local address the app runs on is never shown. |
 | `Size:` | `desktop` | `desktop` is a 1440×900 browser window on a 2560×1440 video. `phone` is the site's mobile layout on an iPhone with Safari's bar and keyboard, in the middle of the same video, tapped and swiped by a finger. Other sizes aren't supported. |
+| `Only:` | the whole page | One component to film instead of the page, e.g. `the heart in the footer, with room above for the hearts it sends`. The video is just that component, enlarged in the middle of a white 1920×1080 picture (black in dark mode), with no browser window. Say what pops or flies out of it, so the picture leaves room. |
 | `Mode:` | the site's own | `light` or `dark`: the site is shown in that mode (if it has one), in a light window on a light grey background or a dark window on a dark navy one. Left out, the site opens as usual and the window matches it. |
 | `Loop:` | `yes` | `yes`: the end dissolves back into the start so the video loops seamlessly. `no`: it ends on the last step, for videos that play once. |
 | `Theme:` | `default` | The look: background, window, cursor. |
@@ -51,6 +52,7 @@ One numbered line per thing the viewer sees happen. Name what's on screen in quo
 | Write | The video shows |
 |---|---|
 | `Click "New project"` | The cursor travels to it and clicks. |
+| `Click the heart 12 times quickly` | The cursor clicks it that many times in a row, about 8 clicks a second (up to 20). `faster and faster` or `over 4 s` makes the clicks speed up. |
 | `Hover "Share"` | The cursor travels to it and rests, to show a tooltip or hover state. |
 | `Type "Moodboard" into Name` | The cursor clicks the field, then the text appears letter by letter. Add `slowly` or `quickly` to change the pace. |
 | `Press Enter` | A key, or a shortcut like `Cmd+K`. |

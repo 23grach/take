@@ -39,6 +39,8 @@ Rules for writing `take.json` ([take-format.md](take-format.md)) from a scenario
 | `"Saved" appears`, `the new card appears` | `waitFor` on the step before it (preferred), or a `wait` step if nothing triggers it directly |
 | `Pause 1 s`, `show it for 2 s` | `hold` |
 | `Lock the middle colour` (an icon that only appears on hover, with no name) | `hover` the column, probe, read the icon's point off that step's picture, then `click` with `"target": [x, y]`. |
+| `Click the heart 12 times quickly` / `mash the like button` | one `click` with `"clicks": 12` (up to 20): about 8 clicks a second, the way a person mashes a button. Add `ms` to make them speed up (`"clicks": 16, "ms": 4000`: from about 0.4 s apart to 8 a second). Separate `click` steps can't be closer than about 0.5 s, so a site that reacts to fast clicking (a burst after 10 clicks in 2 s) won't see them as fast. |
+| `Only the heart` / `Just the date picker, no browser` | `target.focus`: `on` the element (one match), `room` for what it throws out. See [take-format.md](take-format.md). |
 | `Select the word "started"` (in text or a code editor) | `click` the word with `"clicks": 2`; then `type` replaces it. A triple-click (`3`) selects the whole line. |
 | `Change Name to "Moodboard"` (a field that already has text) | `click` the field, `press` `Meta+A` (select all), then `type` without a target: typing replaces the selection. A `type` with a target adds to what's there. |
 | `slowly` / `quickly` on typing | `cps` 8 / 22 (normal 14). On a phone, typing is thumbs on glass: 5 / 11 (normal 7, the default when a phone's `type` step gives no `cps`) |

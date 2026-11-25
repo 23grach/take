@@ -251,7 +251,7 @@ test('a double-click selects a word; a scroll with nothing to move says so', asy
     { do: 'scroll', by: [0, 300] },
   ] });
   assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
-  assert.ok(!validateTake({ version: 0, title: 'D', target: { kind: 'web', url }, steps: [{ do: 'click', target: { css: 'p' }, clicks: 4 }] }).ok);
+  assert.ok(!validateTake({ version: 0, title: 'D', target: { kind: 'web', url }, steps: [{ do: 'click', target: { css: 'p' }, clicks: 21 }] }).ok);
   const { browser, page } = await openTake(r.take);
   try {
     const log = await perform(page, r.take, realtimeClock());

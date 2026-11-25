@@ -26,20 +26,22 @@ export async function storyboard(result: ProbeResult, dir: string, out: string, 
 
 export function storyboardHtml(result: ProbeResult, dir: string, themeName: string): string {
   const { theme, dir: themeDir } = loadTheme(themeName);
-  const k = W / result.viewport[0];
-  const H = Math.round(result.viewport[1] * k);
+  const view = result.focus ?? { x: 0, y: 0, width: result.viewport[0], height: result.viewport[1] };
+  const k = W / view.width;
+  const H = Math.round(view.height * k);
+  const [ox, oy] = [view.x * k, view.y * k];
   const data = (file: string, type: string) => `data:${type};base64,${fs.readFileSync(file).toString('base64')}`;
   const art = cursorArt(theme, themeDir);
   const box = (b: { x: number; y: number; width: number; height: number }, cls: string) =>
-    `<div class="${cls}" style="left:${b.x * k - 3}px;top:${b.y * k - 3}px;width:${b.width * k + 6}px;height:${b.height * k + 6}px"></div>`;
+    `<div class="${cls}" style="left:${b.x * k - ox - 3}px;top:${b.y * k - oy - 3}px;width:${b.width * k + 6}px;height:${b.height * k + 6}px"></div>`;
 
   const shots = result.shots[1] && !result.shots[1].error && /^Hold /.test(result.shots[1].label) ? result.shots.slice(1) : result.shots;
   const cards = shots.map((s) => {
-    const c = typeof s.cursor === 'object' ? { src: s.cursor.image, hotspot: s.cursor.hotspot ?? [0, 0] } : s.cursor === 'none' ? null : art[s.cursor] ?? art.default;
+    const c: { src: string; hotspot: [number, number]; size?: [number, number] } | null = typeof s.cursor === 'object' ? { src: s.cursor.image, hotspot: s.cursor.hotspot ?? [0, 0] } : s.cursor === 'none' ? null : art[s.cursor] ?? art.default;
     const touched = s.step > 0 && !/^Hold /.test(s.label);
     const cursor = result.phone
-      ? touched ? `<div class="finger" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px"></div>` : ''
-      : c && !result.noCursor ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k}px;top:${s.pointer[1] * k}px;transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
+      ? touched ? `<div class="finger" style="left:${s.pointer[0] * k - ox}px;top:${s.pointer[1] * k - oy}px"></div>` : ''
+      : c && !result.noCursor ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k - ox}px;top:${s.pointer[1] * k - oy}px;${c.size ? `width:${c.size[0]}px;height:${c.size[1]}px;` : ''}transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
     return `<figure class="${s.error ? 'failed' : ''}">
       <div class="shot"><img src="${data(path.join(dir, s.file), 'image/png')}">${s.target ? box(s.target, 'target') : ''}${s.waitedFor ? box(s.waitedFor, 'waited') : ''}${cursor}</div>
       <figcaption><b>${s.step === 0 ? 'Start' : s.step}</b><span>${esc(s.label)}${s.error ? `<em>${esc(s.error)}</em>` : ''}</span><i>${s.at.toFixed(1)} s</i></figcaption>
@@ -56,7 +58,7 @@ export function storyboardHtml(result: ProbeResult, dir: string, themeName: stri
     .legend { color: #777; font-size: 12px; margin: -10px 0 16px; } .legend span { display: inline-block; width: 14px; height: 10px; vertical-align: -1px; margin: 0 4px 0 12px; border-radius: 3px; }
     .grid { display: grid; grid-template-columns: repeat(${COLS}, ${W}px); gap: 22px 20px; }
     figure { margin: 0; } .shot { position: relative; width: ${W}px; height: ${H}px; overflow: hidden; border-radius: 6px; box-shadow: 0 0 0 1px #ddd; background: #fff; }
-    .shot > img:first-child { width: ${W}px; height: ${H}px; display: block; }
+    .shot > img:first-child { position: absolute; left: ${-ox}px; top: ${-oy}px; width: ${result.viewport[0] * k}px; height: ${result.viewport[1] * k}px; display: block; }
     .target, .waited { position: absolute; border-radius: 6px; box-sizing: border-box; }
     .target { border: 2.5px solid #2f6bff; } .waited { border: 2px dashed #1a9f5b; }
     .cursor { position: absolute; transform-origin: 0 0; filter: drop-shadow(0 1px 1px rgb(0 0 0 / .3)); }

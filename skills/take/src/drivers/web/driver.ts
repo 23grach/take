@@ -5,7 +5,7 @@ import type { Clock } from './clock.ts';
 import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
 import { pageTop } from './page-top.ts';
 import { botCheck, botCheckMessage } from './bot-check.ts';
-import { PACING, dragMs, ease, frames, scrollMs, spring, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
+import { PACING, clickGaps, dragMs, ease, frames, scrollMs, spring, startPoint, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, describeMatches, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
 import { caretAt, type Caret } from './caret.ts';
@@ -66,6 +66,7 @@ export interface PerformOptions {
   onFrame?: (log: EventLog) => void;
   watch?: boolean;
   unfilmed?: Clock;
+  focus?: Box;
 }
 
 export async function performSetup(page: Page, take: Take, clock: Clock): Promise<boolean> {
@@ -79,12 +80,12 @@ export async function performSetup(page: Page, take: Take, clock: Clock): Promis
   return true;
 }
 
-export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true, unfilmed }: PerformOptions = {}): Promise<EventLog> {
+export async function perform(page: Page, take: Take, clock: Clock, { onStep, onFrame, watch = true, unfilmed, focus }: PerformOptions = {}): Promise<EventLog> {
   const [vw, vh] = take.target.viewport;
   const phone = take.target.device === 'phone';
   const glass = phone ? await page.context().newCDPSession(page) : undefined;
   let touching = false;
-  let pointer: Point = [Math.round(vw * PACING.start[0]), Math.round(vh * PACING.start[1])];
+  let pointer: Point = startPoint([vw, vh], focus);
   const path: Point[] = [];
   const events: Event[] = [];
   const steps: StepLog[] = [];
@@ -123,6 +124,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     ...(phone ? { keyboard, tops, ends } : {}),
     ...(take.steps.some((s) => s.do === 'appearance') ? { appearances } : {}),
     ...(showsNoCursor(take) ? { noCursor: true as const } : {}),
+    ...(focus ? { focus } : {}),
   };
   let current = 0;
   let waited = 0;
@@ -362,10 +364,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
 
   const pressFor = (clicks: number) => (phone ? PACING.tap : clicks > 1 ? PACING.multiClickPress : PACING.press);
 
-  async function click(loc: Locator, t: Target, clicks = 1): Promise<Box> {
+  async function click(loc: Locator, t: Target, clicks = 1, left?: () => number): Promise<Box> {
     const box = await reach(loc, t);
+    const gaps = clickGaps(clicks, left?.());
     for (let n = 1; n <= clicks; n++) {
-      if (n > 1) await wait(PACING.multiClickGap);
+      if (n > 1) await wait(gaps[n - 2]);
       await press(n);
       await wait(pressFor(clicks));
       await release(n);
@@ -374,11 +377,12 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     return box;
   }
 
-  async function clickAt(point: Point, clicks = 1): Promise<undefined> {
+  async function clickAt(point: Point, clicks = 1, left?: () => number): Promise<undefined> {
     await moveTo(async () => point);
     await wait(PACING.settle);
+    const gaps = clickGaps(clicks, left?.());
     for (let n = 1; n <= clicks; n++) {
-      if (n > 1) await wait(PACING.multiClickGap);
+      if (n > 1) await wait(gaps[n - 2]);
       await press(n);
       await wait(pressFor(clicks));
       await release(n);
@@ -518,9 +522,11 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
   async function run(s: Step, log: StepLog) {
     const length = s.do === 'hold' || s.ms === undefined ? undefined : frames(s.ms);
     switch (s.do) {
-      case 'click':
-        log.target = Array.isArray(s.target) ? await clickAt(s.target, s.clicks) : await click(await find(s.target), s.target, s.clicks);
+      case 'click': {
+        const left = length === undefined ? undefined : () => ((length - frames(PACING.gap) - since(log.start)) * 1000) / clock.fps;
+        log.target = Array.isArray(s.target) ? await clickAt(s.target, s.clicks, left) : await click(await find(s.target), s.target, s.clicks, left);
         break;
+      }
       case 'hover':
         if (Array.isArray(s.target)) {
           const point = s.target;

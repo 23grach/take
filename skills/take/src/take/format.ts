@@ -21,7 +21,7 @@ interface Common {
 
 export type Step = Common &
   (
-    | { do: 'click'; target: Spot; clicks?: 2 | 3 }
+    | { do: 'click'; target: Spot; clicks?: number }
     | { do: 'hover'; target: Spot }
     | { do: 'drag'; from: Spot; to: Spot }
     | { do: 'type'; target?: Target; text: string; cps: number }
@@ -32,6 +32,8 @@ export type Step = Common &
     | { do: 'hold'; ms: number }
     | { do: 'appearance'; to: Appearance }
   );
+
+export const MAX_CLICKS = 20;
 
 export const DEVICES = ['desktop', 'phone'] as const;
 export type Device = (typeof DEVICES)[number];
@@ -48,6 +50,13 @@ export const PHONE = {
 };
 export const phonePage = (): [number, number] => [PHONE.screen[0], PHONE.screen[1] - PHONE.statusBar];
 
+export type Room = [top: number, right: number, bottom: number, left: number];
+
+export interface Focus {
+  on: Target;
+  room: Room;
+}
+
 export interface WebTarget {
   kind: 'web';
   device: Device;
@@ -57,6 +66,7 @@ export interface WebTarget {
   scale: 1 | 1.5 | 2;
   login?: string;
   appearance?: Appearance;
+  focus?: Focus;
 }
 
 export function isLocalUrl(url: string): boolean {
@@ -114,6 +124,7 @@ export const DEFAULTS = {
   sound: true,
   cps: { desktop: 14, phone: 7 } satisfies Record<Device, number>,
   timeout: 10_000,
+  room: 48,
 };
 
 export type Result = { ok: true; take: Take } | { ok: false; errors: string[] };
@@ -228,7 +239,8 @@ export function validateTake(input: unknown): Result {
         onlyKeys(v, path, [...common, 'target', ...(action === 'click' ? ['clicks'] : [])]);
         if (!('target' in v)) fail(path, `missing "target" (what to ${action})`);
         else spot(v.target, `${path}.target`);
-        if ('clicks' in v && v.clicks !== 2 && v.clicks !== 3) fail(`${path}.clicks`, `must be 2 (double-click: selects a word) or 3 (triple-click: selects a line), got ${show(v.clicks)}`);
+        if ('clicks' in v && !(Number.isInteger(v.clicks) && (v.clicks as number) >= 2 && (v.clicks as number) <= MAX_CLICKS))
+          fail(`${path}.clicks`, `must be a whole number from 2 to ${MAX_CLICKS}: 2 double-clicks (selects a word), 3 triple-clicks (selects a line), more clicks that many times in quick succession, got ${show(v.clicks)}`);
         break;
       case 'drag':
         onlyKeys(v, path, [...common, 'from', 'to']);
@@ -294,7 +306,7 @@ export function validateTake(input: unknown): Result {
   if (!isObj(input.target)) fail('target', `must be an object such as { "kind": "web", "url": "http://localhost:3000" }, got ${show(input.target)}`);
   else {
     const t = input.target;
-    onlyKeys(t, 'target', ['kind', 'device', 'url', 'address', 'viewport', 'scale', 'login', 'appearance']);
+    onlyKeys(t, 'target', ['kind', 'device', 'url', 'address', 'viewport', 'scale', 'login', 'appearance', 'focus']);
     const device = t.device ?? 'desktop';
     if (!DEVICES.includes(device as Device)) {
       const near = typeof device === 'string' ? closest(device, DEVICES) : undefined;
@@ -319,6 +331,19 @@ export function validateTake(input: unknown): Result {
     const appearance = t.appearance;
     if (appearance !== undefined && !APPEARANCES.includes(appearance as Appearance))
       fail('target.appearance', `must be ${APPEARANCES.map((a) => `"${a}"`).join(' or ')}, or left out to follow the site, got ${show(appearance)}`);
+    let focus: Focus | undefined;
+    if ('focus' in t) {
+      const f = t.focus;
+      if (phone) fail('target.focus', 'filming one component works on desktop only; leave "focus" out of a phone take');
+      if (!isObj(f) || !('on' in f)) fail('target.focus', `must be { "on": target } with the element to film, e.g. { "on": { "role": "button", "name": "Like" } }, got ${show(f)}`);
+      else {
+        onlyKeys(f, 'target.focus', ['on', 'room']);
+        const on = target(f.on, 'target.focus.on');
+        const room = roomOf(f.room ?? DEFAULTS.room);
+        if (!room) fail('target.focus.room', `must be the space around the element in page pixels: one number, [top and bottom, sides] or [top, right, bottom, left], e.g. [160, 120, 40, 120], got ${show(f.room)}`);
+        if (on && room) focus = { on, room };
+      }
+    }
     web = {
       kind: 'web',
       device: phone ? 'phone' : 'desktop',
@@ -328,6 +353,7 @@ export function validateTake(input: unknown): Result {
       scale: scale as 1 | 1.5 | 2,
       ...(typeof login === 'string' ? { login } : {}),
       ...(appearance !== undefined ? { appearance: appearance as Appearance } : {}),
+      ...(focus ? { focus } : {}),
     };
   }
 
@@ -353,6 +379,8 @@ export function validateTake(input: unknown): Result {
         if (s.do === 'hover') fail(`${name}[${i}].do`, 'a phone has no hover: tap the element ("click") or leave the step out');
         if (s.do === 'appearance' && name === 'steps') fail(`${name}[${i}].do`, 'switching light and dark mid-video works on desktop only for now; on a phone, set target.appearance for the whole video');
       });
+  if (web?.focus)
+    steps.forEach((s, i) => s.do === 'scroll' && fail(`steps[${i}].do`, 'a component video keeps the camera still on the component, and scrolling would move it out of the picture; leave the scroll out (Take scrolls the component into view before filming)'));
   setup.forEach((s, i) => s.do === 'appearance' && fail(`setup[${i}].do`, 'setup isn\'t filmed, so a switch there only changes how the video starts: set target.appearance instead'));
 
   if (web && Array.isArray(web.viewport)) {
@@ -384,6 +412,15 @@ export function validateTake(input: unknown): Result {
       sound: sound as boolean,
     },
   };
+}
+
+function roomOf(v: unknown): Room | undefined {
+  const ok = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+  if (ok(v)) return [v, v, v, v];
+  if (!Array.isArray(v) || !v.every(ok)) return undefined;
+  if (v.length === 2) return [v[0], v[1], v[0], v[1]];
+  if (v.length === 4) return v as Room;
+  return undefined;
 }
 
 const KEY_NAMES = new Set([

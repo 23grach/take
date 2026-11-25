@@ -1,3 +1,4 @@
+import type { Box } from './events.ts';
 export const PACING = {
   fps: 60,
   gap: 450,
@@ -74,4 +75,20 @@ export function typingSchedule(text: string, cps: number, fps = PACING.fps): num
     out.push(Math.max(out[out.length - 1] + 1, Math.round(t)));
   }
   return out;
+}
+
+export function startPoint([vw, vh]: [number, number], focus?: Box): [number, number] {
+  const { x, y, width, height } = focus ?? { x: 0, y: 0, width: vw, height: vh };
+  return [Math.round(x + width * PACING.start[0]), Math.round(y + height * PACING.start[1])];
+}
+
+export function clickGaps(clicks: number, ms?: number): number[] {
+  const n = clicks - 1;
+  const fast: number[] = Array.from({ length: Math.max(0, n) }, () => PACING.multiClickGap);
+  if (ms === undefined || clicks <= 3) return fast;
+  const spare = ms - clicks * PACING.multiClickPress - n * PACING.multiClickGap;
+  if (spare <= 0) return fast;
+  const weights = fast.map((_, i) => ((n - i) / n) ** 2);
+  const total = weights.reduce((a, b) => a + b, 0);
+  return weights.map((w) => PACING.multiClickGap + (spare * w) / total);
 }

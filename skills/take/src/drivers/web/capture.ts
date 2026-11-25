@@ -6,6 +6,7 @@ import { realtimeClock } from './clock.ts';
 import { downloadsDone, giveUpDownloads } from './browser.ts';
 import { stepMedia, watchMedia, type Played } from './media.ts';
 import type { Box } from './events.ts';
+import { onScreen } from './focus.ts';
 import type { SoundCatcher } from './sound.ts';
 import type { Appearance } from '../../take/format.ts';
 
@@ -22,12 +23,14 @@ export interface CaptureInfo {
   visibleWindow?: true;
   theme?: string;
   appearance?: Appearance;
+  shows?: Box;
 }
 
 export interface Recorder {
   clock: Clock;
   warmup(ms: number): Promise<void>;
   finish(): Promise<Omit<CaptureInfo, 'version' | 'size' | 'renderSeconds'>>;
+  crop?(region: Box, width: number): Promise<void>;
   videos?: [number, Box[]][];
   saved?(f: number): Promise<void>;
 }
@@ -144,6 +147,7 @@ export async function studio(
   fs.mkdirSync(path.join(dir, 'frames'), { recursive: true });
   await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: scale, mobile });
   let frame = 0;
+  let clip: (Box & { scale: number }) | undefined;
   const dt = 1000 / fps;
   const videos: [number, Box[]][] = [];
   const writes: Promise<void>[] = [];
@@ -184,7 +188,9 @@ export async function studio(
         }
         await new Promise((r) => setTimeout(r, 15));
       }
-      const jpeg = Buffer.from((await picture(page, cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: QUALITY }))).data, 'base64');
+      const scrolled = clip && (await cdp.send('Page.getLayoutMetrics')).cssVisualViewport;
+      const onPage = clip && scrolled && { ...clip, x: clip.x + scrolled.pageX, y: clip.y + scrolled.pageY };
+      const jpeg = Buffer.from((await picture(page, cdp.send('Page.captureScreenshot', { format: 'jpeg', quality: QUALITY, ...(onPage ? { clip: onPage } : {}) }))).data, 'base64');
       writes[frame] = fs.promises.writeFile(path.join(dir, name(frame)), jpeg).catch((e: Error) => void (writeError ??= e));
       frame++;
     },
@@ -211,7 +217,12 @@ export async function studio(
     async finish() {
       await Promise.all(writes);
       if (writeError) throw writeError;
-      return { mode: 'studio', fps, frames: Array.from({ length: frame }, (_, i) => name(i)), images: frame };
+      const shows = clip && { x: clip.x, y: clip.y, width: clip.width, height: clip.height };
+      return { mode: 'studio', fps, frames: Array.from({ length: frame }, (_, i) => name(i)), images: frame, ...(shows ? { shows } : {}) };
+    },
+    async crop(region, size) {
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: size / region.width, mobile });
+      clip = { ...onScreen(region, [width, height]), scale: 1 };
     },
     saved: (f) => writes[f],
     videos,

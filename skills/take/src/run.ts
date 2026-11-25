@@ -5,9 +5,9 @@ import { readyTake } from './take/load.ts';
 import { commitCapture, discardRecording, FAILED_OUTLINE, FAILED_SCREEN, record, stagingDir } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/driver.ts';
 import { NeedsFrameLimit, type Mode } from './drivers/web/capture.ts';
-import { compose, ffmpegProblem, following, loadTheme, phoneLook, themeProblem, type ComposeResult } from './compose/compose.ts';
+import { compose, ffmpegProblem, focusLook, following, loadTheme, phoneLook, themeProblem, type ComposeResult } from './compose/compose.ts';
 import { phoneLayout } from './compose/phone.ts';
-import { layout } from './compose/stage.ts';
+import { focusLayout, layout } from './compose/stage.ts';
 import type { EventLog } from './drivers/web/events.ts';
 import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
@@ -137,8 +137,10 @@ export function pageVideoAreas(log: EventLog, theme?: string): ((f: number) => [
   const list = log.videos;
   if (!list?.length) return undefined;
   const look = loadTheme(theme).theme;
-  const box = log.device === 'phone' ? phoneLayout(look, phoneLook(look, theme ?? 'default'), log.viewport) : layout(look, log.viewport);
-  const z = look.stage.output[0] / look.stage.size[0];
+  const box = log.focus
+    ? focusLayout(log.viewport, log.focus, focusLook(theme ?? 'default').light.size)
+    : log.device === 'phone' ? phoneLayout(look, phoneLook(look, theme ?? 'default'), log.viewport) : layout(look, log.viewport);
+  const z = log.focus ? 1 : look.stage.output[0] / look.stage.size[0];
   return (f) => {
     let i = list.length - 1;
     while (i > 0 && list[i][0] > f) i--;

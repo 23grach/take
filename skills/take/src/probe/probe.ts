@@ -9,8 +9,9 @@ import { cursorReader, type Cursor } from '../drivers/web/cursor.ts';
 import type { Box } from '../drivers/web/events.ts';
 import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
 import { installCssHandles } from '../drivers/web/css-handle.ts';
-import { PACING } from '../drivers/web/pacing.ts';
-import { loadTheme } from '../compose/compose.ts';
+import { startPoint } from '../drivers/web/pacing.ts';
+import { isolate } from '../drivers/web/focus.ts';
+import { focusLook, loadTheme } from '../compose/compose.ts';
 import { timeline, type Script } from './script.ts';
 import { LONG_OUTLINE, onScreen, shortOutline, SHORT_LENGTH } from './outline.ts';
 
@@ -136,12 +137,13 @@ export interface ProbeResult {
   visibleWindow?: true;
   phone?: true;
   noCursor?: true;
+  focus?: Box;
 }
 
 export function describeStep(s: Step): string {
   let text: string;
   switch (s.do) {
-    case 'click': text = `${s.clicks === 2 ? 'Double-click' : s.clicks === 3 ? 'Triple-click' : 'Click'} ${Array.isArray(s.target) ? `at ${s.target.join(', ')}` : describe(s.target)}`; break;
+    case 'click': text = `${s.clicks === 2 ? 'Double-click' : s.clicks === 3 ? 'Triple-click' : 'Click'} ${Array.isArray(s.target) ? `at ${s.target.join(', ')}` : describe(s.target)}${s.clicks && s.clicks > 3 ? ` ${s.clicks} times quickly` : ''}`; break;
     case 'hover': text = `Hover ${Array.isArray(s.target) ? `at ${s.target.join(', ')}` : describe(s.target)}`; break;
     case 'drag': text = `Drag from ${describeSpot(s.from)} to ${describeSpot(s.to)}`; break;
     case 'type': text = `Type "${s.text}"${s.target ? ` into ${describe(s.target)}` : ''}`; break;
@@ -207,6 +209,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   };
   let error: string | undefined;
   let script: Script | undefined;
+  let focus: Box | undefined;
   try {
     await page.waitForLoadState('load');
     try {
@@ -216,14 +219,21 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
       if (!(e instanceof TakeError)) throw e;
       error = e.message;
     }
+    const look = take.target.focus && !error ? focusLook(take.theme) : undefined;
+    if (look) try {
+      focus = await isolate(page, take.target.focus!, take.target.viewport, look);
+    } catch (e) {
+      if (!(e instanceof TakeError)) throw e;
+      error = e.message;
+    }
     await settle(page);
-    const [vw, vh] = take.target.viewport;
-    let pointer: [number, number] = [Math.round(vw * PACING.start[0]), Math.round(vh * PACING.start[1])];
+    let pointer: [number, number] = startPoint(take.target.viewport, focus);
     if (take.target.device !== 'phone') await page.mouse.move(...pointer);
     await shoot(0, 'First screen', pointer, error ? { error } : {});
     if (!error) try {
       const log = await perform(page, rehearsal(take), clock, {
         unfilmed: realtimeClock(60, speed),
+        ...(focus ? { focus } : {}),
         watch: false,
         onStep: async (log, p) => {
           pointer = p;
@@ -248,7 +258,7 @@ export async function probe(take: Take, out: string, { headed = false, speed = R
   } finally {
     await browser.close();
   }
-  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(script ? { script } : {}), ...(take.target.device === 'phone' ? { phone: true as const } : {}), ...(showsNoCursor(take) ? { noCursor: true as const } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
+  const result: ProbeResult = { ok: !error, title: take.title, viewport: take.target.viewport, shots, error, ...(focus ? { focus } : {}), ...(script ? { script } : {}), ...(take.target.device === 'phone' ? { phone: true as const } : {}), ...(showsNoCursor(take) ? { noCursor: true as const } : {}), seconds: +((performance.now() - t0) / 1000).toFixed(1), ...(visible && !headed ? { visibleWindow: true as const } : {}) };
   fs.writeFileSync(path.join(out, 'probe.json'), JSON.stringify(result, null, 1));
   return result;
 }

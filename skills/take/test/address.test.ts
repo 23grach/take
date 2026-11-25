@@ -35,7 +35,7 @@ test('address is checked like the rest of the take', () => {
 test('the stage puts the address in the bar, escaped', () => {
   const { theme, dir } = loadTheme();
   const html = stageHtml(theme, 'boards.app/<x>', layout(theme, [1440, 900]), {}, dir);
-  assert.match(html, /<div class="address glass"><i class="icon"><svg[^]*?<\/svg><\/i><span id="address">boards\.app\/&#60;x&#62;<\/span><\/div>/);
+  assert.match(html, /<div class="address glass"><i class="icon"><svg[^]*?<\/svg><\/i><span class="address-text">boards\.app\/&#60;x&#62;<\/span><\/div>/);
 });
 
 test('the window has close, minimize and zoom buttons in the theme\'s colours', () => {
