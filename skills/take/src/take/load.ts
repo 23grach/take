@@ -37,7 +37,14 @@ export async function answers(url: string, ms = ANSWER_MS): Promise<string | und
   } catch (e) {
     const err = e as Error & { cause?: { code?: string } };
     if (/CERT|SSL|TLS/i.test(err.cause?.code ?? '')) return undefined;
-    if (err.name === 'TimeoutError') return `${url} didn't answer within ${ms / 1000} s. Is the app running, and does its first page load in a browser?`;
-    return `nothing answers at ${url}. Is the app running?`;
+    const local = onThisComputer(url);
+    if (err.name === 'TimeoutError')
+      return local ? `${url} didn't answer within ${ms / 1000} s. Is the app running, and does its first page load in a browser?` : `${url} didn't answer within ${ms / 1000} s. Check that it opens in a browser; a busy site often answers on a second try`;
+    return local ? `nothing answers at ${url}. Is the app running?` : `nothing answers at ${url}. Check the address and the internet connection`;
   }
+}
+
+function onThisComputer(url: string): boolean {
+  const host = new URL(url).hostname;
+  return host === 'localhost' || host.endsWith('.localhost') || host === '[::1]' || host === '0.0.0.0' || host.startsWith('127.');
 }

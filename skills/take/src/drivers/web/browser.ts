@@ -1,7 +1,7 @@
 import type { Browser, BrowserContext, Page } from 'playwright';
 import { launchBrowser } from '../../browser-binary.ts';
 import type { Appearance, Device, Take } from '../../take/format.ts';
-import { ownError } from './page-errors.ts';
+import { breaksApp } from './page-errors.ts';
 import { TakeError } from './take-error.ts';
 import { describeCondition, holds } from './targets.ts';
 import type { Condition } from '../../take/format.ts';
@@ -79,13 +79,13 @@ async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promi
   const page = await context.newPage();
   await hardenClientHints(context, page, userAgent);
   const errors: string[] = [];
-  const onError = (e: Error) => void (ownError(e, page.url()) && errors.push(e.message));
+  const onError = (e: Error) => void (breaksApp(e, page.url()) && errors.push(e.message));
   page.on('pageerror', onError);
   try {
     await prepare?.(page);
     const url = take.target.url;
-    const response = await page.goto(url, { timeout: LOAD_MS }).catch((e: Error) => {
-      if (/timeout/i.test(e.message)) throw new TakeError(-1, `${url} didn't finish loading in ${LOAD_MS / 1000} s`);
+    const response = await page.goto(url, { timeout: LOAD_MS, waitUntil: 'domcontentloaded' }).catch((e: Error) => {
+      if (/timeout/i.test(e.message)) throw new TakeError(-1, `${url} sent no page within ${LOAD_MS / 1000} s; check that it opens in a browser`);
       throw new TakeError(-1, `couldn't open ${url}: ${e.message.split('\n')[0]}`);
     });
     if (response?.status() === 403 && !headed) throw new RefusedHidden(-1, `${url} answered with error 403`);

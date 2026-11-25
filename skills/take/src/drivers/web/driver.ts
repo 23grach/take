@@ -5,7 +5,7 @@ import type { Clock } from './clock.ts';
 import { cursorReader } from './cursor.ts';
 import type { Box, EventLog, StepLog } from './events.ts';
 import { fillSkipped } from './geometry.ts';
-import { ownError } from './page-errors.ts';
+import { breaksApp } from './page-errors.ts';
 import { PACING, frames, startPoint } from './pacing.ts';
 import { since, tick, wait, type PerformState } from './perform-state.ts';
 import { runStep } from './run-step.ts';
@@ -94,7 +94,7 @@ function startState(page: Page, take: Take, clock: Clock, glass: PerformState['g
 export async function perform(page: Page, take: Take, clock: Clock, options: PerformOptions = {}): Promise<EventLog> {
   const glass = take.target.device === 'phone' ? await page.context().newCDPSession(page) : undefined;
   const s = startState(page, take, clock, glass, options);
-  const onError = (e: Error) => void (ownError(e, page.url()) && s.pageErrors.push(e.message));
+  const onError = (e: Error) => void (breaksApp(e, page.url()) && s.pageErrors.push(e.message));
   page.on('pageerror', onError);
   if (!s.phone) await page.mouse.move(...s.pointer);
 
