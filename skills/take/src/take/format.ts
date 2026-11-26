@@ -1,3 +1,6 @@
+import { closest } from './closest.ts';
+import { keyProblem } from './keys.ts';
+
 export const TAKE_VERSION = 0;
 
 export const isLoginName = (name: string) => /^[a-z0-9][a-z0-9._-]*$/i.test(name) && !name.includes('..');
@@ -67,38 +70,6 @@ export interface WebTarget {
   login?: string;
   appearance?: Appearance;
   focus?: Focus;
-}
-
-export function isLocalUrl(url: string): boolean {
-  let host: string;
-  try {
-    host = new URL(url).hostname;
-  } catch {
-    return false;
-  }
-  return host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.test') || host === '[::1]' || host === '0.0.0.0'
-    || /^127\./.test(host) || /^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host);
-}
-
-export function addressWarning(target: WebTarget): string | undefined {
-  if (target.address !== undefined || !isLocalUrl(target.url)) return undefined;
-  return `no address: the app runs at ${new URL(target.url).host}, which isn't shown, so the address bar will be blank. Add the product's domain as target.address, e.g. "boards.app"`;
-}
-
-export function shownAddress(target: WebTarget): string {
-  if (target.address !== undefined) return target.address;
-  if (isLocalUrl(target.url)) return '';
-  const u = new URL(target.url);
-  return (u.host + u.pathname).replace(/\/$/, '');
-}
-
-export function followedAddress(shown: string, firstUrl: string, url: string): string {
-  const [first, now] = [new URL(firstUrl), new URL(url)];
-  const path = now.pathname.replace(/\/$/, '');
-  if (now.host !== first.host) return now.host + path;
-  if (now.pathname === first.pathname) return shown;
-  const domain = shown.split('/')[0];
-  return domain ? domain + path : '';
 }
 
 export interface Take {
@@ -421,57 +392,4 @@ function roomOf(v: unknown): Room | undefined {
   if (v.length === 2) return [v[0], v[1], v[0], v[1]];
   if (v.length === 4) return v as Room;
   return undefined;
-}
-
-const KEY_NAMES = new Set([
-  'Shift', 'Control', 'Alt', 'Meta', 'ControlOrMeta', 'Escape', 'Enter', 'Tab', 'Backspace', 'Delete', 'Insert', 'Space',
-  'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Home', 'End', 'PageUp', 'PageDown', 'CapsLock', 'ContextMenu',
-  'ShiftLeft', 'ShiftRight', 'ControlLeft', 'ControlRight', 'AltLeft', 'AltRight', 'AltGraph', 'MetaLeft', 'MetaRight',
-  'Backquote', 'Minus', 'Equal', 'Backslash', 'BracketLeft', 'BracketRight', 'Semicolon', 'Quote', 'Comma', 'Period', 'Slash',
-  'PrintScreen', 'ScrollLock', 'Pause', 'NumLock', 'NumpadDivide', 'NumpadMultiply', 'NumpadSubtract', 'NumpadAdd', 'NumpadDecimal', 'NumpadEnter',
-  'AudioVolumeMute', 'AudioVolumeDown', 'AudioVolumeUp', 'MediaTrackNext', 'MediaTrackPrevious', 'MediaPlayPause',
-  ...Array.from({ length: 12 }, (_, i) => `F${i + 1}`),
-  ...Array.from({ length: 10 }, (_, i) => `Digit${i}`),
-  ...Array.from({ length: 10 }, (_, i) => `Numpad${i}`),
-  ...Array.from({ length: 26 }, (_, i) => `Key${String.fromCharCode(65 + i)}`),
-]);
-const KEY_ALIASES: Record<string, string> = {
-  cmd: 'Meta', command: 'Meta', '⌘': 'Meta', super: 'Meta', win: 'Meta', ctrl: 'Control', control: 'Control', '⌃': 'Control',
-  option: 'Alt', opt: 'Alt', alt: 'Alt', '⌥': 'Alt', shift: 'Shift', '⇧': 'Shift', esc: 'Escape', escape: 'Escape', return: 'Enter',
-  enter: 'Enter', del: 'Delete', delete: 'Delete', backspace: 'Backspace', up: 'ArrowUp', down: 'ArrowDown', left: 'ArrowLeft',
-  right: 'ArrowRight', space: 'Space', spacebar: 'Space', tab: 'Tab', pgup: 'PageUp', pgdn: 'PageDown', home: 'Home', end: 'End',
-};
-
-export function keyProblem(key: string): string | undefined {
-  const parts = key === '+' ? ['+'] : key.split(/\+(?!$)/);
-  for (const part of parts) {
-    if ([...part].length === 1 || KEY_NAMES.has(part)) continue;
-    const name = KEY_ALIASES[part.toLowerCase()] ?? closest(part, [...KEY_NAMES]);
-    return `unknown key "${part}"${name ? `; use ${name} (e.g. "${key.replace(part, name)}")` : ''}. Join keys with +, as in "Meta+K"`;
-  }
-  return undefined;
-}
-
-function closest(word: string, options: readonly string[]): string | undefined {
-  let best: string | undefined;
-  let bestDist = Infinity;
-  for (const o of options) {
-    const d = distance(word.toLowerCase(), o.toLowerCase());
-    if (d < bestDist) [best, bestDist] = [o, d];
-  }
-  return bestDist <= Math.max(1, Math.floor(word.length / 3)) ? best : undefined;
-}
-
-function distance(a: string, b: string): number {
-  const row = Array.from({ length: b.length + 1 }, (_, j) => j);
-  for (let i = 1; i <= a.length; i++) {
-    let prev = row[0];
-    row[0] = i;
-    for (let j = 1; j <= b.length; j++) {
-      const cur = row[j];
-      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + (a[i - 1] === b[j - 1] ? 0 : 1));
-      prev = cur;
-    }
-  }
-  return row[b.length];
 }

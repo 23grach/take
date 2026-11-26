@@ -1,6 +1,7 @@
 import { ownError } from './page-errors.ts';
 import type { Locator, Page } from 'playwright';
-import { DEFAULTS, PHONE, shownAddress, showsNoCursor, type Appearance, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
+import { shownAddress } from '../../take/address.ts';
+import { DEFAULTS, PHONE, showsNoCursor, type Appearance, type Condition, type Spot, type Step, type Take, type Target } from '../../take/format.ts';
 import type { Clock } from './clock.ts';
 import type { Box, Event, EventLog, KeyboardUp, PageTop, StepLog } from './events.ts';
 import { pageTop } from './page-top.ts';

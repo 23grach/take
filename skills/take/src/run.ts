@@ -12,7 +12,7 @@ import type { EventLog } from './drivers/web/events.ts';
 import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { compareWithRehearsal, STEP_LIMIT } from './check/rehearsal.ts';
-import { addressWarning, shownAddress } from './take/format.ts';
+import { addressWarning, shownAddress } from './take/address.ts';
 import { timeline, type Script } from './probe/script.ts';
 
 export interface RunOptions {

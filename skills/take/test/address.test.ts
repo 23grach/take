@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addressWarning, isLocalUrl, shownAddress, validateTake, type WebTarget } from '../src/take/format.ts';
+import { validateTake, type WebTarget } from '../src/take/format.ts';
+import { addressWarning, isLocalUrl, shownAddress } from '../src/take/address.ts';
 import { stageHtml, layout } from '../src/compose/stage.ts';
 import { loadTheme } from '../src/compose/compose.ts';
 

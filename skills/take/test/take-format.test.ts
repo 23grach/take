@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { validateTake, DEFAULTS, followedAddress } from '../src/take/format.ts';
+import { validateTake, DEFAULTS } from '../src/take/format.ts';
+import { followedAddress } from '../src/take/address.ts';
 import { loadTake } from '../src/take/load.ts';
 
 const example = fileURLToPath(new URL('./fixtures/create-project.take.json', import.meta.url));
@@ -119,7 +120,7 @@ test('take validate reports a good and a broken take', () => {
 });
 
 test('press keys use the browser\'s names; common other names get the right one', async () => {
-  const { keyProblem } = await import('../src/take/format.ts');
+  const { keyProblem } = await import('../src/take/keys.ts');
   for (const ok of ['Enter', 'Meta+A', 'Shift+Tab', 'ControlOrMeta+K', 'a', 'Meta++', '+', 'F5', 'Space']) assert.equal(keyProblem(ok), undefined, ok);
   assert.match(keyProblem('Cmd+K') ?? '', /unknown key "Cmd"; use Meta/);
   assert.match(keyProblem('Esc') ?? '', /use Escape/);
