@@ -5,6 +5,7 @@ import type { PhoneTheme } from './phone.ts';
 import type { Appearance } from '../take/format.ts';
 import type { FocusLook } from '../drivers/web/focus.ts';
 import type { Box } from '../drivers/web/events.ts';
+import { escapeHtml } from '../escape-html.ts';
 
 export interface Theme {
   stage: { size: [number, number]; output: [number, number]; background: string; padding: number };
@@ -91,8 +92,6 @@ export function focusLayout(viewport: [number, number], region: Box, [W]: [numbe
   return { left, top, width: viewport[0] * k, height: viewport[1] * k, contentLeft: left, contentTop: top, k };
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
-
 export type StageCursor = Omit<CursorArt, 'size'> & { size?: [number, number] };
 
 type Stop = [color: string, offset: string, opacity?: number];
@@ -114,7 +113,7 @@ function glassArt(g: Glass, width: number, height: number): string {
 
 function toolbarParts(win: Theme['window'], themeDir: string, address: string): { css: string; nav: string; address: string; actions: string } {
   const bar = win.toolbar;
-  const field = (glass: string, inner: string) => `<div class="address${glass}">${inner}<span class="address-text">${esc(address)}</span></div>`;
+  const field = (glass: string, inner: string) => `<div class="address${glass}">${inner}<span class="address-text">${escapeHtml(address)}</span></div>`;
   if (!bar) return { css: '', nav: '', address: field('', ''), actions: '' };
   const icon = (name: ToolbarIcon) => `<i class="icon">${fs.readFileSync(path.join(themeDir, bar.icons[name]), 'utf8').trim()}</i>`;
   const tool = (name: ToolbarIcon, width: number, off = false) => `<span class="tool${off ? ' off' : ''}" style="width: ${width}px">${icon(name)}</span>`;
@@ -201,7 +200,7 @@ ${looks.map(([look, t]) => `  .scene.${look} {${css(t)}\n  }`).join('\n')}
   .cursor { position: absolute; left: 0; top: 0; visibility: hidden; }
 </style>
 ${looks.map(([look, t]) => html(look, t)).join('\n')}
-${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${i}" src="${esc(cursors[key].src)}" alt="">`).join('')}
+${keys.map((key, i) => `<img class="cursor" data-key="${escapeHtml(key)}" id="cursor-${i}" src="${escapeHtml(cursors[key].src)}" alt="">`).join('')}
 <script>
   const box = ${JSON.stringify(box)};
   const art = ${JSON.stringify(Object.fromEntries(keys.map((key) => [key, { size: cursors[key].size, hotspot: cursors[key].hotspot, shadow: cursors[key].shadow }])))};

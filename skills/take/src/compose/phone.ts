@@ -4,6 +4,7 @@ import type { Event, EventLog, PageTop } from '../drivers/web/events.ts';
 import { ease, frames } from '../drivers/web/pacing.ts';
 import { PHONE, phonePage } from '../take/format.ts';
 import type { Theme } from './stage.ts';
+import { escapeHtml } from '../escape-html.ts';
 
 type Colors = Record<string, string>;
 
@@ -300,12 +301,11 @@ export function safariAt(log: EventLog, look: PhoneTheme['safari'], f: number, l
   return end + (toggled(changes, 0, look.morph) - end) * loop;
 }
 
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
 function keyboardHtml(icon: (name: string) => string, layout: Layout): string {
   const rows = layout === 'letters' ? LETTERS : NUMBERS;
-  const chars = (keys: string) => [...keys].map((c) => `<div class="key char" data-key="${esc(c)}"><span>${esc(c)}</span></div>`).join('');
+  const chars = (keys: string) => [...keys].map((c) => `<div class="key char" data-key="${escapeHtml(c)}"><span>${escapeHtml(c)}</span></div>`).join('');
   const toggle = layout === 'letters' ? '<span class="label">123</span>' : '<span class="label">ABC</span>';
   const side = layout === 'letters'
     ? `<div class="key side" data-key="shift">${icon('shift')}${icon('shiftOn')}</div>`
@@ -430,7 +430,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
   </div>
   <div class="points ui">
     <div class="status">
-      <div class="time">${esc(bar.time)}</div>
+      <div class="time">${escapeHtml(bar.time)}</div>
       <div class="island"></div>
       <div class="levels">
         <div class="cellular">${[6.333, 8.67, 11, 13.667].map((h) => `<i style="height: ${h}px"></i>`).join('')}</div>
@@ -451,7 +451,7 @@ export function phoneStageHtml(theme: Theme, phone: PhoneTheme, themeDir: string
         <div class="callout" id="callout"><svg><path></path></svg><span></span></div>
       </div>
     </div>
-    <div class="glass" id="field">${icon('menu')}${icon('reload')}<div class="address big">${esc(domain)}</div><div class="address small">${esc(domain)}</div></div>
+    <div class="glass" id="field">${icon('menu')}${icon('reload')}<div class="address big">${escapeHtml(domain)}</div><div class="address small">${escapeHtml(domain)}</div></div>
   </div>
 </div>
 <img class="art" src="${art}" alt="">
