@@ -13,7 +13,7 @@ process.env.TAKE_HOME = home;
 
 const { signIn, readLogin, loginPath, defaultLoginName, forgetLogin } = await import('../src/drivers/web/login.ts');
 const { openTake } = await import('../src/drivers/web/browser.ts');
-const { TakeError } = await import('../src/drivers/web/driver.ts');
+const { TakeError } = await import('../src/drivers/web/take-error.ts');
 const { validateTake } = await import('../src/take/format.ts');
 
 const SITE = `<!doctype html><meta charset="utf-8"><main id="who"></main><button id="in">Sign in</button><script>

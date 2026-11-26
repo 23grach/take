@@ -2,7 +2,7 @@ import type { Page } from 'playwright';
 import type { Focus, Room } from '../../take/format.ts';
 import type { Box } from './events.ts';
 import { describe, locate } from './targets.ts';
-import { TakeError } from './driver.ts';
+import { TakeError } from './take-error.ts';
 
 export interface FocusLook {
   size: [number, number];

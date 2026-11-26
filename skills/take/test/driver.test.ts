@@ -4,7 +4,8 @@ import assert from 'node:assert/strict';
 import type { Browser, Page } from 'playwright';
 import { serve } from '../examples/demo-app/serve.mjs';
 import { openTake } from '../src/drivers/web/browser.ts';
-import { perform, TakeError } from '../src/drivers/web/driver.ts';
+import { perform } from '../src/drivers/web/driver.ts';
+import { TakeError } from '../src/drivers/web/take-error.ts';
 import { realtimeClock, type Clock } from '../src/drivers/web/clock.ts';
 import { loadTake } from '../src/take/load.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
@@ -155,7 +156,7 @@ test('says what a wait was waiting for', async () => {
 });
 
 test('a shortcut letter is sent lowercase, as a real keyboard does, unless Shift is held', async () => {
-  const { asPressed } = await import('../src/drivers/web/driver.ts');
+  const { asPressed } = await import('../src/drivers/web/run-step.ts');
   assert.equal(asPressed('Meta+K'), 'Meta+k');
   assert.equal(asPressed('Control+Alt+P'), 'Control+Alt+p');
   assert.equal(asPressed('Shift+Meta+P'), 'Shift+Meta+P');

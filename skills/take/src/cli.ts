@@ -4,7 +4,7 @@ import { parseArgs } from 'node:util';
 import { doctor } from './doctor.ts';
 import { loadTake, problems, readyTake } from './take/load.ts';
 import { record } from './drivers/web/record.ts';
-import { TakeError } from './drivers/web/driver.ts';
+import { TakeError } from './drivers/web/take-error.ts';
 import type { Mode } from './drivers/web/capture.ts';
 import { compose, ffmpegProblem, themeProblem } from './compose/compose.ts';
 import { check, formatCheckReport } from './check/check.ts';
