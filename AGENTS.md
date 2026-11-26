@@ -11,8 +11,8 @@ The tool lives in `skills/take/` (`SKILL.md`, CLI, docs, tests, themes). Run eve
 ## Rules
 
 - No comments anywhere in code, tests, themes or CI. Names and structure explain the code; reasons go in the commit message. `test/rules.test.ts` enforces it.
-- No dead code. `npm run typecheck` rejects unused locals and parameters; delete unused exports and fallbacks too.
-- Never use Playwright's built-in video (`recordVideo`, or `page.screencast` with `path`). Frames come from the browser engine through `src/drivers/web/capture.ts`.
+- No dead code. `npm run typecheck` rejects unused locals and parameters; delete unused exports and fallbacks too. `test/rules.test.ts` catches exports no other file uses.
+- Never use Playwright's built-in video (`recordVideo`, or `page.screencast` with `path`). Frames come from the browser engine through `src/drivers/web/capture.ts`. `test/rules.test.ts` checks it.
 - Output stays H.264 MP4, constant 60 fps, yuv420p, `+faststart`.
 - Keep captures and renders out of git. The one exception is `assets/`: the README demo GIF and the plugin icon.
 - A release bumps `version` in `skills/take/package.json`, `.claude-plugin/plugin.json` and `.cursor-plugin/plugin.json` together. `test/rules.test.ts` checks they match.
