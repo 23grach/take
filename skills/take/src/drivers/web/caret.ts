@@ -25,7 +25,7 @@ export async function hideCaret(page: Page): Promise<void> {
   await Promise.all(page.frames().map((f) => f.evaluate(install, HIDE_ID).catch(() => {})));
 }
 
-export async function caretAt(page: Page): Promise<Caret | null> {
+export async function measureCaret(page: Page): Promise<Caret | null> {
   return page.evaluate((hideId) => {
     const el = document.activeElement as HTMLElement | null;
     if (!el) return null;

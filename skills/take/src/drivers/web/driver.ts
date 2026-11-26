@@ -8,7 +8,7 @@ import { botCheck, botCheckMessage } from './bot-check.ts';
 import { PACING, clickGaps, dragMs, ease, frames, scrollMs, spring, startPoint, swipeProgress, travelMs, typingSchedule } from './pacing.ts';
 import { describe, describeCondition, describeMatches, holds, locate } from './targets.ts';
 import { cursorReader, sameCursor, type Cursor } from './cursor.ts';
-import { caretAt, type Caret } from './caret.ts';
+import { measureCaret, type Caret } from './caret.ts';
 
 export class TakeError extends Error {
   readonly step: number;
@@ -136,7 +136,7 @@ export async function perform(page: Page, take: Take, clock: Clock, { onStep, on
     if (watch) {
       const shape = phone ? 'default' : await cursorAt(pointer).catch((): Cursor => cursors.at(-1)?.[1] ?? 'default');
       if (!sameCursor(cursors.at(-1)?.[1], shape)) cursors.push([clock.frame, shape]);
-      const caret = await caretAt(page).catch(() => null);
+      const caret = await measureCaret(page).catch(() => null);
       if (!carets.length || JSON.stringify(carets.at(-1)![1]) !== JSON.stringify(caret)) carets.push([clock.frame, caret]);
       if (phone) await followKeyboard();
     }

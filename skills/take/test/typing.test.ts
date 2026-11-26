@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import type { Browser, Page } from 'playwright';
 import { serve } from '../examples/demo-app/serve.mjs';
 import { launch } from '../src/drivers/web/browser.ts';
-import { caretAt as measureCaret } from '../src/drivers/web/caret.ts';
+import { measureCaret } from '../src/drivers/web/caret.ts';
 import { typingSchedule } from '../src/drivers/web/pacing.ts';
-import { caretAt, loadTheme, totalFrames } from '../src/compose/compose.ts';
+import { caretOnFrame, loadTheme, totalFrames } from '../src/compose/compose.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
 
 test('typing is uneven like a person, the same every retake, and as long as cps says', () => {
@@ -64,11 +64,11 @@ test('the drawn caret is solid while typing, then blinks, and fades out with the
     events: [], steps: [], marks: {},
   };
   const { solidFrames: s, blinkFrames: b } = theme.caret;
-  assert.equal(caretAt(log, theme, 5), null);
-  assert.equal(caretAt(log, theme, 11)!.x, 10);
-  assert.equal(caretAt(log, theme, 12 + s - 1)!.opacity, 1, 'solid after the last keystroke');
-  assert.equal(caretAt(log, theme, 12 + s)!.opacity, 0, 'then off');
-  assert.equal(caretAt(log, theme, 12 + s + b)!.opacity, 1, 'then on again');
+  assert.equal(caretOnFrame(log, theme, 5), null);
+  assert.equal(caretOnFrame(log, theme, 11)!.x, 10);
+  assert.equal(caretOnFrame(log, theme, 12 + s - 1)!.opacity, 1, 'solid after the last keystroke');
+  assert.equal(caretOnFrame(log, theme, 12 + s)!.opacity, 0, 'then off');
+  assert.equal(caretOnFrame(log, theme, 12 + s + b)!.opacity, 1, 'then on again');
   const last = totalFrames(log, theme) - 1;
-  assert.ok((caretAt(log, theme, last)?.opacity ?? 0) < 0.1, 'fades out with the loop');
+  assert.ok((caretOnFrame(log, theme, last)?.opacity ?? 0) < 0.1, 'fades out with the loop');
 });

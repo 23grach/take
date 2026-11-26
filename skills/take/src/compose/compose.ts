@@ -212,7 +212,7 @@ export function cursorOpacity(log: EventLog, theme: Theme): number[] {
   return Array.from({ length: totalFrames(log, theme) }, (_, f) => opacityAt(log, theme, f));
 }
 
-export function caretAt(log: EventLog, theme: Theme, f: number) {
+export function caretOnFrame(log: EventLog, theme: Theme, f: number) {
   const changes = log.carets;
   const g = Math.min(f, log.frames - 1);
   let i = -1;
@@ -252,7 +252,7 @@ export function overlayAt(log: EventLog, theme: Theme, f: number) {
   if (f >= log.frames) {
     const [a, b] = [log.pointer[log.pointer.length - 1], log.pointer[0]];
     const p = loopProgress(log, theme, f);
-    return { x: a[0] + (b[0] - a[0]) * p, y: a[1] + (b[1] - a[1]) * p, ...shapes, opacity, pressed: false, caret: caretAt(log, theme, f) };
+    return { x: a[0] + (b[0] - a[0]) * p, y: a[1] + (b[1] - a[1]) * p, ...shapes, opacity, pressed: false, caret: caretOnFrame(log, theme, f) };
   }
   const [x, y] = log.pointer[f];
   const downs = log.events.filter((e) => e.type === 'down');
@@ -261,7 +261,7 @@ export function overlayAt(log: EventLog, theme: Theme, f: number) {
     const up = ups.find((u) => u.frame >= d.frame);
     return f >= d.frame && f < (up?.frame ?? Infinity);
   });
-  return { x, y, ...shapes, opacity, pressed, caret: caretAt(log, theme, f) };
+  return { x, y, ...shapes, opacity, pressed, caret: caretOnFrame(log, theme, f) };
 }
 
 export async function compose({ capture, out, theme: themeName = 'default', appearance, address, range, follow, workers: asked }: ComposeOptions): Promise<ComposeResult> {
@@ -384,7 +384,7 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
       const footage = footageAt(info as CaptureInfo, log, theme, f);
       return {
         footage: { ...footage, band: bandOf(g), fade: footage.fade && { ...footage.fade, band: bandOf(0) } },
-        caret: caretAt(log, theme, f),
+        caret: caretOnFrame(log, theme, f),
         finger: fingerAt(log, look.finger, f),
         dark: ease(inks[g].amount + (inks[0].amount - inks[g].amount) * loop),
         lift: keyboard.lift,

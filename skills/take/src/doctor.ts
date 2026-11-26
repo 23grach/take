@@ -97,7 +97,7 @@ export async function runChecks(probe: Probe = realProbe): Promise<CheckResult[]
   return results;
 }
 
-export function formatReport(results: CheckResult[]): string {
+export function formatDoctorReport(results: CheckResult[]): string {
   const width = Math.max(...results.map((r) => r.name.length));
   const lines = results.map((r) => {
     const line = `${r.ok ? '✓' : '✗'} ${r.name.padEnd(width)}  ${r.detail}`;
@@ -110,6 +110,6 @@ export function formatReport(results: CheckResult[]): string {
 
 export async function doctor(): Promise<number> {
   const results = await runChecks();
-  process.stdout.write(formatReport(results));
+  process.stdout.write(formatDoctorReport(results));
   return results.every((r) => r.ok) ? 0 : 1;
 }

@@ -50,12 +50,12 @@ const channels = (color: string): number[] => {
   const [r, g, b, a = '1'] = color.match(/[\d.]+/g) ?? [];
   return [Number(r), Number(g), Number(b), Number(a)];
 };
-const grey = (color: string) => { const [r, g, b] = channels(color); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const colorLuma = (color: string) => { const [r, g, b] = channels(color); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
 const alpha = (color: string) => channels(color)[3];
 
 export function glassTone({ gain, lift, chroma, over, fill, ring, specular }: GlassTone) {
-  const stops = fill.map((stop) => [parseFloat(stop.slice(stop.lastIndexOf(' ') + 1)) / 100, grey(stop.slice(0, stop.lastIndexOf(' ')))]);
-  const seen = gain * grey(over) + lift * 255;
+  const stops = fill.map((stop) => [parseFloat(stop.slice(stop.lastIndexOf(' ') + 1)) / 100, colorLuma(stop.slice(0, stop.lastIndexOf(' ')))]);
+  const seen = gain * colorLuma(over) + lift * 255;
   return {
     gain, lift, chroma,
     glow: stops.map(([at, g]) => [at, g - seen]),
@@ -233,13 +233,13 @@ export function nextInk(ink: Ink | undefined, luma: number, rule: InkRule): Ink 
   return { dark, amount: dark ? Math.min(1, ink.amount + step) : Math.max(0, ink.amount - step) };
 }
 
-type Layout = 'letters' | 'numbers';
+type KeyboardLayout = 'letters' | 'numbers';
 const LETTERS = ['qwertyuiop', 'asdfghjkl', 'zxcvbnm'];
 const NUMBERS = ['1234567890', '-/:;()€&@"', ".,?!'"];
 const ON_NUMBERS = new Set([...NUMBERS.join('')]);
 const NAMED: Record<string, string> = { ' ': 'space', Enter: 'return', Backspace: 'delete' };
 
-function keyFor(key: string): { key: string; layout: Layout; shift: boolean; callout: boolean } | null {
+function keyFor(key: string): { key: string; layout: KeyboardLayout; shift: boolean; callout: boolean } | null {
   if (NAMED[key]) return { key: NAMED[key], layout: 'letters', shift: false, callout: false };
   if (/^[a-z]$/.test(key)) return { key, layout: 'letters', shift: false, callout: true };
   if (/^[A-Z]$/.test(key)) return { key: key.toLowerCase(), layout: 'letters', shift: true, callout: true };
@@ -251,7 +251,7 @@ interface KeyboardFrame {
   up: number;
   opacity: number;
   lift: number;
-  layout: Layout;
+  layout: KeyboardLayout;
   shift: boolean;
   pressed: string | null;
   callout: boolean;
@@ -303,7 +303,7 @@ export function safariAt(log: EventLog, look: PhoneTheme['safari'], f: number, l
 
 const kebab = (s: string) => s.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`);
 
-function keyboardHtml(icon: (name: string) => string, layout: Layout): string {
+function keyboardHtml(icon: (name: string) => string, layout: KeyboardLayout): string {
   const rows = layout === 'letters' ? LETTERS : NUMBERS;
   const chars = (keys: string) => [...keys].map((c) => `<div class="key char" data-key="${escapeHtml(c)}"><span>${escapeHtml(c)}</span></div>`).join('');
   const toggle = layout === 'letters' ? '<span class="label">123</span>' : '<span class="label">ABC</span>';

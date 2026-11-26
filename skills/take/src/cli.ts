@@ -7,7 +7,7 @@ import { record } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/driver.ts';
 import type { Mode } from './drivers/web/capture.ts';
 import { compose, ffmpegProblem, themeProblem } from './compose/compose.ts';
-import { check, formatReport } from './check/check.ts';
+import { check, formatCheckReport } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { run } from './run.ts';
 import { addressWarning, type Appearance } from './take/format.ts';
@@ -259,7 +259,7 @@ async function checkCommand(): Promise<number> {
   const base = file.replace(/\.[^./]+$/, '');
   writeFileSync(`${base}.check.json`, JSON.stringify(report, null, 1));
   const sheet = await contactSheet(report, `${base}.contact.jpg`, { loop });
-  process.stdout.write(formatReport(report) + `Contact sheet: ${sheet}\n`);
+  process.stdout.write(formatCheckReport(report) + `Contact sheet: ${sheet}\n`);
   return report.ok ? 0 : 1;
 }
 
@@ -272,7 +272,7 @@ async function runCommand(): Promise<number> {
   if (r.error) return fail(`✗ ${r.error}`);
   const report = r.report!;
   say('');
-  say(formatReport({ ...report, file: path.relative(process.cwd(), report.file) }).trimEnd());
+  say(formatCheckReport({ ...report, file: path.relative(process.cwd(), report.file) }).trimEnd());
   if (!r.ok && mode === 'live') say('Live drafts stutter where the app animates quickly; record without --mode live for the final video.');
   if (r.script) say(`\n${formatScript(r.script).trimEnd()}\n`);
   say(`Contact sheet: ${path.relative(process.cwd(), r.sheet!)}`);
