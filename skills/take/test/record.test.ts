@@ -179,6 +179,7 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
       const now = await p.evaluate(() => document.querySelector('video')!.currentTime);
       assert.ok(Math.abs(now - start - 1) < 0.07, `60 frames moved the video on ${(now - start).toFixed(3)} s, not 1 s`);
       assert.deepEqual(boxes, [{ x: 0, y: 0, width: 320, height: 240 }]);
+      await p.evaluate(() => ['waiting', 'playing'].forEach((t) => document.querySelector('video')!.dispatchEvent(new Event(t))));
       assert.deepEqual(await p.evaluate(() => (window as unknown as { heard: string[] }).heard), []);
     } finally {
       await opened.browser.close();

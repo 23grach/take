@@ -56,11 +56,13 @@ export function watchMedia(): void {
     const el = e.target as Held;
     const s = el?.__take;
     if (!s) return;
+    const holding = !!s.seeked || (s.set !== undefined && !s.ended);
     const mine =
       e.type === 'ratechange' ? !!s.rates && s.rates-- > 0
       : e.type === 'playing' ? s.waited && !(s.waited = false)
+      : e.type === 'waiting' ? holding
       : !!s.seeked;
-    if (e.type === 'waiting' && s.seeked) s.waited = true;
+    if (e.type === 'waiting' && holding) s.waited = true;
     if (e.type === 'seeked') s.seeked?.();
     if (mine) e.stopImmediatePropagation();
   };
