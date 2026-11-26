@@ -4,7 +4,8 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { openTake } from '../src/drivers/web/browser.ts';
 import { realtimeClock } from '../src/drivers/web/clock.ts';
-import { perform, TakeError } from '../src/drivers/web/driver.ts';
+import { perform } from '../src/drivers/web/driver.ts';
+import { TakeError } from '../src/drivers/web/take-error.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
 import { withShortFind } from './short-find.ts';
 

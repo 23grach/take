@@ -7,7 +7,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { execFileSync } from 'node:child_process';
 import { record } from '../src/drivers/web/record.ts';
-import { focusRegion, onScreen } from '../src/drivers/web/focus.ts';
+import { focusRegion, clipToViewport } from '../src/drivers/web/focus.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
 import { mediaTool } from '../src/media-tools.ts';
 import { clickGaps, PACING } from '../src/drivers/web/pacing.ts';
@@ -98,7 +98,7 @@ test('the framed area is 16:9, centred on the element with the same room on oppo
   const huge = focusRegion({ x: 0, y: 0, width: 1400, height: 880 }, [48, 48, 48, 48], [1440, 900], size, 5);
   assert.ok(huge.width <= 1440 && huge.height <= 900);
   const corner = focusRegion({ x: 1420, y: 880, width: 20, height: 20 }, [48, 48, 48, 48], [1440, 900], size, 5);
-  assert.deepEqual(onScreen(corner, [1440, 900]), { x: corner.x, y: corner.y, width: 1440 - corner.x, height: 900 - corner.y });
+  assert.deepEqual(clipToViewport(corner, [1440, 900]), { x: corner.x, y: corner.y, width: 1440 - corner.x, height: 900 - corner.y });
 });
 
 function pixels(file: string, w = 192, h = 108): Buffer {

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readyTake } from './take/load.ts';
 import { commitCapture, discardRecording, FAILED_OUTLINE, FAILED_SCREEN, record, stagingDir } from './drivers/web/record.ts';
-import { TakeError } from './drivers/web/driver.ts';
+import { TakeError } from './drivers/web/take-error.ts';
 import { NeedsFrameLimit, type Mode } from './drivers/web/capture.ts';
 import { compose, ffmpegProblem, focusLook, following, loadTheme, phoneLook, themeProblem, type ComposeResult } from './compose/compose.ts';
 import { phoneLayout } from './compose/phone.ts';
@@ -12,7 +12,7 @@ import type { EventLog } from './drivers/web/events.ts';
 import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
 import { compareWithRehearsal, STEP_LIMIT } from './check/rehearsal.ts';
-import { addressWarning, shownAddress } from './take/format.ts';
+import { addressWarning, shownAddress } from './take/address.ts';
 import { timeline, type Script } from './probe/script.ts';
 
 export interface RunOptions {

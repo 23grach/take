@@ -6,7 +6,7 @@ import { realtimeClock } from './clock.ts';
 import { downloadsDone, giveUpDownloads } from './browser.ts';
 import { stepMedia, watchMedia, type Played } from './media.ts';
 import type { Box } from './events.ts';
-import { onScreen } from './focus.ts';
+import { clipToViewport } from './focus.ts';
 import type { SoundCatcher } from './sound.ts';
 import type { Appearance } from '../../take/format.ts';
 
@@ -222,7 +222,7 @@ export async function studio(
     },
     async crop(region, size) {
       await cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: size / region.width, mobile });
-      clip = { ...onScreen(region, [width, height]), scale: 1 };
+      clip = { ...clipToViewport(region, [width, height]), scale: 1 };
     },
     saved: (f) => writes[f],
     videos,

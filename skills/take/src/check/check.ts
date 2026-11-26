@@ -117,7 +117,7 @@ export function check(file: string, { loop = true, fps: expectedFps = 60, pageVi
   return { file, width: s.width, height: s.height, fps, frames: n, seconds, findings, hitches, ok: findings.every((f) => f.status !== 'fail') };
 }
 
-export function formatReport(r: Report): string {
+export function formatCheckReport(r: Report): string {
   const icon = { pass: '✓', warn: '⚠', fail: '✗' };
   const lines = r.findings.map((f) => `${icon[f.status]} ${f.name.padEnd(11)} ${f.detail}`);
   const fails = r.findings.filter((f) => f.status === 'fail').length;
@@ -154,10 +154,10 @@ function greyFrames(file: string): Buffer {
 }
 
 let cache: { file: string; grey: Buffer } | undefined;
-const grey = (file: string) => (cache?.file === file ? cache.grey : (cache = { file, grey: greyFrames(file) }).grey);
+const cachedGreyFrames = (file: string) => (cache?.file === file ? cache.grey : (cache = { file, grey: greyFrames(file) }).grey);
 
 function tileDiff(file: string, a: number, b: number): Float32Array {
-  const g = grey(file);
+  const g = cachedGreyFrames(file);
   const S = GRID.w * GRID.h;
   const [tw, th] = [GRID.w / GRID.cols, GRID.h / GRID.rows];
   const out = new Float32Array(GRID.cols * GRID.rows);
@@ -168,6 +168,6 @@ function tileDiff(file: string, a: number, b: number): Float32Array {
 }
 
 function tileChanges(file: string): Float32Array[] {
-  const n = grey(file).length / (GRID.w * GRID.h);
+  const n = cachedGreyFrames(file).length / (GRID.w * GRID.h);
   return Array.from({ length: n - 1 }, (_, i) => tileDiff(file, i, i + 1));
 }

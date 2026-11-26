@@ -117,6 +117,12 @@ Formats: [scenario](skills/take/docs/scenario-format.md) (what you write) · [ta
 cd skills/take && npm install && npm test
 ```
 
+To check one file while you work, run its test alone:
+
+```bash
+node --test test/compose.test.ts
+```
+
 `npm run demo` starts the small demo app the tests use, at http://127.0.0.1:4300/.
 
 ## License

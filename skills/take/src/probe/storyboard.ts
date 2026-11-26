@@ -4,11 +4,10 @@ import { launchBrowser } from '../browser-binary.ts';
 import { loadTheme } from '../compose/compose.ts';
 import { cursorArt } from '../compose/cursor-art.ts';
 import type { ProbeResult } from './probe.ts';
+import { escapeHtml } from '../escape-html.ts';
 
 const COLS = 3;
 const W = 560;
-
-const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export async function storyboard(result: ProbeResult, dir: string, out: string, { theme = 'default' } = {}): Promise<string> {
   const html = storyboardHtml(result, dir, theme);
@@ -41,16 +40,16 @@ export function storyboardHtml(result: ProbeResult, dir: string, themeName: stri
     const touched = s.step > 0 && !/^Hold /.test(s.label);
     const cursor = result.phone
       ? touched ? `<div class="finger" style="left:${s.pointer[0] * k - ox}px;top:${s.pointer[1] * k - oy}px"></div>` : ''
-      : c && !result.noCursor ? `<img class="cursor" src="${esc(c.src)}" style="left:${s.pointer[0] * k - ox}px;top:${s.pointer[1] * k - oy}px;${c.size ? `width:${c.size[0]}px;height:${c.size[1]}px;` : ''}transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
+      : c && !result.noCursor ? `<img class="cursor" src="${escapeHtml(c.src)}" style="left:${s.pointer[0] * k - ox}px;top:${s.pointer[1] * k - oy}px;${c.size ? `width:${c.size[0]}px;height:${c.size[1]}px;` : ''}transform:scale(${k}) translate(${-c.hotspot[0]}px,${-c.hotspot[1]}px)">` : '';
     return `<figure class="${s.error ? 'failed' : ''}">
       <div class="shot"><img src="${data(path.join(dir, s.file), 'image/png')}">${s.target ? box(s.target, 'target') : ''}${s.waitedFor ? box(s.waitedFor, 'waited') : ''}${cursor}</div>
-      <figcaption><b>${s.step === 0 ? 'Start' : s.step}</b><span>${esc(s.label)}${s.error ? `<em>${esc(s.error)}</em>` : ''}</span><i>${s.at.toFixed(1)} s</i></figcaption>
+      <figcaption><b>${s.step === 0 ? 'Start' : s.step}</b><span>${escapeHtml(s.label)}${s.error ? `<em>${escapeHtml(s.error)}</em>` : ''}</span><i>${s.at.toFixed(1)} s</i></figcaption>
     </figure>`;
   });
   const steps = result.shots.length - 1;
   const verdict = result.ok
     ? `<div class="ok">✓ All ${steps} step${steps === 1 ? '' : 's'} work</div>`
-    : `<div class="bad">✗ ${esc(result.error ?? 'failed')}</div>`;
+    : `<div class="bad">✗ ${escapeHtml(result.error ?? 'failed')}</div>`;
 
   return `<!doctype html><meta charset="utf-8"><style>
     body { margin: 0; padding: 28px; width: ${COLS * (W + 20)}px; font: 14px/1.4 system-ui, sans-serif; color: #222; background: #fafaf8; }
@@ -69,7 +68,7 @@ export function storyboardHtml(result: ProbeResult, dir: string, themeName: stri
     figcaption em { display: block; font-style: normal; color: #c0362c; }
     .failed .shot { box-shadow: 0 0 0 3px #c0362c; } .failed b { background: #c0362c; }
   </style>
-  <h1>${esc(result.title)}: storyboard</h1>
+  <h1>${escapeHtml(result.title)}: storyboard</h1>
   ${verdict}
   <div class="legend">Each picture is the page after that step.<span style="border:2px solid #2f6bff"></span>acted on<span style="border:2px dashed #1a9f5b"></span>waited for</div>
   <div class="grid">${cards.join('')}</div>`;

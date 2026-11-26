@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { runChecks, formatReport, type Probe } from '../src/doctor.ts';
+import { runChecks, formatDoctorReport, type Probe } from '../src/doctor.ts';
 
 const healthy: Probe = {
   platform: 'darwin',
@@ -23,7 +23,7 @@ test('all checks pass on a healthy machine', async () => {
     results.map((r) => [r.name, r.ok]),
     [['Node', true], ['Browser', true], ['ffmpeg', true], ['H.264 encoder', true], ['ffprobe', true]],
   );
-  assert.match(formatReport(results), /All good/);
+  assert.match(formatDoctorReport(results), /All good/);
 });
 
 test('missing tools come with a fix', async () => {
@@ -42,7 +42,7 @@ test('missing tools come with a fix', async () => {
   assert.deepEqual(failed.map((r) => r.name), ['Node', 'Browser', 'ffmpeg', 'ffprobe']);
   assert.ok(failed.every((r) => r.fix));
   assert.equal(results.find((r) => r.name === 'ffmpeg')?.fix, "run in Take's folder: node src/install-ffmpeg.ts");
-  assert.match(formatReport(results), /4 problems to fix/);
+  assert.match(formatDoctorReport(results), /4 problems to fix/);
 });
 
 test('Take\'s own ffmpeg is named as such', async () => {

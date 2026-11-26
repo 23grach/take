@@ -2,7 +2,7 @@ import type { Browser, BrowserContext, Page } from 'playwright';
 import { launchBrowser } from '../../browser-binary.ts';
 import type { Appearance, Device, Take } from '../../take/format.ts';
 import { ownError } from './page-errors.ts';
-import { TakeError } from './driver.ts';
+import { TakeError } from './take-error.ts';
 import { describeCondition, holds } from './targets.ts';
 import type { Condition } from '../../take/format.ts';
 import { applyHarden, actLikeIPhone, chromeUserAgent, hardenClientHints, hardenLaunchOptions, IPHONE_USER_AGENT } from './harden.ts';

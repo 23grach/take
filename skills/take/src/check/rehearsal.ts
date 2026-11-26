@@ -34,11 +34,11 @@ export function compareWithRehearsal(captureDir: string, log: EventLog, probeDir
     const [from, to] = shot.step === 0
       ? [0, Math.min(last, (log.steps[0]?.end ?? 0))]
       : [Math.min(last, log.steps[shot.step - 1].end), Math.min(last, (log.steps[shot.step]?.end ?? log.frames - 1))];
-    const a = grey(path.join(probeDir, shot.file), info.shows);
+    const a = greyFrame(path.join(probeDir, shot.file), info.shows);
     let best = { frame: from, differs: Infinity };
     for (let k = 0; k < SAMPLES; k++) {
       const frame = Math.round(from + ((to - from) * k) / (SAMPLES - 1));
-      const differs = blockDifference(a, grey(path.join(captureDir, info.frames[frame])), videoMask(log, frame, view));
+      const differs = blockDifference(a, greyFrame(path.join(captureDir, info.frames[frame])), videoMask(log, frame, view));
       if (differs < best.differs) best = { frame, differs };
       if (differs === 0) break;
     }
@@ -69,7 +69,7 @@ function blockDifference(a: Buffer, b: Buffer, masked: Uint8Array): number {
   return blocks ? off / blocks : 0;
 }
 
-function grey(file: string, crop?: Box): Buffer {
+function greyFrame(file: string, crop?: Box): Buffer {
   const cut = crop ? `crop=${crop.width}:${crop.height}:${crop.x}:${crop.y},` : '';
   return execFileSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', file, '-vf', `${cut}scale=${SIZE.w}:${SIZE.h},format=gray`, '-f', 'rawvideo', '-']);
 }
