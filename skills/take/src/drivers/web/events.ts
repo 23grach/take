@@ -1,6 +1,6 @@
 import type { Cursor } from './cursor.ts';
 import type { Caret } from './caret.ts';
-import type { Device } from '../../take/format.ts';
+import type { Appearance, Device } from '../../take/format.ts';
 
 export interface Box {
   x: number;
@@ -59,4 +59,9 @@ export interface EventLog {
   videos?: [number, Box[]][];
   keyboard?: [number, KeyboardUp | null][];
   tops?: [number, PageTop][];
+  urls?: [number, string][];
+  ends?: [number, boolean][];
+  appearances?: [number, Appearance][];
+  noCursor?: true;
+  focus?: Box;
 }

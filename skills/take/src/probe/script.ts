@@ -21,7 +21,7 @@ export interface Script {
   estimated: boolean;
 }
 
-export function timeline(take: Take, logs: StepLog[], total: number, { fps, speed = 1, loopFrames = 0 }: { fps: number; speed?: number; loopFrames?: number }): Script {
+export function timeline(take: Take, logs: StepLog[], total: number, { fps, speed = 1, loopFrames = 0, rehearsed = false }: { fps: number; speed?: number; loopFrames?: number; rehearsed?: boolean }): Script {
   let at = 0;
   const lines = logs.map((log, i): ScriptLine => {
     const s = take.steps[log.index];
@@ -33,7 +33,7 @@ export function timeline(take: Take, logs: StepLog[], total: number, { fps, spee
     at += span;
     return line;
   });
-  return { title: take.title, lines, loop: loopFrames / fps, total: (at + loopFrames) / fps, estimated: speed !== 1 };
+  return { title: take.title, lines, loop: loopFrames / fps, total: (at + loopFrames) / fps, estimated: rehearsed };
 }
 
 const clock = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toFixed(2).padStart(5, '0')}`;

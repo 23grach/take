@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { validateTake, DEFAULTS } from '../src/take/format.ts';
+import { validateTake, DEFAULTS, followedAddress } from '../src/take/format.ts';
 import { loadTake } from '../src/take/load.ts';
 
 const example = fileURLToPath(new URL('./fixtures/create-project.take.json', import.meta.url));
@@ -58,6 +58,17 @@ test('"target.appearance" picks light or dark, and follows the site when left ou
   const left = validateTake(minimal());
   assert.ok(left.ok && !('appearance' in left.take.target));
   assert.deepEqual(errorsOf({ ...minimal(), target: { ...minimal().target, appearance: 'night' } }), ['target.appearance: must be "light" or "dark", or left out to follow the site, got "night"']);
+});
+
+test('an "appearance" step switches the computer to light or dark mid-video, on desktop, in the filmed steps', () => {
+  const steps = (step: unknown) => ({ ...minimal(), steps: [step] });
+  assert.ok(validateTake(steps({ do: 'appearance', to: 'dark' })).ok);
+  assert.deepEqual(errorsOf(steps({ do: 'appearance', to: 'night' })), ['steps[0].to: must be "light" or "dark", got "night"']);
+  assert.deepEqual(errorsOf(steps({ do: 'appearance' })), ['steps[0]: missing "to" ("light" or "dark": the mode the computer switches to)']);
+  assert.deepEqual(errorsOf({ ...steps({ do: 'appearance', to: 'dark' }), target: { kind: 'web', url: 'http://localhost:3000/', device: 'phone' } }),
+    ['steps[0].do: switching light and dark mid-video works on desktop only for now; on a phone, set target.appearance for the whole video']);
+  assert.deepEqual(errorsOf({ ...minimal(), setup: [{ do: 'appearance', to: 'dark' }] }),
+    ['setup[0].do: setup isn\'t filmed, so a switch there only changes how the video starts: set target.appearance instead']);
 });
 
 test('typos get a suggestion', () => {
@@ -123,4 +134,13 @@ test('any step can be given a length in ms; a type step takes cps or ms, not bot
   assert.equal(r.take.steps[0].ms, 3000);
   assert.deepEqual(errorsOf(take([{ do: 'press', key: 'Enter', ms: 0 }])), ['steps[0].ms: must be a number above 0, got 0']);
   assert.deepEqual(errorsOf(take([{ do: 'type', text: 'Hi', cps: 8, ms: 2000 }])), ['steps[0]: give "cps" (typing speed) or "ms" (how long the step lasts: the typing speed follows), not both']);
+});
+
+test('the address follows the page: same site keeps the shown domain with the new path, another site shows its own', () => {
+  assert.equal(followedAddress('stripe.com', 'https://stripe.com/', 'https://stripe.com/payments'), 'stripe.com/payments');
+  assert.equal(followedAddress('github.com/facebook/react', 'https://github.com/react/react', 'https://github.com/react/react/issues/38261'), 'github.com/react/react/issues/38261');
+  assert.equal(followedAddress('boards.app', 'http://localhost:5173/', 'http://localhost:5173/projects/'), 'boards.app/projects');
+  assert.equal(followedAddress('github.com/facebook/react', 'https://github.com/react/react', 'https://github.com/react/react#readme'), 'github.com/facebook/react');
+  assert.equal(followedAddress('boards.app', 'http://localhost:5173/', 'https://docs.example.com/start'), 'docs.example.com/start');
+  assert.equal(followedAddress('', 'http://localhost:5173/', 'http://localhost:5173/projects'), '');
 });

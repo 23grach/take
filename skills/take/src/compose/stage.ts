@@ -3,6 +3,8 @@ import path from 'node:path';
 import type { CursorArt } from './cursor-art.ts';
 import type { PhoneTheme } from './phone.ts';
 import type { Appearance } from '../take/format.ts';
+import type { FocusLook } from '../drivers/web/focus.ts';
+import type { Box } from '../drivers/web/events.ts';
 
 export interface Theme {
   stage: { size: [number, number]; output: [number, number]; background: string; padding: number };
@@ -16,11 +18,13 @@ export interface Theme {
     address: { show: boolean; width: number; color: string; font: string };
     toolbar?: Toolbar;
   };
-  cursor: { art?: 'system'; size: number; pressScale: number; hideFade: number; shapes: Record<'arrow' | 'hand' | 'text', { file: string; hotspot: [number, number] }> };
+  cursor: { art?: 'system'; size: number; pressScale: number; morph: number; hideFade: number; shapes: Record<'arrow' | 'hand' | 'text', { file: string; hotspot: [number, number] }> };
   caret: { width: number; solidFrames: number; blinkFrames: number };
   loop: { frames: number };
+  appearance: { frames: number };
+  focus?: FocusLook;
   phone?: PhoneTheme;
-  dark?: Overrides<Pick<Theme, 'stage' | 'window'>>;
+  dark?: Overrides<Pick<Theme, 'stage' | 'window' | 'focus'>>;
 }
 
 interface Glass {
@@ -80,6 +84,13 @@ export function layout(theme: Theme, viewport: [number, number]): Layout {
   return { left, top, width, height, contentLeft: left, contentTop: top + bar, k: width / viewport[0] };
 }
 
+export function focusLayout(viewport: [number, number], region: Box, [W]: [number, number]): Layout {
+  const k = W / region.width;
+  const left = -region.x * k;
+  const top = -region.y * k;
+  return { left, top, width: viewport[0] * k, height: viewport[1] * k, contentLeft: left, contentTop: top, k };
+}
+
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
 
 export type StageCursor = Omit<CursorArt, 'size'> & { size?: [number, number] };
@@ -103,7 +114,7 @@ function glassArt(g: Glass, width: number, height: number): string {
 
 function toolbarParts(win: Theme['window'], themeDir: string, address: string): { css: string; nav: string; address: string; actions: string } {
   const bar = win.toolbar;
-  const field = (glass: string, inner: string) => `<div class="address${glass}">${inner}${esc(address)}</div>`;
+  const field = (glass: string, inner: string) => `<div class="address${glass}">${inner}<span class="address-text">${esc(address)}</span></div>`;
   if (!bar) return { css: '', nav: '', address: field('', ''), actions: '' };
   const icon = (name: ToolbarIcon) => `<i class="icon">${fs.readFileSync(path.join(themeDir, bar.icons[name]), 'utf8').trim()}</i>`;
   const tool = (name: ToolbarIcon, width: number, off = false) => `<span class="tool${off ? ' off' : ''}" style="width: ${width}px">${icon(name)}</span>`;
@@ -126,17 +137,11 @@ function toolbarParts(win: Theme['window'], themeDir: string, address: string): 
   };
 }
 
-export function stageHtml(theme: Theme, address: string, box: Layout, cursors: Record<string, StageCursor>, themeDir: string): string {
-  const { window: win, cursor } = theme;
-  const parts = toolbarParts(win, themeDir, address);
+function sceneCss(theme: Theme, box: Layout, toolbarCss: string): string {
+  const win = theme.window;
   const fieldHeight = win.toolbar?.height ?? 0;
-  const [W, H] = theme.stage.size;
-  const keys = Object.keys(cursors);
-  return `<!doctype html>
-<meta charset="utf-8">
-<style>
-  html, body { margin: 0; width: ${W}px; height: ${H}px; overflow: hidden; }
-  body { background: ${theme.stage.background}; }
+  return `
+  & { position: absolute; inset: 0; background: ${theme.stage.background}; }
   .window { position: absolute; left: ${box.left}px; top: ${box.top}px; width: ${box.width}px; height: ${box.height}px;
     border-radius: ${win.radius}px; box-shadow: ${win.shadow}; overflow: hidden; background: ${win.background}; }
   .window::after { content: ""; position: absolute; inset: 0; border-radius: inherit; border: ${win.border}; pointer-events: none; }
@@ -145,16 +150,57 @@ export function stageHtml(theme: Theme, address: string, box: Layout, cursors: R
   .dot { width: ${win.dots.size}px; height: ${win.dots.size}px; border-radius: 50%; margin-right: ${win.dots.gap}px; }
 ${BUTTONS.map((b) => `  .dot.${b} { background: ${win.dots[b].fill}; box-shadow: inset 0 0 0 ${win.dots.outlineWidth}px ${win.dots[b].outline}; }`).join('\n')}
   .address { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); width: ${win.address.width}px; height: ${fieldHeight}px;
-    color: ${win.address.color}; font: ${win.address.font}; display: ${win.address.show ? 'flex' : 'none'}; align-items: center; justify-content: center; }${parts.css}
+    color: ${win.address.color}; font: ${win.address.font}; display: ${win.address.show ? 'flex' : 'none'}; align-items: center; justify-content: center; }${toolbarCss}
   .content { position: absolute; left: 0; top: ${win.bar.height}px; width: ${box.width}px; height: ${box.height - win.bar.height}px; overflow: hidden; }
   .content img { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
-  #caret { position: absolute; left: 0; top: 0; display: none; }
+  .caret { position: absolute; left: 0; top: 0; display: none; }`;
+}
+
+export interface Bare {
+  size: [number, number];
+  shows: Box;
+}
+
+function bareSceneCss(theme: Theme, box: Layout, shows: Box): string {
+  const px = (n: number) => `${Math.round(n * 1000) / 1000}px`;
+  return `
+  & { position: absolute; inset: 0; background: ${theme.focus!.background}; overflow: hidden; }
+  .window { position: absolute; left: ${px(box.left)}; top: ${px(box.top)}; width: ${px(box.width)}; height: ${px(box.height)}; }
+  .content { position: absolute; inset: 0; }
+  .content img { position: absolute; left: ${px(shows.x * box.k)}; top: ${px(shows.y * box.k)}; width: ${px(shows.width * box.k)}; height: ${px(shows.height * box.k)}; display: block; }
+  .caret { position: absolute; left: 0; top: 0; display: none; }`;
+}
+
+const bareSceneHtml = (look: string) => `<div class="scene ${look}">
+  <div class="window"><div class="content"><img class="shot" alt=""><img class="fade" alt="" style="opacity: 0"><div class="caret"></div></div></div>
+</div>`;
+
+function sceneHtml(look: string, theme: Theme, themeDir: string, address: string): string {
+  const parts = toolbarParts(theme.window, themeDir, address);
+  return `<div class="scene ${look}">
+  <div class="window">
+    <div class="bar">${BUTTONS.map((b) => `<span class="dot ${b}"></span>`).join('')}${parts.nav}${parts.address}${parts.actions}</div>
+    <div class="content"><img class="shot" alt=""><img class="fade" alt="" style="opacity: 0"><div class="caret"></div></div>
+  </div>
+</div>`;
+}
+
+export function stageHtml(theme: Theme, address: string, box: Layout, cursors: Record<string, StageCursor>, themeDir: string, dark?: Theme, bare?: Bare): string {
+  const { cursor } = theme;
+  const looks: [string, Theme][] = dark ? [['light', theme], ['dark', dark]] : [['only', theme]];
+  const [W, H] = bare?.size ?? theme.stage.size;
+  const css = (t: Theme) => (bare ? bareSceneCss(t, box, bare.shows) : sceneCss(t, box, toolbarParts(t.window, themeDir, address).css));
+  const html = (look: string, t: Theme) => (bare ? bareSceneHtml(look) : sceneHtml(look, t, themeDir, address));
+  const keys = Object.keys(cursors);
+  return `<!doctype html>
+<meta charset="utf-8">
+<style>
+  html, body { margin: 0; width: ${W}px; height: ${H}px; overflow: hidden; }
+${looks.map(([look, t]) => `  .scene.${look} {${css(t)}\n  }`).join('\n')}
+  .scene.dark { opacity: 0; }
   .cursor { position: absolute; left: 0; top: 0; visibility: hidden; }
 </style>
-<div class="window">
-  <div class="bar">${BUTTONS.map((b) => `<span class="dot ${b}"></span>`).join('')}${parts.nav}${parts.address}${parts.actions}</div>
-  <div class="content"><img id="shot" alt=""><img id="fade" alt="" style="opacity: 0"><div id="caret"></div></div>
-</div>
+${looks.map(([look, t]) => html(look, t)).join('\n')}
 ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${i}" src="${esc(cursors[key].src)}" alt="">`).join('')}
 <script>
   const box = ${JSON.stringify(box)};
@@ -177,27 +223,37 @@ ${keys.map((key, i) => `<img class="cursor" data-key="${esc(key)}" id="cursor-${
     await img.decode();
     fit(img);
   };
-  const shot = document.getElementById('shot'), fade = document.getElementById('fade');
+  const scenes = [...document.querySelectorAll('.scene')];
+  const darkScene = document.querySelector('.scene.dark');
   const sx = (x) => box.contentLeft + x * box.k, sy = (y) => box.contentTop + y * box.k;
   const show = async (img, src) => { if (img.getAttribute('src') !== src) { img.src = src; await img.decode(); } };
-  window.render = async ({ footage, overlay: o }) => {
-    await show(shot, footage.src);
+  const caretWidth = Math.max(1, Math.round(${theme.caret.width} * box.k));
+  const paint = async (scene, footage, c, address) => {
+    const addressText = scene.querySelector('.address-text');
+    if (addressText && addressText.textContent !== address) addressText.textContent = address;
+    const fade = scene.querySelector('.fade');
+    await show(scene.querySelector('.shot'), footage.src);
     if (footage.fade) await show(fade, footage.fade.src);
     fade.style.opacity = footage.fade ? footage.fade.opacity : 0;
-    const caret = document.getElementById('caret'), c = o.caret;
+    const caret = scene.querySelector('.caret');
     caret.style.display = c && c.opacity > 0 ? 'block' : 'none';
-    if (c) {
-      const w = Math.max(1, Math.round(${theme.caret.width} * box.k));
-      Object.assign(caret.style, { left: Math.round(c.x * box.k) + 'px', top: Math.round(c.y * box.k) + 'px', width: w + 'px', height: Math.round(c.height * box.k) + 'px', background: c.color, opacity: c.opacity });
-    }
+    if (c) Object.assign(caret.style, { left: Math.round(c.x * box.k) + 'px', top: Math.round(c.y * box.k) + 'px', width: caretWidth + 'px', height: Math.round(c.height * box.k) + 'px', background: c.color, opacity: c.opacity });
+  };
+  window.render = async ({ footage, overlay: o, address, dark }) => {
+    if (darkScene) darkScene.style.opacity = dark;
+    const shown = darkScene ? scenes.filter((s) => (s === darkScene ? dark > 0 : dark < 1)) : scenes;
+    await Promise.all(shown.map((s) => paint(s, footage, o.caret, address)));
     for (const c of Object.values(byKey)) c.style.visibility = 'hidden';
-    const cur = o.cursor && byKey[o.cursor];
-    if (cur) {
-      const h = art[o.cursor].hotspot;
-      cur.style.visibility = o.opacity > 0 ? 'visible' : 'hidden';
-      cur.style.opacity = o.opacity;
-      cur.style.transform = 'translate(' + (sx(o.x) - h[0] * box.k) + 'px,' + (sy(o.y) - h[1] * box.k) + 'px) scale(' + (o.pressed ? pressScale : 1) + ')';
-    }
+    const place = (key, opacity) => {
+      const img = key && byKey[key];
+      if (!img) return;
+      const h = art[key].hotspot;
+      img.style.visibility = opacity > 0 ? 'visible' : 'hidden';
+      img.style.opacity = opacity;
+      img.style.transform = 'translate(' + (sx(o.x) - h[0] * box.k) + 'px,' + (sy(o.y) - h[1] * box.k) + 'px) scale(' + (o.pressed ? pressScale : 1) + ')';
+    };
+    if (o.from !== o.cursor) place(o.from, o.opacity * (1 - o.mix));
+    place(o.cursor, o.from === o.cursor ? o.opacity : o.opacity * o.mix);
   };
 </script>`;
 }

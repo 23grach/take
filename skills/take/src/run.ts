@@ -2,12 +2,12 @@ import { VISIBLE_NOTE } from './drivers/web/browser.ts';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readyTake } from './take/load.ts';
-import { commitCapture, discardRecording, record, stagingDir } from './drivers/web/record.ts';
+import { commitCapture, discardRecording, FAILED_OUTLINE, FAILED_SCREEN, record, stagingDir } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/driver.ts';
 import { NeedsFrameLimit, type Mode } from './drivers/web/capture.ts';
-import { compose, ffmpegProblem, following, loadTheme, phoneLook, themeProblem, type ComposeResult } from './compose/compose.ts';
+import { compose, ffmpegProblem, focusLook, following, loadTheme, phoneLook, themeProblem, type ComposeResult } from './compose/compose.ts';
 import { phoneLayout } from './compose/phone.ts';
-import { layout } from './compose/stage.ts';
+import { focusLayout, layout } from './compose/stage.ts';
 import type { EventLog } from './drivers/web/events.ts';
 import { check, type Report } from './check/check.ts';
 import { contactSheet } from './check/contact.ts';
@@ -60,6 +60,8 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
     return `${s.toFixed(1)} s`;
   };
 
+  const failedScreen = path.join(dir, 'failed');
+  fs.rmSync(failedScreen, { recursive: true, force: true });
   const options = { capture, out: video, theme: theme ?? take.theme, appearance: take.target.appearance, address: shownAddress(take.target) };
   let composing: Promise<ComposeResult> | undefined;
   let recorded: Awaited<ReturnType<typeof record>> | undefined;
@@ -75,7 +77,7 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
       abort.abort();
     });
     try {
-      const { capture: info, events, warnings } = (recorded = await record(take, { mode, out: capture, headed, onFrame: recording?.frame, commit: !recording, signal: abort.signal, unthrottled }));
+      const { capture: info, events, warnings } = (recorded = await record(take, { mode, out: capture, headed, onFrame: recording?.frame, commit: !recording, signal: abort.signal, unthrottled, failedScreen }));
       recording?.end(events);
       log(`✓ recorded  ${info.frames.length} frames (${(info.frames.length / info.fps).toFixed(2)} s of app) in ${lap()} → ${rel(capture)}`);
       if (info.visibleWindow) log(`⚠ ${VISIBLE_NOTE}`);
@@ -90,7 +92,7 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
         log(`↻ ${e.message}`);
         continue;
       }
-      if (e instanceof TakeError) return { ...stop(e.message), capture };
+      if (e instanceof TakeError) return { ...stop(e.message + (fs.existsSync(failedScreen) ? `\n  the screen it stopped on: ${rel(path.join(failedScreen, FAILED_SCREEN))}, its outline: ${rel(path.join(failedScreen, FAILED_OUTLINE))}` : '')), capture };
       throw e;
     }
   }
@@ -108,8 +110,10 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   log(`✓ composed  ${composed.size.join('×')}, ${composed.frames} frames (${composed.seconds.toFixed(2)} s of video) in ${lap()} → ${rel(video)}`);
 
   const loop = take.loop !== 'none';
-  const report = check(video, { loop, pageVideos: recorded && pageVideoAreas(recorded.events, options.theme) });
+  const report = check(video, { loop, pageVideos: recorded && pageVideoAreas(recorded.events, options.theme), exactFrames: mode === 'studio' });
   const matches = mode === 'studio' && recorded ? compareWithRehearsal(capture, recorded.events, path.join(path.dirname(file), 'probe'), file) : undefined;
+  if (mode === 'studio' && !matches)
+    report.findings.push({ name: 'rehearsal', status: 'warn', detail: 'not compared with the rehearsal: the last probe of this take.json failed, is older than it, or has other steps; probe it again to compare' });
   if (matches) {
     const off = matches.filter((m) => m.differs > STEP_LIMIT);
     report.findings.push({
@@ -133,8 +137,10 @@ export function pageVideoAreas(log: EventLog, theme?: string): ((f: number) => [
   const list = log.videos;
   if (!list?.length) return undefined;
   const look = loadTheme(theme).theme;
-  const box = log.device === 'phone' ? phoneLayout(look, phoneLook(look, theme ?? 'default'), log.viewport) : layout(look, log.viewport);
-  const z = look.stage.output[0] / look.stage.size[0];
+  const box = log.focus
+    ? focusLayout(log.viewport, log.focus, focusLook(theme ?? 'default').light.size)
+    : log.device === 'phone' ? phoneLayout(look, phoneLook(look, theme ?? 'default'), log.viewport) : layout(look, log.viewport);
+  const z = log.focus ? 1 : look.stage.output[0] / look.stage.size[0];
   return (f) => {
     let i = list.length - 1;
     while (i > 0 && list[i][0] > f) i--;

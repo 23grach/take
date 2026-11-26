@@ -9,6 +9,7 @@ import { realtimeClock, type Clock } from '../src/drivers/web/clock.ts';
 import { loadTake } from '../src/take/load.ts';
 import { validateTake, type Take } from '../src/take/format.ts';
 import { withShortFind } from './short-find.ts';
+import { frames, PACING, scrollMs } from '../src/drivers/web/pacing.ts';
 
 let app: { url: string; close: () => Promise<unknown> };
 let browser: Browser | undefined;
@@ -62,6 +63,38 @@ test('performs the example take in real time and logs it', async () => {
   assert.ok(log.steps[3].waitedFor);
 });
 
+test('a scroll lasts its own length even when a slow page makes the clock skip frames', async () => {
+  const take = takeOf([{ do: 'scroll', by: [0, 300] }, { do: 'hold', ms: 100 }]);
+  const page = await open(take);
+  await page.evaluate(() => document.body.style.setProperty('min-height', '4000px'));
+  let frame = 0;
+  const skipping: Clock = { fps: 60, get frame() { return frame; }, async tick() { frame += 3; await new Promise((r) => setImmediate(r)); } };
+  const log = await perform(page, take, skipping, { watch: false });
+  const scrollFrames = frames(scrollMs(300)) + frames(PACING.gap);
+  assert.ok(log.steps[1].start - log.steps[0].start <= scrollFrames + 6, `the scroll took ${log.steps[1].start - log.steps[0].start} frames, not ${scrollFrames}`);
+  assert.equal(await page.evaluate(() => scrollY), 300);
+});
+
+test('a scroll given a length moves slowly for all of it, as one move', async () => {
+  const take = takeOf([{ do: 'scroll', by: [0, 300], ms: 3000 }, { do: 'hold', ms: 100 }]);
+  const page = await open(take);
+  await page.evaluate(() => document.body.style.setProperty('min-height', '4000px'));
+  const log = await perform(page, take, fastClock(), { watch: false });
+  const scrolls = log.events.filter((e) => e.type === 'scroll');
+  const span = scrolls.at(-1)!.frame - scrolls[0].frame;
+  assert.ok(span > 4 * frames(scrollMs(300)), `the scroll moved for ${span} frames, its usual pace is ${frames(scrollMs(300))}`);
+  assert.equal(log.steps[1].start - log.steps[0].start, frames(3000));
+  assert.ok(scrolls.every((e, i) => i === 0 || e.frame === scrolls[i - 1].frame + 1), 'once moving, the page moves every frame until it arrives');
+  assert.equal(await page.evaluate(() => scrollY), 300);
+});
+
+test('typing with no text field focused says so', async () => {
+  const take = takeOf([{ do: 'type', text: 'ab', cps: 30 }]);
+  const page = await open(take);
+  const log = await perform(page, take, fastClock(), { watch: false });
+  assert.match(log.steps[0].note ?? '', /no text field had focus/);
+});
+
 test('a step given a length lasts exactly that long, and typing fits into it', async () => {
   const take = takeOf([
     { ...openDialog, ms: 3000 },
@@ -87,12 +120,29 @@ async function failure(steps: unknown[]): Promise<string> {
   return err.message;
 }
 
+test('an appearance step tells the page the computer switched mode, and logs the frame; a take that never points hides the cursor', async () => {
+  const take = takeOf([{ do: 'appearance', to: 'dark' }, { do: 'hold', ms: 100 }, { do: 'appearance', to: 'light' }, { do: 'hold', ms: 100 }]);
+  const page = await open(take);
+  await page.evaluate(() => {
+    const w = window as unknown as { seen: boolean[] };
+    w.seen = [];
+    matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => w.seen.push(e.matches));
+  });
+  const log = await perform(page, take, realtimeClock(), { watch: false });
+  const seen = await page.evaluate(() => (window as unknown as { seen: boolean[] }).seen);
+  assert.deepEqual(log.appearances?.map(([, to]) => to), ['dark', 'light']);
+  assert.ok(log.appearances![0][0] < log.appearances![1][0]);
+  assert.deepEqual(seen, [true, false]);
+  assert.equal(log.noCursor, true);
+  assert.equal((await perform(page, takeOf([{ do: 'hover', target: [10, 10] }]), fastClock(), { watch: false })).noCursor, undefined);
+});
+
 test('says when a target is not on the page', async () => {
   assert.equal(await failure([{ do: 'click', target: { text: 'Archive' } }]), 'step 1: can\'t find text "Archive" (looked for 1.5 s)');
 });
 
 test('says when a target matches more than one element', async () => {
-  assert.match(await failure([{ do: 'hover', target: { role: 'heading', name: 'r' } }]), /^step 1: 4 elements match heading "r" \("Projects", "Brand refresh", "Onboarding flow", …\); make the target more specific/);
+  assert.match(await failure([{ do: 'hover', target: { role: 'heading', name: 'r' } }]), /^step 1: 4 elements match heading "r" \("Projects" on screen: \{ "css": ".heading div > h1" \}, "Brand refresh" on screen: .*, "Pricing page" on screen: .*\); make the target more specific/);
 });
 
 test('says when a target is covered or disabled', async () => {
@@ -201,7 +251,7 @@ test('a double-click selects a word; a scroll with nothing to move says so', asy
     { do: 'scroll', by: [0, 300] },
   ] });
   assert.ok(r.ok, r.ok ? '' : r.errors.join('\n'));
-  assert.ok(!validateTake({ version: 0, title: 'D', target: { kind: 'web', url }, steps: [{ do: 'click', target: { css: 'p' }, clicks: 4 }] }).ok);
+  assert.ok(!validateTake({ version: 0, title: 'D', target: { kind: 'web', url }, steps: [{ do: 'click', target: { css: 'p' }, clicks: 21 }] }).ok);
   const { browser, page } = await openTake(r.take);
   try {
     const log = await perform(page, r.take, realtimeClock());

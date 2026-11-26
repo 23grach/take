@@ -39,10 +39,20 @@ Rules for writing `take.json` ([take-format.md](take-format.md)) from a scenario
 | `"Saved" appears`, `the new card appears` | `waitFor` on the step before it (preferred), or a `wait` step if nothing triggers it directly |
 | `Pause 1 s`, `show it for 2 s` | `hold` |
 | `Lock the middle colour` (an icon that only appears on hover, with no name) | `hover` the column, probe, read the icon's point off that step's picture, then `click` with `"target": [x, y]`. |
+| `Click the heart 12 times quickly` / `mash the like button` | one `click` with `"clicks": 12` (up to 20): about 8 clicks a second, the way a person mashes a button. Add `ms` to make them speed up (`"clicks": 16, "ms": 4000`: from about 0.4 s apart to 8 a second). Separate `click` steps can't be closer than about 0.5 s, so a site that reacts to fast clicking (a burst after 10 clicks in 2 s) won't see them as fast. |
+| `Only the heart` / `Just the date picker, no browser` | `target.focus`: `on` the element (one match), `room` for what it throws out. See [take-format.md](take-format.md). |
 | `Select the word "started"` (in text or a code editor) | `click` the word with `"clicks": 2`; then `type` replaces it. A triple-click (`3`) selects the whole line. |
 | `Change Name to "Moodboard"` (a field that already has text) | `click` the field, `press` `Meta+A` (select all), then `type` without a target: typing replaces the selection. A `type` with a target adds to what's there. |
 | `slowly` / `quickly` on typing | `cps` 8 / 22 (normal 14). On a phone, typing is thumbs on glass: 5 / 11 (normal 7, the default when a phone's `type` step gives no `cps`) |
+| `scroll slowly`, `glide down the page` | one `scroll` with `"ms"` as long as the glide should last (about 2 s per screen for slow): the scroll itself stretches to fill it. Don't split it into several scrolls: each one starts and stops, so the page moves in pulses |
 | `show the dialog for 3 s`, `this step takes 2 s`, a length the user changed in the script | `"ms"` on that step: it lasts exactly that long, the pause after it fills the rest ([Timing](take-format.md#timing)) |
+| A click that opens a new page, and the cursor would sit over its content for the closing hold | after the click's `waitFor`, `hover` an empty point (`"target": [x, y]`, read off the step's picture) so the result isn't covered |
+| A site that plays an intro animation on load (a blurred headline sharpening, a hero fading in) | `"setup": [{ "do": "hold", "ms": 2500 }]` (as long as the intro), or `ready` on what the finished page shows; the video then opens on the settled page |
+| A site that picks its language from where the computer is | put the site's own language setting in `target.url` (`?hl=en` on Google sites, `/en-us/` paths, a `lang=` parameter): Take's browser is wherever the Mac is |
+| `Zoom in on the map` | `hover` a point on the map first, then `scroll` `"by": [0, -300]`: a scroll goes to what's under the cursor, so it zooms the map instead of moving the page |
+| `Put a label on the shape` (canvas whiteboards) | `click` the shape's edge (hollow shapes aren't hit inside), `press` `Enter`, `type` without a target, `press` `Escape`. A double-click often lands on a handle or makes a separate text, and the step still passes: check the picture |
+| A video plays an ad first (YouTube) | after the click that opens the video, `{ "do": "wait", "for": { "visible": { "css": "#movie_player.playing-mode:not(.ad-showing)" } }, "timeout": 60000, "film": false }`: the ad plays off camera and the video cuts to the real video playing. Other players: wait for whatever the page shows only once the real content plays |
+| `Pick dates` in a date picker | choose days the picker shows without paging (this month's later days, or the first days after one `Next month` click) and say in the take's title or your message that it needs a new probe once those dates pass |
 
 **Toasts at the end.** The app's own confirmation toast during the closing hold is good: it says what happened. But if it's still showing when the closing hold ends, the loop fades it into the first screen. Then add `{ "do": "wait", "for": { "hidden": <the toast> } }` before the closing hold, so the result is shown clean for the full 2 s.
 
@@ -58,7 +68,7 @@ Pick from the page outline `take probe` writes after each step (`probe/step-NN.o
 4. `text`, for things that aren't controls (a card title, a menu item without a role).
 5. `css` only as a last resort; it breaks when the app's code changes. When the outline itself offers one (at its end: elements with no name, or several with the same name), use that.
 
-Add `"exact": true` when the name is part of another name on the page (`Create` vs `Create project`, `Save` vs `Save as…`). A target must match exactly one visible element; the probe says when it doesn't.
+Add `"exact": true` when the name is part of another name on the page (`Create` vs `Create project`, `Save` vs `Save as…`). A target must match exactly one visible element; the probe says when it doesn't. A name can hold text the screen doesn't show, for screen readers (a tab showing "Issues 871" can be named `Issues (871)`): the outline shows the name to use. Avoid names with live counts; target those by `css`.
 
 ## Length
 

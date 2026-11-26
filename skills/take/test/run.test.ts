@@ -42,6 +42,7 @@ test('run goes from take.json to a checked MP4 with a contact sheet', async () =
     assert.ok(fs.existsSync(path.join(dir, f)), f);
   assert.deepEqual(lines.filter((l) => l.startsWith('✓')).map((l) => l.split(/\s+/)[1]), ['recorded', 'composed', 'checked']);
   assert.ok(lines.some((l) => l.startsWith('⚠ no address')), 'warns that the address bar will be blank');
+  assert.match(r.report?.findings.find((f) => f.name === 'rehearsal')?.detail ?? '', /^not compared with the rehearsal/);
 });
 
 test('run stops with the failing step when the app does not match the take', async () => {
@@ -50,6 +51,10 @@ test('run stops with the failing step when the app does not match the take', asy
   assert.equal(r.ok, false);
   assert.match(r.error ?? '', /^step 1: .*Delete everything/);
   assert.equal(r.video, undefined);
+  const failed = path.join(path.dirname(file), 'failed');
+  assert.match(r.error ?? '', /the screen it stopped on: .*failed\/screen\.png/);
+  assert.ok(fs.statSync(path.join(failed, 'screen.png')).size > 1000);
+  assert.match(fs.readFileSync(path.join(failed, 'screen.outline.yml'), 'utf8'), /button "New project"/);
 });
 
 test('run says so when the app is not running', async () => {

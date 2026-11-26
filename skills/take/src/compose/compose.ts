@@ -7,14 +7,15 @@ import type { Browser, Page } from 'playwright';
 import { launchBrowser } from '../browser-binary.ts';
 import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog, PageTop } from '../drivers/web/events.ts';
-import type { Appearance, Device } from '../take/format.ts';
-import { stageHtml, layout, themeFor, type Theme } from './stage.ts';
+import { followedAddress, type Appearance, type Device } from '../take/format.ts';
+import { stageHtml, focusLayout, layout, themeFor, type Theme } from './stage.ts';
 import { bandAt, fingerAt, keyboardAt, KEYBOARD_SLIDE, nextInk, pageTops, phoneLayout, phoneStageHtml, safariAt, type Ink, type PhoneTheme } from './phone.ts';
 import { ease } from '../drivers/web/pacing.ts';
 import type { Cursor } from '../drivers/web/cursor.ts';
 import { cursorArt, type ArtSet } from './cursor-art.ts';
 import type { StageCursor } from './stage.ts';
 import { addSound, readSound } from './sound.ts';
+import type { FocusLook } from '../drivers/web/focus.ts';
 import { mediaTool } from '../media-tools.ts';
 
 export interface ComposeOptions {
@@ -111,6 +112,14 @@ export function loadTheme(name = 'default'): { theme: Theme; dir: string } {
   return { theme: JSON.parse(fs.readFileSync(path.join(dir, 'tokens.json'), 'utf8')), dir };
 }
 
+export function focusLook(name: string): { light: FocusLook; dark: FocusLook } {
+  const { theme } = loadTheme(name);
+  const light = theme.focus;
+  const dark = themeFor(theme, 'dark').focus;
+  if (!light || !dark) throw new Error(`the "${name}" theme has no look for component videos; use the default theme`);
+  return { light, dark };
+}
+
 export function phoneLook(theme: Theme, name: string): PhoneTheme {
   if (!theme.phone) throw new Error(phoneLessTheme(name));
   return theme.phone;
@@ -130,6 +139,27 @@ export function totalFrames(log: EventLog, theme: Theme): number {
 export function loopProgress(log: EventLog, theme: Theme, f: number): number {
   if (f < log.frames) return 0;
   return ease((f - log.frames + 1) / (theme.loop.frames + 1));
+}
+
+export function darknessAt(log: EventLog, theme: Theme, start: Appearance, f: number): number {
+  const level = (a: Appearance) => (a === 'dark' ? 1 : 0);
+  const changes = log.appearances ?? [];
+  const g = Math.min(f, log.frames - 1);
+  let dark = level(start);
+  for (let i = 0; i < changes.length && changes[i][0] <= g; i++) {
+    const [from, to] = changes[i];
+    const next = changes[i + 1]?.[0];
+    const until = next !== undefined && next <= g ? next : g;
+    dark += (level(to) - dark) * ease(Math.min(1, (until - from) / theme.appearance.frames));
+  }
+  return dark + (level(start) - dark) * loopProgress(log, theme, f);
+}
+
+export function addressAt(log: EventLog, theme: Theme, shown: string, f: number): string {
+  const urls = log.urls ?? [];
+  if (urls.length < 2 || loopProgress(log, theme, f) > 0.5) return shown;
+  const now = urls.findLast(([frame]) => frame <= f) ?? urls[0];
+  return followedAddress(shown, urls[0][1], now[1]);
 }
 
 export function footageAt(info: CaptureInfo, log: EventLog, theme: Theme, f: number) {
@@ -164,6 +194,7 @@ export function stageCursors(log: EventLog, art: ArtSet) {
 
 const opacityCache = new WeakMap<EventLog, { values: number[]; hiding: boolean }>();
 export function opacityAt(log: EventLog, theme: Theme, f: number): number {
+  if (log.noCursor) return 0;
   let c = opacityCache.get(log);
   if (!c) opacityCache.set(log, (c = { values: [], hiding: false }));
   const step = 1 / Math.max(1, theme.cursor.hideFade);
@@ -195,13 +226,33 @@ export function caretAt(log: EventLog, theme: Theme, f: number) {
   return { ...c, opacity: on ? fade : 0 };
 }
 
+export function shapeChanges(log: EventLog, theme: Theme): [number, Cursor][] {
+  const changes = [...log.cursors];
+  if (log.loop !== 'crossfade-to-start') return changes;
+  let f = log.frames;
+  while (f < totalFrames(log, theme) - 1 && loopProgress(log, theme, f) < 0.5) f++;
+  changes.push([f, shapeAt(log, 0)]);
+  return changes;
+}
+
+export function shapeMixAt(log: EventLog, theme: Theme, f: number): { shape: Cursor; from: Cursor; mix: number } {
+  const changes = shapeChanges(log, theme);
+  let i = -1;
+  for (let j = 0; j < changes.length && changes[j][0] <= f; j++) i = j;
+  const shape = i >= 0 ? changes[i][1] : 'default';
+  const from = i >= 1 ? changes[i - 1][1] : shape;
+  const since = i >= 0 ? f - changes[i][0] : Infinity;
+  const mix = since < theme.cursor.morph ? ease((since + 1) / (theme.cursor.morph + 1)) : 1;
+  return { shape, from: mix < 1 ? from : shape, mix };
+}
+
 export function overlayAt(log: EventLog, theme: Theme, f: number) {
   const opacity = opacityAt(log, theme, f);
+  const shapes = shapeMixAt(log, theme, f);
   if (f >= log.frames) {
     const [a, b] = [log.pointer[log.pointer.length - 1], log.pointer[0]];
     const p = loopProgress(log, theme, f);
-    const shape = p < 0.5 ? shapeAt(log, log.frames - 1) : shapeAt(log, 0);
-    return { x: a[0] + (b[0] - a[0]) * p, y: a[1] + (b[1] - a[1]) * p, shape, opacity, pressed: false, caret: caretAt(log, theme, f) };
+    return { x: a[0] + (b[0] - a[0]) * p, y: a[1] + (b[1] - a[1]) * p, ...shapes, opacity, pressed: false, caret: caretAt(log, theme, f) };
   }
   const [x, y] = log.pointer[f];
   const downs = log.events.filter((e) => e.type === 'down');
@@ -210,27 +261,25 @@ export function overlayAt(log: EventLog, theme: Theme, f: number) {
     const up = ups.find((u) => u.frame >= d.frame);
     return f >= d.frame && f < (up?.frame ?? Infinity);
   });
-  return { x, y, shape: shapeAt(log, f), opacity, pressed, caret: caretAt(log, theme, f) };
+  return { x, y, ...shapes, opacity, pressed, caret: caretAt(log, theme, f) };
 }
 
 export async function compose({ capture, out, theme: themeName = 'default', appearance, address, range, follow, workers: asked }: ComposeOptions): Promise<ComposeResult> {
   const { theme: base, dir: themeDir } = loadTheme(themeName);
-  const [W, H] = base.stage.size;
-  const scale = base.stage.output[0] / W;
-  const size = base.stage.output;
   const t0 = performance.now();
   const workers = asked ?? (follow ? Math.min(2, composeWorkers(Infinity)) : undefined);
   const launches = follow ? Array.from({ length: workers! }, () => launchBrowser({ args: ARGS })) : [];
 
   let log: EventLog;
-  let info: Pick<CaptureInfo, 'fps' | 'frames'>;
+  let info: Pick<CaptureInfo, 'fps' | 'frames' | 'shows'>;
   let recorded = 0;
   let ended = true;
   let theme: Theme;
+  let start: Appearance;
   try {
     if (follow) {
       ({ log, frames: recorded, ended } = await follow.wait(1));
-      info = { fps: log.fps, frames: [] };
+      info = { fps: log.fps, frames: [], ...(log.focus ? { shows: log.focus } : {}) };
     } else {
       info = JSON.parse(fs.readFileSync(path.join(capture, 'capture.json'), 'utf8'));
       log = JSON.parse(fs.readFileSync(path.join(capture, 'events.json'), 'utf8'));
@@ -239,17 +288,27 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
       log.device ??= 'desktop';
       if (log.device === 'phone' && !log.tops) throw new Error(`${capture} was recorded by an older version of Take. Record it again: take record <take.json>`);
     }
-    theme = themeFor(base, appearance ?? pageAppearance(path.join(capture, info.frames[0] ?? frameFile(0))));
+    start = appearance ?? pageAppearance(path.join(capture, info.frames[0] ?? frameFile(0)));
+    theme = themeFor(base, start);
   } catch (e) {
     await Promise.allSettled(launches.map((b) => b.then((b) => b.close())));
     throw e;
   }
   const phone = log.device === 'phone' ? phoneLook(theme, themeName) : undefined;
+  const focus = log.focus && focusLook(themeName);
+  const [W, H] = focus ? focus.light.size : base.stage.size;
+  const size: [number, number] = focus ? focus.light.size : base.stage.output;
+  const scale = size[0] / W;
+  const shown = address ?? log.address;
   const art = cursorArt(theme, themeDir);
   const { cursors, keyOf } = stageCursors(log, art);
+  const box = log.focus ? focusLayout(log.viewport, log.focus, [W, H]) : layout(theme, log.viewport);
+  const bare = focus && { size: focus.light.size, shows: info.shows ?? { x: 0, y: 0, width: log.viewport[0], height: log.viewport[1] } };
   const html = phone
-    ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport, address ?? log.address)
-    : stageHtml(theme, address ?? log.address, layout(theme, log.viewport), art, themeDir);
+    ? phoneStageHtml(theme, phone, themeDir, phoneLayout(theme, phone, log.viewport), log.viewport, shown)
+    : log.appearances && base.dark
+      ? stageHtml(base, shown, box, art, themeDir, themeFor(base, 'dark'), bare)
+      : stageHtml(theme, shown, box, art, themeDir, undefined, bare);
   const staged = new Set(Object.keys(art));
   const first = range?.[0] ?? 0;
   const ahead = phone ? Math.max(phone.finger.lead, KEYBOARD_SLIDE) : 0;
@@ -294,13 +353,14 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
     const onEvery = (fn: (page: Page) => Promise<unknown>) => pages.forEach((page, i) => (queues[i] = queues[i].then(() => fn(page))));
     const desktopState = (f: number) => {
       const overlay = overlayAt(log, theme, f);
-      const cursor = keyOf(overlay.shape);
-      if (cursor && !staged.has(cursor)) {
-        staged.add(cursor);
-        const { src, hotspot } = cursors[cursor];
-        onEvery((page) => page.evaluate((c) => (window as unknown as { addCursor: (c: unknown) => Promise<void> }).addCursor(c), { key: cursor, src, hotspot }));
-      }
-      return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor } };
+      const [cursor, from] = [keyOf(overlay.shape), keyOf(overlay.from)];
+      for (const key of [from, cursor])
+        if (key && !staged.has(key)) {
+          staged.add(key);
+          const { src, hotspot } = cursors[key];
+          onEvery((page) => page.evaluate((c) => (window as unknown as { addCursor: (c: unknown) => Promise<void> }).addCursor(c), { key, src, hotspot }));
+        }
+      return { footage: footageAt(info as CaptureInfo, log, theme, f), overlay: { ...overlay, cursor, from }, address: addressAt(log, theme, shown, f), dark: darknessAt(log, theme, start, f) };
     };
     let tops: PageTop[] = [];
     const bandOf = (g: number) => {
@@ -330,6 +390,7 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
         lift: keyboard.lift,
         bar: safariAt(log, look.safari, f, loop),
         keyboard,
+        address: addressAt(log, theme, shown, f),
       };
     };
     const draw = (f: number): Promise<Buffer> => {
