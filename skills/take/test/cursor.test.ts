@@ -4,7 +4,8 @@ import type { Browser, Page } from 'playwright';
 import { serve } from '../examples/demo-app/serve.mjs';
 import { launch } from '../src/drivers/web/browser.ts';
 import { cursorReader, parseCursor } from '../src/drivers/web/cursor.ts';
-import { cursorOpacity, loadTheme, overlayAt, shapeAt, stageCursors, totalFrames } from '../src/compose/compose.ts';
+import { loadTheme } from '../src/compose/compose.ts';
+import { cursorOpacity, overlayAt, shapeAt, stageCursors, totalFrames } from '../src/compose/timeline.ts';
 import { cursorArt } from '../src/compose/cursor-art.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
 
