@@ -20,7 +20,7 @@ export function focusRegion(element: Box, [top, right, bottom, left]: Room, [vw,
   return { x: r(element.x + element.width / 2 - width / 2), y: r(element.y + element.height / 2 - height / 2), width: r(width), height: r(height) };
 }
 
-export function onScreen(region: Box, [vw, vh]: [number, number]): Box {
+export function clipToViewport(region: Box, [vw, vh]: [number, number]): Box {
   const x = Math.max(0, region.x);
   const y = Math.max(0, region.y);
   return { x, y, width: Math.min(vw, region.x + region.width) - x, height: Math.min(vh, region.y + region.height) - y };
