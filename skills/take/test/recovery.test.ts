@@ -37,6 +37,8 @@ const PAGES: Record<string, string> = {
   '/counted': page('<nav><a href="/issues" onclick="event.preventDefault()">Issues <span aria-hidden="true">871</span><span style="position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)">(871)</span></a></nav><div style="height:2000px"></div><a href="/good">Good first issues</a>'),
   '/throws': page('<button onclick="null.x">Break</button>'),
   '/load-error': page('<p>Hi</p>', `undefinedFunction();`),
+  '/hydration': page('<p>Hi</p>', `throw new Error("Minified React error #418; visit https://react.dev/errors/418?args[]=text for the full message");`),
+  '/endless': page('<p>Readable</p><img src="/never.png">'),
 };
 
 let server: http.Server;
@@ -45,6 +47,7 @@ let noHiddenHits = 0;
 before(async () => {
   server = http.createServer((req, res) => {
     if (req.url === '/data') return void setTimeout(() => res.end('Ready'), 1500);
+    if (req.url === '/never.png') return void res.writeHead(200, { 'Content-Type': 'image/png' }).write('');
     if (req.url === '/broken') return void res.writeHead(500).end('Internal error');
     if (req.url === '/forbidden') return void res.writeHead(403).end('Forbidden');
     if (req.url === '/no-hidden') {
@@ -59,7 +62,10 @@ before(async () => {
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
-after(() => new Promise((r) => server.close(r)));
+after(() => new Promise((r) => {
+  server.close(r);
+  server.closeAllConnections();
+}));
 
 function take(path: string, steps: unknown[]): Take {
   const r = validateTake({ version: 0, title: 't', target: { kind: 'web', url: base + path, viewport: [800, 600], scale: 1 }, steps });
@@ -145,9 +151,21 @@ test('stops with a clear message when the app throws', async () => {
 });
 
 test('opening the app: error pages and errors while loading are explained', async () => {
-  const open = (path: string) => openTake(take(path, [{ do: 'hold', ms: 100 }])).then(() => '', (e) => (e instanceof TakeError ? e.message : `not a TakeError: ${e}`));
+  const open = (path: string) => openTake(take(path, [{ do: 'hold', ms: 100 }])).then(({ browser }) => browser.close().then(() => ''), (e) => (e instanceof TakeError ? e.message : `not a TakeError: ${e}`));
   assert.match(await open('/broken'), /^opening the app: .*\/broken answered with error 500/);
   assert.match(await open('/load-error'), /^opening the app: the app threw an error while loading: ".*undefinedFunction.*"/);
+  assert.equal(await open('/hydration'), '', 'React recovers from a hydration mismatch on its own');
+});
+
+test('a page whose load event never comes still opens once it is readable', async () => {
+  const started = Date.now();
+  const { browser, page } = await openTake(take('/endless', [{ do: 'hold', ms: 100 }]), { quietMs: 1000 });
+  try {
+    assert.equal(await page.getByText('Readable').count(), 1);
+    assert.ok(Date.now() - started < 15_000, `opened after ${Date.now() - started} ms`);
+  } finally {
+    await browser.close();
+  }
 });
 
 test('a site that refuses the hidden browser opens in a visible window instead', async () => {

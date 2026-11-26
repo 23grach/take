@@ -62,6 +62,12 @@ test('run says so when the app is not running', async () => {
   assert.match(r.error ?? '', /nothing answers at http:\/\/127\.0\.0\.1:9\/\. Is the app running\?/);
 });
 
+test('a public site that does not answer is not asked whether it is running', async () => {
+  const { answers } = await import('../src/take/load.ts');
+  const problem = await answers('https://take-nowhere.invalid/', 5000);
+  assert.match(problem ?? '', /^nothing answers at https:\/\/take-nowhere\.invalid\/\. Check the address and the internet connection$/);
+});
+
 test('run explains a broken take before opening a browser', async () => {
   const r = await run(writeTake('broken', [{ do: 'clik', target: { text: 'x' } }]));
   assert.match(r.error ?? '', /problem/);

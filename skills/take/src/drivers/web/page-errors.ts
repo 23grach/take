@@ -6,7 +6,13 @@ export function siteOf(host: string): string {
   return parts.slice(-keep).join('.');
 }
 
-export function ownError(error: Error, pageUrl: string): boolean {
+const RECOVERED_BY_REACT = /Minified React error #(418|419|421|422|423|425)\b|Hydration failed|hydrat\w* (mismatch|error)|server.rendered (HTML|text) didn't match|Text content does not match server-rendered/i;
+
+export function breaksApp(error: Error, pageUrl: string): boolean {
+  return !RECOVERED_BY_REACT.test(error.message) && ownError(error, pageUrl);
+}
+
+function ownError(error: Error, pageUrl: string): boolean {
   let site: string;
   try {
     site = siteOf(new URL(pageUrl).hostname);

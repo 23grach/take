@@ -191,17 +191,23 @@ test('Meta+K reaches a site that listens for "k", and a radio hidden under its l
 });
 
 test('page errors: other sites\' scripts are ignored, the app\'s own still stop the take', async () => {
-  const { siteOf, ownError } = await import('../src/drivers/web/page-errors.ts');
+  const { siteOf, breaksApp } = await import('../src/drivers/web/page-errors.ts');
   assert.equal(siteOf('www.example.co.uk'), 'example.co.uk');
   assert.equal(siteOf('app.example.com'), 'example.com');
   const at = (url: string) => Object.assign(new Error('x'), { stack: `Error: x\n    at f (${url}:1:2)` });
-  assert.equal(ownError(at('https://challenges.cloudflare.com/turnstile/v0/api.js'), 'https://coolors.co/generate'), false);
-  assert.equal(ownError(at('https://static.example.com/app.js'), 'https://www.example.com/'), true);
-  assert.equal(ownError(new Error('no stack lines'), 'https://example.com/'), true);
+  assert.equal(breaksApp(at('https://challenges.cloudflare.com/turnstile/v0/api.js'), 'https://coolors.co/generate'), false);
+  assert.equal(breaksApp(at('https://static.example.com/app.js'), 'https://www.example.com/'), true);
+  assert.equal(breaksApp(new Error('no stack lines'), 'https://example.com/'), true);
   const turnstile = Object.assign(new Error('[Cloudflare Turnstile] Error: 600010.'), {
     stack: 'TurnstileError: x\n    at x (https://challenges.cloudflare.com/turnstile/v0/api.js:1:17327)\n    at c (https://coolors.co/cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js:0:9404)',
   });
-  assert.equal(ownError(turnstile, 'https://coolors.co/generate'), false);
+  assert.equal(breaksApp(turnstile, 'https://coolors.co/generate'), false);
+  assert.equal(breaksApp(new Error('Minified React error #418; visit https://react.dev/errors/418?args[]=text for the full message'), 'https://example.com/'), false);
+  assert.equal(breaksApp(new Error("Hydration failed because the server rendered text didn't match the client."), 'https://example.com/'), false);
+  const react310 = Object.assign(new Error('Minified React error #310; visit https://react.dev/errors/310'), {
+    stack: 'Error: Minified React error #310; visit https://react.dev/errors/310\n    at f (https://example.com/_next/static/chunks/app.js:1:2)',
+  });
+  assert.equal(breaksApp(react310, 'https://example.com/'), true);
 
   const http = await import('node:http');
   const { validateTake } = await import('../src/take/format.ts');
