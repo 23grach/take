@@ -9,18 +9,18 @@ import { chromePaths } from '../src/browser-binary.ts';
 import { belongsTo, chromeEndpoint, loginFromChrome } from '../src/drivers/web/chrome-login.ts';
 
 test('cookies belong to the site and its subdomains, not to other sites', () => {
-  assert.ok(belongsTo('.x.com', 'https://x.com/home'));
-  assert.ok(belongsTo('x.com', 'https://www.x.com/'));
-  assert.ok(belongsTo('api.x.com', 'https://x.com/'));
+  assert.ok(belongsTo('.social.example', 'https://social.example/home'));
+  assert.ok(belongsTo('social.example', 'https://www.social.example/'));
+  assert.ok(belongsTo('api.social.example', 'https://social.example/'));
   assert.ok(belongsTo('.boards.app', 'https://app.boards.app/'));
-  assert.ok(!belongsTo('.notx.com', 'https://x.com/'));
-  assert.ok(!belongsTo('.google.com', 'https://x.com/'));
+  assert.ok(!belongsTo('.notsocial.example', 'https://social.example/'));
+  assert.ok(!belongsTo('.other.example', 'https://social.example/'));
 });
 
 test('no connection file: says how to turn remote debugging on', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'take-chrome-'));
   assert.equal(chromeEndpoint(dir), undefined);
-  await assert.rejects(loginFromChrome('https://x.com/', ''), /chrome:\/\/inspect\/#remote-debugging/);
+  await assert.rejects(loginFromChrome('https://social.example/', ''), /chrome:\/\/inspect\/#remote-debugging/);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
@@ -35,11 +35,11 @@ test('copies only the site\'s cookies and Chrome\'s user agent from a running Ch
     const ws = new WebSocket(endpoint);
     await new Promise((r) => ws.addEventListener('open', r));
     const cookie = (name: string, domain: string) => ({ name, value: `v-${name}`, domain, path: '/', secure: true, httpOnly: true, expires: Date.now() / 1000 + 3600 });
-    ws.send(JSON.stringify({ id: 1, method: 'Storage.setCookies', params: { cookies: [cookie('auth_token', '.x.com'), cookie('api', 'api.x.com'), cookie('other', '.example.org')] } }));
+    ws.send(JSON.stringify({ id: 1, method: 'Storage.setCookies', params: { cookies: [cookie('auth_token', '.social.example'), cookie('api', 'api.social.example'), cookie('other', '.example.org')] } }));
     await new Promise((r) => ws.addEventListener('message', r));
     ws.close();
 
-    const login = await loginFromChrome('https://x.com/home', endpoint);
+    const login = await loginFromChrome('https://social.example/home', endpoint);
     assert.deepEqual(login.state.cookies.map((c) => c.name).sort(), ['api', 'auth_token']);
     assert.equal(login.state.cookies.find((c) => c.name === 'auth_token')?.value, 'v-auth_token');
     assert.match(login.userAgent, /Chrome\/\d+/);

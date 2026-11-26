@@ -11,7 +11,7 @@ You write a few lines: the app's address and the steps (*click "New project", ty
 - **Seamless loop.** The video ends by fading back into its first frame, ready for a landing page or a release note.
 - **Easy to change.** "Type slower", "no loop", "show the result longer", "the app changed, record it again". Ask in chat; the scenario stays in your project.
 
-The result is a 2560×1440 H.264 MP4 at 60 fps that plays everywhere. Or ask for just the page: no window or background, 1920×1080. Or just one component: a button, a card, a like heart, alone and enlarged on white (black in dark mode), 1920×1080, with room for whatever flies out of it.
+The result is a 2560×1440 H.264 MP4 at 60 fps that plays everywhere. Or ask for just the page: no window or background, 1920×1080. Or just one component: a button, a card, a like heart, alone and enlarged on white (black in dark mode), 1920×1080, with room for whatever flies out of it. Or on a phone: the site's mobile layout in an iPhone, a fingertip instead of the cursor, on the same 2560×1440 video.
 
 ## Install
 
@@ -91,7 +91,7 @@ Since a signed-in video shows a real account, the agent points out personal deta
 
 ## Not yet
 
-Videos come in three looks: the browser window at 2560×1440, just the page at 1920×1080, or one component on white at 1920×1080. Phone frames, multi-finger gestures, zoom-in camera moves and GIF export aren't there yet. Videos can only start from a page the app's address opens, signed in or not, never from filmed setup steps. Some sites with strong bot protection may still refuse to be recorded. Animations in pages embedded from other sites play too fast in a final video.
+Videos come in four looks: the browser window or an iPhone at 2560×1440, and just the page or one component on white at 1920×1080. Tablets, multi-finger gestures, zoom-in camera moves and GIF export aren't there yet. Videos can only start from a page the app's address opens, signed in or not, never from filmed setup steps. Some sites with strong bot protection may still refuse to be recorded. Animations in pages embedded from other sites play too fast in a final video.
 
 ## Under the hood
 
