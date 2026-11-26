@@ -18,7 +18,7 @@ import { focusLook } from '../../compose/compose.ts';
 const WARMUP_MS = 1000;
 const SETTLE_AFTER_SETUP_MS = 600;
 
-export interface RecordOptions {
+interface RecordOptions {
   mode?: Mode;
   out: string;
   headed?: boolean;

@@ -1,7 +1,7 @@
 import { closest } from './closest.ts';
 import { keyProblem } from './keys.ts';
 
-export const TAKE_VERSION = 0;
+const TAKE_VERSION = 0;
 
 export const isLoginName = (name: string) => /^[a-z0-9][a-z0-9._-]*$/i.test(name) && !name.includes('..');
 
@@ -36,12 +36,12 @@ export type Step = Common &
     | { do: 'appearance'; to: Appearance }
   );
 
-export const MAX_CLICKS = 20;
+const MAX_CLICKS = 20;
 
-export const DEVICES = ['desktop', 'phone'] as const;
+const DEVICES = ['desktop', 'phone'] as const;
 export type Device = (typeof DEVICES)[number];
 
-export const APPEARANCES = ['light', 'dark'] as const;
+const APPEARANCES = ['light', 'dark'] as const;
 export type Appearance = (typeof APPEARANCES)[number];
 
 export const PHONE = {

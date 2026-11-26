@@ -60,10 +60,10 @@ function overlaid<T>(base: T, over: unknown): T {
 
 export const themeFor = (theme: Theme, appearance: Appearance): Theme => (appearance === 'dark' && theme.dark ? overlaid(theme, theme.dark) : theme);
 
-export type WindowButton = 'close' | 'minimize' | 'zoom';
+type WindowButton = 'close' | 'minimize' | 'zoom';
 const BUTTONS: WindowButton[] = ['close', 'minimize', 'zoom'];
 
-export interface Layout {
+interface Layout {
   left: number;
   top: number;
   width: number;
@@ -155,7 +155,7 @@ ${BUTTONS.map((b) => `  .dot.${b} { background: ${win.dots[b].fill}; box-shadow:
   .caret { position: absolute; left: 0; top: 0; display: none; }`;
 }
 
-export interface Bare {
+interface Bare {
   size: [number, number];
   shows: Box;
 }

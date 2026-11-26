@@ -15,7 +15,7 @@ import { compareWithRehearsal, STEP_LIMIT } from './check/rehearsal.ts';
 import { addressWarning, shownAddress } from './take/address.ts';
 import { timeline, type Script } from './probe/script.ts';
 
-export interface RunOptions {
+interface RunOptions {
   mode?: Mode;
   theme?: string;
   out?: string;
@@ -23,7 +23,7 @@ export interface RunOptions {
   log?: (line: string) => void;
 }
 
-export interface RunResult {
+interface RunResult {
   ok: boolean;
   error?: string;
   capture?: string;
@@ -133,7 +133,7 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   return { ok: report.ok, capture, video, report, sheet, script, seconds: elapsed() };
 }
 
-export function pageVideoAreas(log: EventLog, theme?: string): ((f: number) => [number, number, number, number][]) | undefined {
+function pageVideoAreas(log: EventLog, theme?: string): ((f: number) => [number, number, number, number][]) | undefined {
   const list = log.videos;
   if (!list?.length) return undefined;
   const look = loadTheme(theme).theme;

@@ -10,7 +10,7 @@ export interface SoundLog {
   clips: Clip[];
 }
 
-export interface Clip {
+interface Clip {
   file: string;
   at: number;
   from: number;
@@ -19,7 +19,7 @@ export interface Clip {
   volume: number;
 }
 
-export const WEB_AUDIO_SECONDS = 180;
+const WEB_AUDIO_SECONDS = 180;
 
 const TAIL_SECONDS = 3;
 

@@ -17,7 +17,7 @@ export interface SavedLogin {
 
 const SAVE_EVERY_MS = 2000;
 
-export function loginsDir(): string {
+function loginsDir(): string {
   return path.join(process.env.TAKE_HOME ?? path.join(os.homedir(), '.take'), 'logins');
 }
 
@@ -55,7 +55,7 @@ export function writeLogin(name: string, login: SavedLogin) {
   fs.renameSync(tmp, file);
 }
 
-export interface SignInResult {
+interface SignInResult {
   file: string;
   cookies: number;
   sites: string[];

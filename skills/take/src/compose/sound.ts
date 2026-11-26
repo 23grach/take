@@ -12,7 +12,7 @@ export function readSound(capture: string): SoundLog | undefined {
   return fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, 'utf8')) : undefined;
 }
 
-export interface Placement {
+interface Placement {
   seconds: number;
   offset: number;
   fadeFrom?: number;

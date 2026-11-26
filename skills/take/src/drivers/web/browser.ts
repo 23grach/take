@@ -102,7 +102,7 @@ async function open(take: Take, headed: boolean, prepare: ((page: Page) => Promi
   return { browser, page };
 }
 
-export const READY_MS = 30_000;
+const READY_MS = 30_000;
 const SETTLE_MS = 500;
 
 export async function untilReady(page: Page, ready: Condition[] | undefined, pass: (ms: number) => Promise<unknown>) {

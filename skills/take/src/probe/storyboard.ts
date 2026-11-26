@@ -74,7 +74,7 @@ export function storyboardHtml(result: ProbeResult, dir: string, themeName: stri
   <div class="grid">${cards.join('')}</div>`;
 }
 
-export const passedSheet = (sheet: string) => sheet.replace(/\.jpg$/, '.passed.jpg');
+const passedSheet = (sheet: string) => sheet.replace(/\.jpg$/, '.passed.jpg');
 
 export function keepPassing(ok: boolean, sheet: string): string | undefined {
   if (ok) return void fs.copyFileSync(sheet, passedSheet(sheet));

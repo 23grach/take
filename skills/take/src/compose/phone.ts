@@ -106,8 +106,8 @@ export function pageTops(changes: readonly [number, PageTop][], count: number): 
 }
 
 type Rows = { top: number; height: number };
-export type BandPiece = Rows & ({ color: string } | { frame: number; row: number });
-export interface Band {
+type BandPiece = Rows & ({ color: string } | { frame: number; row: number });
+interface Band {
   pieces: BandPiece[];
   cover: string | null;
 }
@@ -151,7 +151,7 @@ export function bandAt(tops: readonly PageTop[], f: number): Band {
   return { pieces, cover: now.cover };
 }
 
-export interface Finger {
+interface Finger {
   x: number;
   y: number;
   opacity: number;

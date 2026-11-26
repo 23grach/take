@@ -3,13 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import type { SavedLogin, StorageState } from './login.ts';
 
-export function chromeProfileDir(platform: NodeJS.Platform = process.platform, env = process.env): string {
+function chromeProfileDir(platform: NodeJS.Platform = process.platform, env = process.env): string {
   if (platform === 'darwin') return path.join(os.homedir(), 'Library', 'Application Support', 'Google', 'Chrome');
   if (platform === 'win32') return path.join(env.LOCALAPPDATA ?? path.join(os.homedir(), 'AppData', 'Local'), 'Google', 'Chrome', 'User Data');
   return path.join(env.XDG_CONFIG_HOME ?? path.join(os.homedir(), '.config'), 'google-chrome');
 }
 
-export const ENABLE_STEPS =
+const ENABLE_STEPS =
   'In Chrome, open chrome://inspect/#remote-debugging and turn on remote debugging (once), keep Chrome open, then run this again';
 
 export function chromeEndpoint(dir = chromeProfileDir()): string | undefined {
@@ -43,7 +43,7 @@ export function belongsTo(cookieDomain: string, url: string): boolean {
   return d === host || `.${host}`.endsWith(`.${d}`) || d.endsWith(`.${host}`);
 }
 
-export function toPlaywright(cookies: CdpCookie[]): StorageState['cookies'] {
+function toPlaywright(cookies: CdpCookie[]): StorageState['cookies'] {
   return cookies.map((c) => ({
     name: c.name,
     value: c.value,

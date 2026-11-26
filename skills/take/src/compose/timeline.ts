@@ -68,7 +68,7 @@ export function stageCursors(log: EventLog, art: ArtSet) {
 }
 
 const opacityCache = new WeakMap<EventLog, { values: number[]; hiding: boolean }>();
-export function opacityAt(log: EventLog, theme: Theme, f: number): number {
+function opacityAt(log: EventLog, theme: Theme, f: number): number {
   if (log.noCursor) return 0;
   let c = opacityCache.get(log);
   if (!c) opacityCache.set(log, (c = { values: [], hiding: false }));
@@ -101,7 +101,7 @@ export function caretOnFrame(log: EventLog, theme: Theme, f: number) {
   return { ...c, opacity: on ? fade : 0 };
 }
 
-export function shapeChanges(log: EventLog, theme: Theme): [number, Cursor][] {
+function shapeChanges(log: EventLog, theme: Theme): [number, Cursor][] {
   const changes = [...log.cursors];
   if (log.loop !== 'crossfade-to-start') return changes;
   let f = log.frames;
@@ -110,7 +110,7 @@ export function shapeChanges(log: EventLog, theme: Theme): [number, Cursor][] {
   return changes;
 }
 
-export function shapeMixAt(log: EventLog, theme: Theme, f: number): { shape: Cursor; from: Cursor; mix: number } {
+function shapeMixAt(log: EventLog, theme: Theme, f: number): { shape: Cursor; from: Cursor; mix: number } {
   const changes = shapeChanges(log, theme);
   let i = -1;
   for (let j = 0; j < changes.length && changes[j][0] <= f; j++) i = j;

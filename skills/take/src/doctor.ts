@@ -5,7 +5,7 @@ import { isBundled, mediaTool, type MediaTool } from './media-tools.ts';
 
 const execFileAsync = promisify(execFile);
 
-export interface CheckResult {
+interface CheckResult {
   name: string;
   ok: boolean;
   detail: string;
@@ -20,9 +20,9 @@ export interface Probe {
   browser(): Promise<string>;
 }
 
-export const MIN_NODE_MAJOR = 24;
+const MIN_NODE_MAJOR = 24;
 
-export const realProbe: Probe = {
+const realProbe: Probe = {
   platform: process.platform,
   nodeVersion: process.versions.node,
   async run(tool, args) {
@@ -37,7 +37,7 @@ export const realProbe: Probe = {
   browser: browserLabel,
 };
 
-export const DOWNLOAD_FFMPEG = 'node src/install-ffmpeg.ts';
+const DOWNLOAD_FFMPEG = 'node src/install-ffmpeg.ts';
 
 const missingFix = `run in Take's folder: ${DOWNLOAD_FFMPEG}`;
 const version = (probe: Probe, tool: MediaTool, number: string) => (probe.bundled(tool) ? `${number} (Take's own copy)` : number);

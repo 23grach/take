@@ -1,6 +1,6 @@
 import type { Page } from 'playwright';
 
-export const CURSOR_KEYWORDS = [
+const CURSOR_KEYWORDS = [
   'default', 'pointer', 'text', 'vertical-text', 'crosshair', 'grab', 'grabbing', 'move', 'not-allowed', 'copy', 'alias',
   'context-menu', 'help', 'cell', 'zoom-in', 'zoom-out', 'progress', 'wait', 'none',
   'ew-resize', 'ns-resize', 'nesw-resize', 'nwse-resize', 'col-resize', 'row-resize',
@@ -8,7 +8,7 @@ export const CURSOR_KEYWORDS = [
 ] as const;
 export type CursorKeyword = (typeof CURSOR_KEYWORDS)[number];
 
-export interface CursorImage {
+interface CursorImage {
   image: string;
   hotspot?: [number, number];
   fallback: CursorKeyword;

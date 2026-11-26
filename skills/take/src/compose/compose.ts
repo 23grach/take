@@ -18,7 +18,7 @@ import type { FocusLook } from '../drivers/web/focus.ts';
 import { mediaTool } from '../media-tools.ts';
 import { addressAt, caretOnFrame, darknessAt, footageAt, loopProgress, overlayAt, stageCursors, totalFrames } from './timeline.ts';
 
-export interface ComposeOptions {
+interface ComposeOptions {
   capture: string;
   out: string;
   theme?: string;
@@ -29,13 +29,13 @@ export interface ComposeOptions {
   workers?: number;
 }
 
-export interface Progress {
+interface Progress {
   log: EventLog;
   frames: number;
   ended: boolean;
 }
 
-export interface Follow {
+interface Follow {
   wait(frames: number): Promise<Progress>;
 }
 
@@ -88,7 +88,7 @@ export function composeWorkers(frames: number, cpus = os.availableParallelism(),
   return Math.max(1, Math.min(4, Math.floor(cpus / 2), Math.floor(memory / 3 / 2 ** 30), Math.ceil(frames / 120)));
 }
 
-export const themeNames = () => fs.readdirSync(THEMES).filter((d) => fs.existsSync(path.join(THEMES, d, 'tokens.json'))).sort();
+const themeNames = () => fs.readdirSync(THEMES).filter((d) => fs.existsSync(path.join(THEMES, d, 'tokens.json'))).sort();
 
 export function themeProblem(name: string, device: Device = 'desktop'): string | undefined {
   if (!themeNames().includes(name)) return `there's no theme "${name}". Themes: ${themeNames().join(', ')}`;

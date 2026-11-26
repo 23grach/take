@@ -3,7 +3,7 @@ import type { StepLog } from '../drivers/web/events.ts';
 import { frames } from '../drivers/web/pacing.ts';
 import { describeStep } from './probe.ts';
 
-export interface ScriptLine {
+interface ScriptLine {
   step: number;
   label: string;
   mark?: string;
