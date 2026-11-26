@@ -20,7 +20,7 @@ export function hasChrome(): boolean {
 export const UNTHROTTLED = ['--disable-gpu-vsync', '--disable-frame-rate-limit'];
 
 export const DOWNLOAD_CHROMIUM = 'npx playwright install chromium --no-shell';
-export const NO_BROWSER = `no browser to record with: install Google Chrome, or run "${DOWNLOAD_CHROMIUM}" in Take's folder`;
+const NO_BROWSER = `no browser to record with: install Google Chrome, or run "${DOWNLOAD_CHROMIUM}" in Take's folder`;
 
 const isMissing = (e: unknown) => /Executable doesn.t exist/i.test(String((e as Error)?.message ?? e));
 

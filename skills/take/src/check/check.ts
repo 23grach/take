@@ -2,8 +2,8 @@ import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { mediaTool } from '../media-tools.ts';
 
-export type Status = 'pass' | 'warn' | 'fail';
-export interface Finding {
+type Status = 'pass' | 'warn' | 'fail';
+interface Finding {
   name: string;
   status: Status;
   detail: string;
@@ -20,7 +20,7 @@ export interface Report {
   ok: boolean;
 }
 
-export interface CheckOptions {
+interface CheckOptions {
   loop?: boolean;
   fps?: number;
   pageVideos?: (f: number) => [number, number, number, number][];

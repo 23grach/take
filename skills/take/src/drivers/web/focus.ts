@@ -26,7 +26,7 @@ export function clipToViewport(region: Box, [vw, vh]: [number, number]): Box {
   return { x, y, width: Math.min(vw, region.x + region.width) - x, height: Math.min(vh, region.y + region.height) - y };
 }
 
-export function hideAllBut(element: Element, [light, dark]: [string, string]): void {
+function hideAllBut(element: Element, [light, dark]: [string, string]): void {
   const style = document.createElement('style');
   style.textContent = `[data-take-off] { visibility: hidden !important; } :where([data-take-on]) { visibility: visible; }
 :where(html) { color-scheme: light dark; }

@@ -68,7 +68,7 @@ export class NeedsFrameLimit extends Error {
   }
 }
 
-export function watchViewTransitions(): void {
+function watchViewTransitions(): void {
   const w = globalThis as unknown as { __takeViewTransition?: () => void; __takeWatchesTransitions?: true };
   if (w.__takeWatchesTransitions || typeof Document === 'undefined') return;
   w.__takeWatchesTransitions = true;
@@ -100,7 +100,7 @@ function checkDrawing(page: Page): void {
   if (state?.unthrottled && state.viewTransition) throw new NeedsFrameLimit('the page started a view transition');
 }
 
-export function idleWithTime(): void {
+function idleWithTime(): void {
   const w = globalThis as unknown as { __takeIdle?: true } & Window;
   if (w.__takeIdle) return;
   w.__takeIdle = true;

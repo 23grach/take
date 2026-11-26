@@ -5,7 +5,9 @@ import { readyTake } from './take/load.ts';
 import { commitCapture, discardRecording, FAILED_OUTLINE, FAILED_SCREEN, record, stagingDir } from './drivers/web/record.ts';
 import { TakeError } from './drivers/web/take-error.ts';
 import { NeedsFrameLimit, type Mode } from './drivers/web/capture.ts';
-import { compose, ffmpegProblem, focusLook, following, loadTheme, phoneLook, themeProblem, type ComposeResult } from './compose/compose.ts';
+import { compose, following, type ComposeResult } from './compose/compose.ts';
+import { ffmpegProblem } from './compose/ffmpeg.ts';
+import { focusLook, loadTheme, phoneLook, themeProblem } from './compose/themes.ts';
 import { phoneLayout } from './compose/phone.ts';
 import { focusLayout, layout } from './compose/stage.ts';
 import type { EventLog } from './drivers/web/events.ts';
@@ -15,7 +17,7 @@ import { compareWithRehearsal, STEP_LIMIT } from './check/rehearsal.ts';
 import { addressWarning, shownAddress } from './take/address.ts';
 import { timeline, type Script } from './probe/script.ts';
 
-export interface RunOptions {
+interface RunOptions {
   mode?: Mode;
   theme?: string;
   out?: string;
@@ -23,7 +25,7 @@ export interface RunOptions {
   log?: (line: string) => void;
 }
 
-export interface RunResult {
+interface RunResult {
   ok: boolean;
   error?: string;
   capture?: string;
@@ -133,7 +135,7 @@ export async function run(file: string, { mode = 'studio', theme, out, headed = 
   return { ok: report.ok, capture, video, report, sheet, script, seconds: elapsed() };
 }
 
-export function pageVideoAreas(log: EventLog, theme?: string): ((f: number) => [number, number, number, number][]) | undefined {
+function pageVideoAreas(log: EventLog, theme?: string): ((f: number) => [number, number, number, number][]) | undefined {
   const list = log.videos;
   if (!list?.length) return undefined;
   const look = loadTheme(theme).theme;

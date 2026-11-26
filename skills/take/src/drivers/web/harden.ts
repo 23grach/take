@@ -13,7 +13,7 @@ export function hardenLaunchArgs(extra: string[] = []): string[] {
 
 export const HARDEN_IGNORE_DEFAULT_ARGS = ['--enable-automation'] as const;
 
-export const HARDEN_INIT_SCRIPT = `(() => {
+const HARDEN_INIT_SCRIPT = `(() => {
   try {
     Object.defineProperty(Navigator.prototype, 'webdriver', {
       get: () => undefined,

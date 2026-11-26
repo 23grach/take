@@ -28,7 +28,7 @@ export async function readyTake(file: string): Promise<{ take: Take; error?: und
   return problem ? { error: problem } : { take: loaded.take };
 }
 
-export const ANSWER_MS = 30_000;
+const ANSWER_MS = 30_000;
 
 export async function answers(url: string, ms = ANSWER_MS): Promise<string | undefined> {
   try {

@@ -12,7 +12,7 @@ import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
 import { installCssHandles } from '../drivers/web/css-handle.ts';
 import { startPoint } from '../drivers/web/pacing.ts';
 import { isolate } from '../drivers/web/focus.ts';
-import { focusLook, loadTheme } from '../compose/compose.ts';
+import { focusLook, loadTheme } from '../compose/themes.ts';
 import { timeline, type Script } from './script.ts';
 import { LONG_OUTLINE, onScreen, shortOutline, SHORT_LENGTH } from './outline.ts';
 
@@ -166,10 +166,10 @@ async function settle(page: Page) {
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
 }
 
-export const REHEARSAL_SPEED = 2;
+const REHEARSAL_SPEED = 2;
 const REHEARSAL_QUIET_MS = 3000;
 
-export const REHEARSAL_HOLD_MS = 500;
+const REHEARSAL_HOLD_MS = 500;
 
 export function rehearsal(take: Take): Take {
   const last = take.steps.length - 1;

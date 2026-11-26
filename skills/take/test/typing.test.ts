@@ -5,7 +5,7 @@ import { serve } from '../examples/demo-app/serve.mjs';
 import { launch } from '../src/drivers/web/browser.ts';
 import { measureCaret } from '../src/drivers/web/caret.ts';
 import { typingSchedule } from '../src/drivers/web/pacing.ts';
-import { loadTheme } from '../src/compose/compose.ts';
+import { loadTheme } from '../src/compose/themes.ts';
 import { caretOnFrame, totalFrames } from '../src/compose/timeline.ts';
 import type { EventLog } from '../src/drivers/web/events.ts';
 

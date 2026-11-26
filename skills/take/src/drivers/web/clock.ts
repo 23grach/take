@@ -6,7 +6,7 @@ export interface Clock {
   resume?(): void;
 }
 
-export interface RealtimeClock extends Clock {
+interface RealtimeClock extends Clock {
   readonly startedAt: number | undefined;
   resume(): void;
 }

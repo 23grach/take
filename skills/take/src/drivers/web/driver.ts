@@ -13,7 +13,7 @@ import { TakeError } from './take-error.ts';
 
 const offCameraWait = (s: Step | undefined) => s?.do === 'wait' && s.film === false;
 
-export interface PerformOptions {
+interface PerformOptions {
   onStep?: (log: StepLog, pointer: [number, number]) => Promise<void>;
   onFrame?: (log: EventLog) => void;
   watch?: boolean;

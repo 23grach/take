@@ -17,7 +17,7 @@ interface Node {
   children: Node[];
 }
 
-export interface OnScreen {
+interface OnScreen {
   text: string;
   pieces: string[];
 }

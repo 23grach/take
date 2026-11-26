@@ -1,9 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from '../browser-binary.ts';
-import { loadTheme } from '../compose/compose.ts';
+import { loadTheme } from '../compose/themes.ts';
 import { cursorArt } from '../compose/cursor-art.ts';
 import type { ProbeResult } from './probe.ts';
+import type { Box } from '../drivers/web/events.ts';
 import { escapeHtml } from '../escape-html.ts';
 
 const COLS = 3;
@@ -31,7 +32,7 @@ export function storyboardHtml(result: ProbeResult, dir: string, themeName: stri
   const [ox, oy] = [view.x * k, view.y * k];
   const data = (file: string, type: string) => `data:${type};base64,${fs.readFileSync(file).toString('base64')}`;
   const art = cursorArt(theme, themeDir);
-  const box = (b: { x: number; y: number; width: number; height: number }, cls: string) =>
+  const box = (b: Box, cls: string) =>
     `<div class="${cls}" style="left:${b.x * k - ox - 3}px;top:${b.y * k - oy - 3}px;width:${b.width * k + 6}px;height:${b.height * k + 6}px"></div>`;
 
   const shots = result.shots[1] && !result.shots[1].error && /^Hold /.test(result.shots[1].label) ? result.shots.slice(1) : result.shots;
@@ -74,7 +75,7 @@ export function storyboardHtml(result: ProbeResult, dir: string, themeName: stri
   <div class="grid">${cards.join('')}</div>`;
 }
 
-export const passedSheet = (sheet: string) => sheet.replace(/\.jpg$/, '.passed.jpg');
+const passedSheet = (sheet: string) => sheet.replace(/\.jpg$/, '.passed.jpg');
 
 export function keepPassing(ok: boolean, sheet: string): string | undefined {
   if (ok) return void fs.copyFileSync(sheet, passedSheet(sheet));

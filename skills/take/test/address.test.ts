@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { validateTake, type WebTarget } from '../src/take/format.ts';
 import { addressWarning, isLocalUrl, shownAddress } from '../src/take/address.ts';
 import { stageHtml, layout } from '../src/compose/stage.ts';
-import { loadTheme } from '../src/compose/compose.ts';
+import { loadTheme } from '../src/compose/themes.ts';
 
 const web = (url: string, address?: string): WebTarget => ({ kind: 'web', device: 'desktop', url, viewport: [1440, 900], scale: 2, ...(address !== undefined ? { address } : {}) });
 

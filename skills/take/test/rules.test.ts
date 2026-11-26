@@ -131,6 +131,33 @@ test('no comments in code, tests, themes or CI', () => {
   assert.deepEqual(found, [], `${NO_COMMENTS}:\n  ${found.join('\n  ')}`);
 });
 
+const scriptsIn = (dir: string) => filesIn(path.join(TOOL, dir)).filter((file) => /\.(ts|js|mjs)$/.test(file));
+
+test("frames never come from Playwright's built-in video", () => {
+  const BUILT_IN_VIDEO = "Never use Playwright's built-in video (AGENTS.md). Take frames through src/drivers/web/capture.ts instead";
+  const found = scriptsIn('src').flatMap((file) => {
+    const source = fs.readFileSync(file, 'utf8');
+    const screencastCalls = source.match(/screencast\.start\(\{[\s\S]*?\n\s*\}\)/g) ?? [];
+    const uses = [/\brecordVideo\b/.test(source) ? 'recordVideo' : '', screencastCalls.some((call) => /\bpath\s*:/.test(call)) ? 'page.screencast with path' : ''];
+    return uses.filter(Boolean).map((use) => `${path.relative(REPO, file)}: ${use}`);
+  });
+  assert.deepEqual(found, [], `${BUILT_IN_VIDEO}:\n  ${found.join('\n  ')}`);
+});
+
+test('every export in src is used by another file', () => {
+  const UNUSED_EXPORT = 'Unused export (AGENTS.md). Drop the export keyword, or delete the code if nothing uses it';
+  const sources = scriptsIn('src');
+  const readers = [...sources, ...scriptsIn('test'), ...scriptsIn('examples'), path.join(TOOL, 'bin/take')];
+  const text = new Map(readers.map((file) => [file, fs.readFileSync(file, 'utf8')]));
+  const found = sources.flatMap((file) =>
+    [...text.get(file)!.matchAll(/^export (?:async )?(?:const|function|interface|type|class|let) ([\w$]+)/gm)]
+      .map((match) => match[1])
+      .filter((name) => !readers.some((other) => other !== file && new RegExp(`\\b${name.replace('$', '\\$')}\\b`).test(text.get(other)!)))
+      .map((name) => `${path.relative(REPO, file)}: ${name}`),
+  );
+  assert.deepEqual(found, [], `${UNUSED_EXPORT}:\n  ${found.join('\n  ')}`);
+});
+
 test('a release bumps the version in package.json and both plugin manifests together', () => {
   const files = ['skills/take/package.json', '.claude-plugin/plugin.json', '.cursor-plugin/plugin.json'];
   const versionOf = (file: string) => (JSON.parse(fs.readFileSync(path.join(REPO, file), 'utf8')) as { version?: string }).version;
