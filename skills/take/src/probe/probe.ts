@@ -12,7 +12,7 @@ import { describe, describeCondition, locate } from '../drivers/web/targets.ts';
 import { installCssHandles } from '../drivers/web/css-handle.ts';
 import { startPoint } from '../drivers/web/pacing.ts';
 import { isolate } from '../drivers/web/focus.ts';
-import { focusLook, loadTheme } from '../compose/compose.ts';
+import { focusLook, loadTheme } from '../compose/themes.ts';
 import { timeline, type Script } from './script.ts';
 import { LONG_OUTLINE, onScreen, shortOutline, SHORT_LENGTH } from './outline.ts';
 

@@ -1,21 +1,19 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 import type { Browser, Page } from 'playwright';
 import { launchBrowser } from '../browser-binary.ts';
 import { frameFile, type CaptureInfo } from '../drivers/web/capture.ts';
 import type { EventLog, PageTop } from '../drivers/web/events.ts';
-import type { Appearance, Device } from '../take/format.ts';
+import type { Appearance } from '../take/format.ts';
 import { stageHtml, focusLayout, layout, themeFor, type Theme } from './stage.ts';
 import { bandAt, fingerAt, keyboardAt, KEYBOARD_SLIDE, nextInk, pageTops, phoneLayout, safariAt, type Ink, type PhoneTheme } from './phone.ts';
 import { ease } from '../drivers/web/pacing.ts';
 import { cursorArt } from './cursor-art.ts';
 import { phoneStageHtml } from './phone-stage.ts';
 import { addSound, readSound } from './sound.ts';
-import type { FocusLook } from '../drivers/web/focus.ts';
-import { mediaTool } from '../media-tools.ts';
+import { focusLook, loadTheme, phoneLook } from './themes.ts';
+import { encoder, pageAppearance } from './ffmpeg.ts';
 import { addressAt, caretOnFrame, darknessAt, footageAt, loopProgress, overlayAt, stageCursors, totalFrames } from './timeline.ts';
 
 interface ComposeOptions {
@@ -81,55 +79,10 @@ export interface ComposeResult {
   renderSeconds: number;
 }
 
-const THEMES = fileURLToPath(new URL('../../themes/', import.meta.url));
 const HOST = 'http://take.local/';
 
 export function composeWorkers(frames: number, cpus = os.availableParallelism(), memory = os.totalmem()): number {
   return Math.max(1, Math.min(4, Math.floor(cpus / 2), Math.floor(memory / 3 / 2 ** 30), Math.ceil(frames / 120)));
-}
-
-const themeNames = () => fs.readdirSync(THEMES).filter((d) => fs.existsSync(path.join(THEMES, d, 'tokens.json'))).sort();
-
-export function themeProblem(name: string, device: Device = 'desktop'): string | undefined {
-  if (!themeNames().includes(name)) return `there's no theme "${name}". Themes: ${themeNames().join(', ')}`;
-  if (device === 'phone' && !loadTheme(name).theme.phone) return phoneLessTheme(name);
-  return undefined;
-}
-
-const phoneLessTheme = (name: string) => `the "${name}" theme has no phone look; use the default theme for phone takes`;
-
-const NO_FFMPEG = "ffmpeg isn't installed (or isn't on the PATH). Run take doctor to see how to install it.";
-
-export function ffmpegProblem(): string | undefined {
-  const r = spawnSync(mediaTool('ffmpeg'), ['-hide_banner', '-version'], { stdio: 'ignore' });
-  return r.error ? NO_FFMPEG : undefined;
-}
-
-export function loadTheme(name = 'default'): { theme: Theme; dir: string } {
-  const dir = path.join(THEMES, name);
-  const problem = themeProblem(name);
-  if (problem) throw new Error(problem);
-  return { theme: JSON.parse(fs.readFileSync(path.join(dir, 'tokens.json'), 'utf8')), dir };
-}
-
-export function focusLook(name: string): { light: FocusLook; dark: FocusLook } {
-  const { theme } = loadTheme(name);
-  const light = theme.focus;
-  const dark = themeFor(theme, 'dark').focus;
-  if (!light || !dark) throw new Error(`the "${name}" theme has no look for component videos; use the default theme`);
-  return { light, dark };
-}
-
-export function phoneLook(theme: Theme, name: string): PhoneTheme {
-  if (!theme.phone) throw new Error(phoneLessTheme(name));
-  return theme.phone;
-}
-
-export function pageAppearance(frame: string): Appearance {
-  const r = spawnSync(mediaTool('ffmpeg'), ['-v', 'error', '-i', frame, '-vf', 'scale=1:1:flags=area,format=gray', '-f', 'rawvideo', '-'], { maxBuffer: 1024 });
-  if ((r.error as NodeJS.ErrnoException | undefined)?.code === 'ENOENT') throw new Error(NO_FFMPEG);
-  if (r.status !== 0 || !r.stdout?.length) throw new Error(`ffmpeg failed (${r.status}): ${r.stderr?.toString().trim() || r.error?.message}`);
-  return r.stdout[0] < 128 ? 'dark' : 'light';
 }
 
 export async function compose({ capture, out, theme: themeName = 'default', appearance, address, range, follow, workers: asked }: ComposeOptions): Promise<ComposeResult> {
@@ -308,34 +261,6 @@ export async function compose({ capture, out, theme: themeName = 'default', appe
 }
 
 const ARGS = ['--force-color-profile=srgb', '--hide-scrollbars'];
-
-function encoder(out: string, fps: number) {
-  const proc = spawn(mediaTool('ffmpeg'), [
-    '-v', 'error', '-y',
-    '-f', 'image2pipe', '-framerate', String(fps), '-c:v', 'mjpeg', '-i', '-',
-    '-vf', 'scale=in_color_matrix=bt601:out_color_matrix=bt709:in_range=pc:out_range=tv:flags=accurate_rnd+full_chroma_int+full_chroma_inp,format=yuv420p,'
-      + 'setparams=range=tv:colorspace=bt709:color_primaries=bt709:color_trc=iec61966-2-1',
-    '-c:v', 'libx264', '-preset', 'slow', '-crf', '16', '-profile:v', 'high',
-    '-r', String(fps), '-fps_mode', 'cfr',
-    '-movflags', '+faststart', '-f', 'mp4', out,
-  ], { stdio: ['pipe', 'ignore', 'pipe'] });
-  let err = '';
-  let failure: Error | undefined;
-  proc.stderr.on('data', (d) => (err += d));
-  proc.stdin.on('error', () => {});
-  const done = new Promise<void>((resolve, reject) => {
-    const fail = (e: Error) => reject((failure ??= e));
-    proc.on('error', (e: NodeJS.ErrnoException) =>
-      fail(e.code === 'ENOENT' ? new Error(NO_FFMPEG) : e));
-    proc.on('close', (code) => (code === 0 ? resolve() : fail(new Error(`ffmpeg failed (${code}): ${err.trim()}`))));
-  });
-  done.catch(() => {});
-  return Object.assign(proc, { done, failed: () => failure }) as typeof proc & {
-    stdin: NodeJS.WritableStream & { destroy(): void };
-    done: Promise<void>;
-    failed: () => Error | undefined;
-  };
-}
 
 const previousOf = (video: string) => video.replace(/(\.mp4)?$/i, '.previous.mp4');
 

@@ -4,7 +4,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { compose, composeWorkers, following, loadTheme, pageAppearance } from '../src/compose/compose.ts';
+import { compose, composeWorkers, following } from '../src/compose/compose.ts';
+import { pageAppearance } from '../src/compose/ffmpeg.ts';
+import { loadTheme } from '../src/compose/themes.ts';
 import { cursorOpacity, darknessAt, footageAt, loopProgress, overlayAt, totalFrames } from '../src/compose/timeline.ts';
 import type { CaptureInfo } from '../src/drivers/web/capture.ts';
 import { layout, themeFor } from '../src/compose/stage.ts';
@@ -256,7 +258,7 @@ test('compose stops with ffmpeg\'s reason when ffmpeg dies mid-video, instead of
 });
 
 test('the window shows the address of the page on screen, and the first one again from the middle of the loop', async () => {
-  const { loadTheme } = await import('../src/compose/compose.ts');
+  const { loadTheme } = await import('../src/compose/themes.ts');
   const { addressAt } = await import('../src/compose/timeline.ts');
   const { theme } = loadTheme('default');
   const log = { frames: 100, urls: [[0, 'https://stripe.com/'], [60, 'https://stripe.com/payments']] } as unknown as Parameters<typeof addressAt>[0];

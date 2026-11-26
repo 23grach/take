@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { launchBrowser } from '../browser-binary.ts';
-import { loadTheme } from '../compose/compose.ts';
+import { loadTheme } from '../compose/themes.ts';
 import { cursorArt } from '../compose/cursor-art.ts';
 import type { ProbeResult } from './probe.ts';
 import { escapeHtml } from '../escape-html.ts';

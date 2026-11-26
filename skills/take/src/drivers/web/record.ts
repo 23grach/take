@@ -13,7 +13,7 @@ import { hideCaret } from './caret.ts';
 import type { EventLog } from './events.ts';
 import { catchSound, type SoundCatcher } from './sound.ts';
 import { isolate } from './focus.ts';
-import { focusLook } from '../../compose/compose.ts';
+import { focusLook } from '../../compose/themes.ts';
 
 const WARMUP_MS = 1000;
 const SETTLE_AFTER_SETUP_MS = 600;
