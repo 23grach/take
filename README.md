@@ -117,6 +117,8 @@ Formats: [scenario](skills/take/docs/scenario-format.md) (what you write) · [ta
 cd skills/take && npm install && npm test
 ```
 
+The tests open a real browser and encode video, so they need Google Chrome (or Chromium) and ffmpeg. When either is missing, `npm install` downloads it once, which needs the internet. On Linux without a screen, run the tests under `xvfb-run -a`, as CI does.
+
 To check one file while you work, run its test alone:
 
 ```bash
