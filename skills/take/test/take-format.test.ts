@@ -138,10 +138,10 @@ test('any step can be given a length in ms; a type step takes cps or ms, not bot
 });
 
 test('the address follows the page: same site keeps the shown domain with the new path, another site shows its own', () => {
-  assert.equal(followedAddress('stripe.com', 'https://stripe.com/', 'https://stripe.com/payments'), 'stripe.com/payments');
-  assert.equal(followedAddress('github.com/facebook/react', 'https://github.com/react/react', 'https://github.com/react/react/issues/38261'), 'github.com/react/react/issues/38261');
+  assert.equal(followedAddress('shop.example', 'https://shop.example/', 'https://shop.example/payments'), 'shop.example/payments');
+  assert.equal(followedAddress('code.example.com/acme/app', 'https://code.example.com/acme-inc/app', 'https://code.example.com/acme-inc/app/issues/38261'), 'code.example.com/acme-inc/app/issues/38261');
   assert.equal(followedAddress('boards.app', 'http://localhost:5173/', 'http://localhost:5173/projects/'), 'boards.app/projects');
-  assert.equal(followedAddress('github.com/facebook/react', 'https://github.com/react/react', 'https://github.com/react/react#readme'), 'github.com/facebook/react');
+  assert.equal(followedAddress('code.example.com/acme/app', 'https://code.example.com/acme-inc/app', 'https://code.example.com/acme-inc/app#readme'), 'code.example.com/acme/app');
   assert.equal(followedAddress('boards.app', 'http://localhost:5173/', 'https://docs.example.com/start'), 'docs.example.com/start');
   assert.equal(followedAddress('', 'http://localhost:5173/', 'http://localhost:5173/projects'), '');
 });

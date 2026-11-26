@@ -195,13 +195,13 @@ test('page errors: other sites\' scripts are ignored, the app\'s own still stop 
   assert.equal(siteOf('www.example.co.uk'), 'example.co.uk');
   assert.equal(siteOf('app.example.com'), 'example.com');
   const at = (url: string) => Object.assign(new Error('x'), { stack: `Error: x\n    at f (${url}:1:2)` });
-  assert.equal(breaksApp(at('https://challenges.cloudflare.com/turnstile/v0/api.js'), 'https://coolors.co/generate'), false);
+  assert.equal(breaksApp(at('https://challenges.cloudflare.com/turnstile/v0/api.js'), 'https://palette.example/generate'), false);
   assert.equal(breaksApp(at('https://static.example.com/app.js'), 'https://www.example.com/'), true);
   assert.equal(breaksApp(new Error('no stack lines'), 'https://example.com/'), true);
   const turnstile = Object.assign(new Error('[Cloudflare Turnstile] Error: 600010.'), {
-    stack: 'TurnstileError: x\n    at x (https://challenges.cloudflare.com/turnstile/v0/api.js:1:17327)\n    at c (https://coolors.co/cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js:0:9404)',
+    stack: 'TurnstileError: x\n    at x (https://challenges.cloudflare.com/turnstile/v0/api.js:1:17327)\n    at c (https://palette.example/cdn-cgi/scripts/7d0fa10a/cloudflare-static/rocket-loader.min.js:0:9404)',
   });
-  assert.equal(breaksApp(turnstile, 'https://coolors.co/generate'), false);
+  assert.equal(breaksApp(turnstile, 'https://palette.example/generate'), false);
   assert.equal(breaksApp(new Error('Minified React error #418; visit https://react.dev/errors/418?args[]=text for the full message'), 'https://example.com/'), false);
   assert.equal(breaksApp(new Error("Hydration failed because the server rendered text didn't match the client."), 'https://example.com/'), false);
   const react310 = Object.assign(new Error('Minified React error #310; visit https://react.dev/errors/310'), {

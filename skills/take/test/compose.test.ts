@@ -261,10 +261,10 @@ test('the window shows the address of the page on screen, and the first one agai
   const { loadTheme } = await import('../src/compose/themes.ts');
   const { addressAt } = await import('../src/compose/timeline.ts');
   const { theme } = loadTheme('default');
-  const log = { frames: 100, urls: [[0, 'https://stripe.com/'], [60, 'https://stripe.com/payments']] } as unknown as Parameters<typeof addressAt>[0];
-  assert.equal(addressAt(log, theme, 'stripe.com', 59), 'stripe.com');
-  assert.equal(addressAt(log, theme, 'stripe.com', 60), 'stripe.com/payments');
-  assert.equal(addressAt(log, theme, 'stripe.com', 100), 'stripe.com/payments');
-  assert.equal(addressAt(log, theme, 'stripe.com', 100 + theme.loop.frames - 1), 'stripe.com');
-  assert.equal(addressAt({ frames: 100 } as Parameters<typeof addressAt>[0], theme, 'stripe.com', 80), 'stripe.com');
+  const log = { frames: 100, urls: [[0, 'https://shop.example/'], [60, 'https://shop.example/payments']] } as unknown as Parameters<typeof addressAt>[0];
+  assert.equal(addressAt(log, theme, 'shop.example', 59), 'shop.example');
+  assert.equal(addressAt(log, theme, 'shop.example', 60), 'shop.example/payments');
+  assert.equal(addressAt(log, theme, 'shop.example', 100), 'shop.example/payments');
+  assert.equal(addressAt(log, theme, 'shop.example', 100 + theme.loop.frames - 1), 'shop.example');
+  assert.equal(addressAt({ frames: 100 } as Parameters<typeof addressAt>[0], theme, 'shop.example', 80), 'shop.example');
 });
