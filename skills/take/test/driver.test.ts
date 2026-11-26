@@ -42,9 +42,9 @@ test('performs the example take in real time and logs it', async () => {
   const r = loadTake(fileURLToPath(new URL('./fixtures/create-project.take.json', import.meta.url)));
   assert.ok(r.ok);
   const page = await open(r.take);
-  const t0 = performance.now();
-  const log = await perform(page, r.take, realtimeClock());
-  const wall = (performance.now() - t0) / 1000;
+  const clock = realtimeClock();
+  const log = await perform(page, r.take, clock);
+  const wall = (Date.now() - clock.startedAt!) / 1000;
 
   assert.equal(await page.getByRole('list', { name: 'Projects' }).getByRole('listitem').count(), 4);
   assert.ok(Math.abs(log.frames / 60 - wall) < 0.2, `${log.frames} frames vs ${wall} s`);

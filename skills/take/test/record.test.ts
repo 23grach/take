@@ -173,6 +173,7 @@ test('a video in the page plays at its true speed in studio mode, and the log sa
     try {
       const p = opened.page;
       for (let i = 0; i < 100 && !(await p.evaluate(() => !document.querySelector('video')!.paused)); i++) await new Promise((res) => setTimeout(res, 50));
+      await p.evaluate(() => void ((window as unknown as { heard: string[] }).heard.length = 0));
       const start = (await stepMedia(p, 0), await p.evaluate(() => document.querySelector('video')!.currentTime));
       let boxes;
       for (let f = 0; f < 60; f++) ({ boxes } = await stepMedia(p, Math.round((f + 1) * (1000 / 60)) - Math.round(f * (1000 / 60))));
